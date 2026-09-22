@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Direction A, "Terminal": TradingView's own palette, so charts and chrome match. */
+@theme {
+  --color-bg: #0b0e14;
+  --color-panel: #131722;
+  --color-line: #1f2430;
+  --color-fg: #d1d4dc;
+  --color-muted: #6b7385;
+  --color-accent: #2962ff;
+  --color-up: #26a69a;
+  --color-down: #ef5350;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius-sm: 3px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+/* Numbers are always tabular and monospaced, so columns line up. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
