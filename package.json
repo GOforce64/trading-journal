@@ -10,7 +10,11 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "biome check .",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "dev:server": "pnpm --filter @tj/server dev",
+    "dev:web": "pnpm --filter @tj/web dev",
+    "build": "pnpm --filter @tj/web build",
+    "start": "pnpm build && pnpm --filter @tj/server start"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
