@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    // Type-checking only: packages are consumed from source, so emitting JS would
+    // just create duplicate copies of the tests for the runner to find.
+    "emitDeclarationOnly": true,
+    "composite": true
+  }
+}
