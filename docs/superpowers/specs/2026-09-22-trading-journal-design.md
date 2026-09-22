@@ -226,7 +226,8 @@ oQuants has no export, so the history is extracted from the user's own logged-in
   - **max loss** = the larger of the two. Both are shown, since a broken wing means one side is the real risk.
 - **Max profit** = credit × 100 × contracts (minus fees).
 - **Return on risk** = net P&L ÷ max loss. **% of max profit captured** = net P&L ÷ max profit.
-- **P&L % of cost** = net P&L ÷ |net cost|, the same number oQuants shows, so imported rows reconcile against the source.
+- **P&L % of cost** = net P&L ÷ |net cost|, the same number oQuants shows, so imported rows reconcile against the source. Return on risk is the one used for ranking, since P&L % of cost is measured against the credit and flatters wide-wing trades.
+- **Breakevens** = body ± credit per share, with the wings marking where the loss stops growing.
 - **Actual move %** = |S_post − S_pre| ÷ S_pre, where:
   - S_pre is the regular-session close before the announcement (AMC: same day; BMO: previous trading day);
   - S_post is the first regular-session open after it.
@@ -320,8 +321,11 @@ oQuants has no export, so the history is extracted from the user's own logged-in
 
 - **Tagging:** a setup (playbook page with per-setup stat cards), mistake tags, one emotion tag, grade A–F, and Markdown notes. All are editable inline from the trade page and the journal grid.
 - **Global filter bar** (persisted in the URL): book (Live / Paper / Missed, multi-select), strategy, account, date range, ticker, setup, tag, and **include excluded**.
-- **Dashboard:**
-  - KPIs: net P&L, win rate, profit factor, expectancy ($/trade), avg R, trade count;
+- **Two separate surfaces:**
+  - the **Dashboard** is the landing page: how the current period is going, recent trades, and anything sitting in the review queue;
+  - **Analytics** is its own page for aggregated stats, with tabs for **Overview, Scalps, Iron flies, Missed and Setups**, the global filter bar applied across all of them, and CSV export of any table it shows.
+- **Dashboard and Analytics Overview share these:**
+  - KPIs: net P&L, win rate, profit factor, expectancy ($/trade), avg R, trade count, max drawdown;
   - equity curve with drawdown shading;
   - month P&L calendar (click a day to see its trades).
 - **Time of day** (scalps): net P&L, avg R and win rate by minutes-after-open bucket (0–5, 5–15, 15–30, 30–60, 60+) and by hold-time bucket.
@@ -347,7 +351,8 @@ oQuants has no export, so the history is extracted from the user's own logged-in
   - accent `#2962ff`, up `#26a69a`, down `#ef5350`.
 - **Inter** for UI text and **JetBrains Mono** for every number (tabular, aligned). Uppercase micro-labels. 2–3 px radii. Dense tables.
 - Semantic chips: strategy (IRON FLY violet, SCALP amber), book (LIVE green, PAPER blue, MISSED grey), and EXCLUDED (dashed outline).
-- Layout: a left nav (Dashboard, Journal, Iron Flies, Scalps, Missed, Playbook, Import / Sync, Settings) and a top filter bar.
+- Layout: a left nav (Dashboard, Journal, Analytics, Iron Flies, Scalps, Missed, Playbook, Import / Sync, Settings) and a top filter bar.
+- On a trade page, secondary detail (the leg breakdown, the raw imported row) sits behind an expander rather than on screen by default, so the page opens on the numbers that matter.
 - Dark by default. A light theme exists (tokens defined once in CSS variables), but it is not the design focus.
 - Command palette (Ctrl+K) to jump to trades, pages and actions. Keyboard review flow: J/K for next/previous trade, and 1–5 to set the grade.
 
