@@ -5,11 +5,11 @@ describe("money", () => {
   it("rounds to cents, away from zero at the half", () => {
     expect(round2(1.005)).toBe(1.01);
     expect(round2(-1.005)).toBe(-1.01);
-    expect(round2(224.0649)).toBe(224.06);
+    expect(round2(512.0649)).toBe(512.06);
   });
 
   it("sums without float drift", () => {
-    expect(sumMoney([-440, -350, 5, 10])).toBe(-775);
+    expect(sumMoney([-840, -640, 140, 140])).toBe(-1200);
     expect(sumMoney([0.1, 0.2])).toBe(0.3);
   });
 });

@@ -144,7 +144,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 
 - **accounts**: `name`, `broker` (`ibkr` | `other`), `kind` (`live` | `paper`), `external_id` (IBKR account number).
 - **trades**:
-  - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "Macy's Inc"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
+  - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "XYZ Industries"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
   - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
   - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`
   - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants does not, so those trades key on the natural-key hash of §7.2b)
@@ -205,9 +205,9 @@ oQuants has no export, so the history is extracted from the user's own logged-in
   2. **The expanded child rows**, one per leg: type (Call/Put), expiry, strike, size (signed: `-5` short, `+5` long), cost, P&L, P&L %.
   3. **The row's designer link**, whose query string encodes every leg — `positions[i][buySell|size|type|strike|expiration]` — plus the structure `name` and the symbol. This is where the **ISO expiry** comes from (`2026-09-11`); the table only shows "Sep 11 (2d)". Leg `price` values in the link are unreliable (mostly `0`) and are ignored.
   - MUI class names are hashed and unstable, so cells are read **by column index resolved from the header labels**, never by class.
-- **Derived on import** (verified against a real row, a 5-lot M iron fly):
+- **Derived on import** (worked through on a sample row, a 4-lot broken-wing fly):
   - leg open price = |leg cost| ÷ (size × 100); leg close cash = leg P&L − leg open cash, giving the close price;
-  - **fees = Σ leg cost − row cost** (that row: −775.00 vs −764.06, so $10.94). The same difference appears in P&L (+235.00 vs +224.06), so the numbers reconcile and fees need not be guessed;
+  - **fees = Σ leg cost − row cost** (that row: −1,200.00 vs −1,192.00, so $8.00). The same difference appears in P&L (+520.00 vs +512.00), so the numbers reconcile and fees need not be guessed;
   - the import preview shows this reconciliation per trade and flags any row where it doesn't balance.
 - **No stable identifier exists.** The link's `portfolio-0-1790108523081` is generated at render time and changes on reload. Identity therefore comes from a **natural key**: ticker + open timestamp + close timestamp + sorted (right, strike, size) legs. The trade's UUID is UUIDv5 of that key, which makes re-imports idempotent and keeps both machines in agreement (§12).
 - **Dates need repair.** Displayed dates carry no year ("Sep 9"), so the year is taken from the link's ISO expiry, stepping back one year if that would place the open after expiry. Times are rendered in the viewer's timezone, so the snippet records `Intl.DateTimeFormat().resolvedOptions().timeZone` in its output, and the import preview shows both the original text and the converted ET time for confirmation.
