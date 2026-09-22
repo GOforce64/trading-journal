@@ -21,6 +21,12 @@ body,
   height: 100%;
 }
 
+/* Native widgets (number spinners, date picker, checkbox, scrollbars) render
+   light-on-white by default, which looked wrong against the terminal theme. */
+:root {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   background: var(--color-bg);

@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } fr
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
+import { EditTrade } from "./routes/EditTrade.js";
 import { IronFlies } from "./routes/IronFlies.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
@@ -26,6 +27,7 @@ const rootRoute = createRootRoute({
 });
 
 const openTrade = (id: string) => router.navigate({ to: "/trades/$id", params: { id } });
+const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id } });
 
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -62,7 +64,16 @@ const tradeDetailRoute = createRoute({
   path: "/trades/$id",
   component: function TradeDetailRoute() {
     const { id } = tradeDetailRoute.useParams();
-    return <TradeDetail tradeId={id} />;
+    return <TradeDetail tradeId={id} onEdit={editTrade} />;
+  },
+});
+
+const editTradeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/trades/$id/edit",
+  component: function EditTradeRoute() {
+    const { id } = editTradeRoute.useParams();
+    return <EditTrade tradeId={id} onSaved={openTrade} />;
   },
 });
 
@@ -119,6 +130,7 @@ export const router = createRouter({
     ironFliesRoute,
     newIronFlyRoute,
     tradeDetailRoute,
+    editTradeRoute,
     ...placeholderRoutes,
   ]),
 });

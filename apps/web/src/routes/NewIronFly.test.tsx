@@ -3,6 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewIronFly } from "./NewIronFly.js";
 
+const fill = (label: string, value: string) =>
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
 function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -16,40 +19,29 @@ function setup() {
   return { onCreated };
 }
 
-const fill = (label: string, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
-
-/** The sample broken-wing fly: short 50 straddle, wings 45 / 58, 4 lots. */
-function fillStructure() {
+/** The sample fly, priced leg by leg. */
+function priceTheSampleFly() {
   fill("Underlying", "XYZ");
-  fill("Body strike", "50");
-  fill("Put wing", "45");
-  fill("Call wing", "58");
-  fill("Contracts", "4");
-  fill("Credit per share", "3.00");
+  fill("Expiry", "2026-10-16");
+  for (const [leg, strike, entry, exit] of [
+    ["Short call", "50", "2.10", "1.00"],
+    ["Short put", "50", "1.60", "0.80"],
+    ["Long call", "58", "0.35", "0.05"],
+    ["Long put", "45", "0.35", "0.05"],
+  ] as const) {
+    fill(`${leg} strike`, strike);
+    fill(`${leg} size`, "4");
+    fill(`${leg} entry`, entry);
+    fill(`${leg} exit`, exit);
+  }
+  fill("Entry fees", "5");
+  fill("Exit fees", "3");
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("NewIronFly", () => {
-  it("previews metrics live as the structure is typed", () => {
-    setup();
-    fillStructure();
-    fill("Fees", "8.00");
-    expect(screen.getByTestId("preview-max-loss").textContent).toContain("2,008.00");
-    expect(screen.getByTestId("preview-max-loss").textContent).toContain("call");
-    expect(screen.getByTestId("preview-breakevens").textContent).toContain("47.02");
-    expect(screen.getByTestId("preview-breakevens").textContent).toContain("52.98");
-    expect(screen.getByTestId("preview-wings").textContent).toContain("broken");
-  });
-
-  it("says nothing until the structure is complete", () => {
-    setup();
-    fill("Underlying", "XYZ");
-    expect(screen.queryByTestId("preview-max-loss")).toBeNull();
-  });
-
-  it("posts the trade and reports the new id", async () => {
+  it("posts the built position and reports the new id", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(JSON.stringify({ id: "new-id" }), {
@@ -59,18 +51,16 @@ describe("NewIronFly", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const { onCreated } = setup();
-    fillStructure();
-    fill("Net P&L", "512.00");
+    priceTheSampleFly();
     fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-id"));
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body.strategy).toBe("iron_fly");
-    expect(body.ironFly.callWingStrike).toBe(58);
-    expect(body.ironFly.putWingStrike).toBe(45);
     expect(body.netPnl).toBe(512);
+    expect(body.fees).toBe(8);
     expect(body.legs).toHaveLength(4);
-    expect(body.legs.filter((leg: { quantity: number }) => leg.quantity < 0)).toHaveLength(2);
+    expect(body.ironFly.netCost).toBe(-1192);
   });
 
   it("surfaces a failed save", async () => {
@@ -79,7 +69,7 @@ describe("NewIronFly", () => {
       vi.fn(async () => new Response("bad", { status: 400 })),
     );
     setup();
-    fillStructure();
+    priceTheSampleFly();
     fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
     await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy());
   });

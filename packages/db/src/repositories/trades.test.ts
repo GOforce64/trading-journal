@@ -21,6 +21,8 @@ const sampleFly: NewTrade = {
   closedAt: 1788_086_400_000,
   netPnl: 512,
   fees: 8,
+  feesOpen: 5,
+  feesClose: 3,
   notes: null,
   grade: null,
   excluded: false,

@@ -109,6 +109,8 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
             closedAt: input.closedAt,
             netPnl: input.netPnl,
             fees: input.fees,
+            feesOpen: input.feesOpen,
+            feesClose: input.feesClose,
             notes: input.notes,
             grade: input.grade,
             setupId: input.setupId,

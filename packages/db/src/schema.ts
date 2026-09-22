@@ -42,7 +42,10 @@ export const trades = sqliteTable(
     openedAt: integer("opened_at").notNull(),
     closedAt: integer("closed_at"),
     netPnl: real("net_pnl"),
+    /** Round-trip commissions; feesOpen + feesClose when both are known. */
     fees: real("fees").notNull().default(0),
+    feesOpen: real("fees_open"),
+    feesClose: real("fees_close"),
     notes: text("notes"),
     grade: text("grade"),
     setupId: text("setup_id").references(() => setups.id),

@@ -28,7 +28,7 @@ const ET = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-export function TradeDetail({ tradeId }: { tradeId: string }) {
+export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id: string) => void }) {
   const queryClient = useQueryClient();
 
   const { data: trade, isLoading } = useQuery({
@@ -76,6 +76,13 @@ export function TradeDetail({ tradeId }: { tradeId: string }) {
         <span className="text-[18px]">
           <Pct value={metrics?.pnlPctOfCost ?? null} />
         </span>
+        <button
+          type="button"
+          onClick={() => onEdit?.(trade.id)}
+          className="rounded-sm border border-line bg-panel px-3 py-1 text-fg hover:border-accent"
+        >
+          Edit
+        </button>
       </header>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
