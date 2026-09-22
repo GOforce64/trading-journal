@@ -3223,3 +3223,53 @@ Deferred to later plans, by design: the CSV/paste importer and oQuants extractor
 **Placeholder scan:** no TBDs; every code step carries runnable code; the one prose-only step (Task 9 step 6 router wiring, Task 8 step 4 README) states exactly what to write.
 
 **Type consistency check:** `ironFlyMetrics`/`ironFlyOutcome` field names used in Tasks 7, 11 and 12 match Task 3 (`maxLoss`, `riskySide`, `breakevenLow`, `breakevenHigh`, `returnOnRisk`, `pnlPctOfCost`). `createTradesRepo(db, now)` signature matches its use in Task 7. `TradeRecord.tagIds` is produced in Task 5 and consumed in Tasks 10 and 12. `AppType` is exported in Task 7 and imported in Task 9.
+
+---
+
+## Addendum: what changed while executing (2026-09-22)
+
+All thirteen tasks were implemented. These are the deliberate departures from the plan above, so the next reader is not misled by it.
+
+**Toolchain**
+
+1. **`tsx` runs the server**, not `node --experimental-strip-types`. Node's type stripping does not resolve `./app.js` specifiers to TypeScript sources, so the entry point could not start.
+2. **`fileURLToPath` everywhere**, never `new URL(...).pathname`, which yields `/C:/...` on Windows and would have broken the Windows CI leg.
+3. **`emitDeclarationOnly`** in the base tsconfig: `tsc -b` was emitting JavaScript copies of the tests, which the runner then executed a second time.
+4. **pnpm 12 names the setting `allowBuilds`**, not `onlyBuiltDependencies`; better-sqlite3 and esbuild are approved there.
+5. **Biome** needed `css.parser.tailwindDirectives` for `@theme`, and generated `.d.ts` output excluded from linting.
+6. **A root `vitest.config.ts`** with `projects` so each package can bring its own environment (the web app needs jsdom, and Testing Library's cleanup must be registered explicitly because the suites run without globals).
+
+**Design**
+
+7. **Zod 4 keeps refinements inside the schema**, so `tradePatchSchema` derives from a shared field map rather than `.innerType()`. A test caught a real bug here: `.partial()` preserves defaults, so `PATCH {grade:"B"}` would have wiped legs, tags and the exclude flag. Creation defaults and patch fields are now defined separately.
+8. **shadcn/ui was not installed.** Its CLI is interactive, so the few primitives needed (`Panel`, `Money`, `Pct`, `Chip`) are hand-written against the same Tailwind tokens. Adding shadcn components later needs no rework.
+9. Task 3's "symmetric fly" test in this plan asserted `isBrokenWing` was **true**, contradicting its own name. The implemented test asserts equal wings are unbroken and carry equal risk.
+
+**Product changes requested after the first run-through**
+
+10. **Legs are always visible** on the trade page, with per-leg cost and P&L under a bold totals line (cost, legs P&L, fees, net). Only the raw imported row hides behind an expander.
+11. **Journal rows** highlight on hover and open the trade on click or Enter; the note shows truncated with the full text on hover.
+12. **`/iron-flies`** lists flies with a New trade button, and every other nav destination renders what it will hold rather than a dead "Not found".
+13. **`color-scheme: dark`**, so native number spinners, date pickers and checkboxes stop rendering white against the terminal theme.
+14. **The position builder replaced the simple entry form** (spec §7.1): one row per leg with strike, size, entry premium and exit premium, plus entry and exit fees. All cash figures are derived by `positionCash` in `core`; none are typed twice. Round-trip fees land in the cost line, matching oQuants. Sizes are whole contracts.
+15. **Trades can be edited** through the same builder, from an Edit button on the trade page; saving recomputes P&L from the edited prices.
+16. **`trades.fees_open` and `trades.fees_close`** were added (migration `0001`), keeping the two sides of the commission alongside the round-trip total.
+
+## Follow-on work, in order
+
+**Next plan — option chains and live marks (spec §8.6)**
+
+- Alpaca client in `packages/market-data`: listed expirations for an underlying, listed strikes for an expiration, and current quotes for a contract. Key in `secrets.json`, never in the repo.
+- The builder's expiry and strike fields become pickers fed by the chain, falling back to typed entry when the API is unreachable, so old trades can always be entered.
+- Open positions show the current premium per leg and the unrealised P&L it implies, in muted type and labelled an estimate. **Estimates are never written into exit prices and never stored as the trade's P&L**; exit fields stay empty until real fills are typed in.
+- A settings page to hold the key, replacing hand-editing `secrets.json`.
+
+**Then, in the order of the spec's Phase 1**
+
+- The oQuants extractor and the CSV/paste importer (§7.2, §7.2b).
+- The Analytics page (§9).
+- Export and merge bundles (§12).
+
+**Deferred deliberately**
+
+- A **general multi-leg editor** for scalps and structures that are not four-legged flies. It gets its own plan next to the Phase 2 scalp work; the iron fly builder covers everything being traded through this journal today.

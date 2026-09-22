@@ -99,4 +99,19 @@ describe("IronFlyForm", () => {
     expect((screen.getByLabelText("Short call strike") as HTMLInputElement).value).toBe("30");
     expect((screen.getByLabelText("Long put exit") as HTMLInputElement).value).toBe("0.02");
   });
+
+  it("refuses a fractional contract size", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    fill("Short call size", "4.5");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/whole contracts/i)).toBeTruthy();
+  });
+
+  it("asks for whole contracts in the size inputs", () => {
+    setup();
+    expect(screen.getByLabelText("Short call size").getAttribute("step")).toBe("1");
+    expect(screen.getByLabelText("Short call entry").getAttribute("step")).toBe("0.01");
+  });
 });

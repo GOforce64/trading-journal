@@ -53,7 +53,7 @@ const millis = (value: string): number => (value ? new Date(value).getTime() : N
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Legs are only priced once strike, size and entry are all present. */
-function toPricedLegs(values: IronFlyFormValues): PricedLeg[] | null {
+function toPricedLegs(values: IronFlyFormValues): PricedLeg[] | null | "fractional-size" {
   const legs: PricedLeg[] = [];
   for (const role of LEG_ROLES) {
     const fields = values.legs[role.key];
@@ -61,6 +61,7 @@ function toPricedLegs(values: IronFlyFormValues): PricedLeg[] | null {
     const size = num(fields.size);
     const entry = num(fields.entry);
     if (Number.isNaN(strike) || Number.isNaN(size) || size <= 0 || Number.isNaN(entry)) return null;
+    if (!Number.isInteger(size)) return "fractional-size";
     const exit = num(fields.exit);
     legs.push({
       right: role.right,
@@ -101,7 +102,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
 
   const derived = useMemo(() => {
     const legs = toPricedLegs(values);
-    if (!legs) return null;
+    if (!legs || legs === "fractional-size") return null;
     const cash = positionCash(legs, {
       open: zeroIfBlank(values.feesOpen),
       close: zeroIfBlank(values.feesClose),
@@ -119,6 +120,10 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
   }, [values]);
 
   function submit() {
+    if (toPricedLegs(values) === "fractional-size") {
+      setProblem("Sizes are whole contracts.");
+      return;
+    }
     if (!derived || !derived.structure) {
       setProblem("Every leg needs a strike, a size and an entry price.");
       return;
@@ -178,7 +183,8 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     <input
       aria-label={label}
       type="number"
-      step="0.01"
+      step={field === "size" ? "1" : "0.01"}
+      min={field === "size" ? 1 : undefined}
       value={values.legs[key][field]}
       onChange={setLeg(key, field)}
       className="num w-full rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-right text-[13px] text-fg outline-none focus:border-accent"
