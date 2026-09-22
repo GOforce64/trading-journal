@@ -2,7 +2,8 @@
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 110 },
   "linter": { "enabled": true, "rules": { "preset": "recommended" } },
+  "css": { "parser": { "tailwindDirectives": true } },
   "files": {
-    "includes": ["**", "!**/dist", "!**/migrations", "!.superpowers", "!**/pnpm-lock.yaml"]
+    "includes": ["**", "!**/dist", "!**/dist-types", "!**/migrations", "!.superpowers", "!**/pnpm-lock.yaml"]
   }
 }
