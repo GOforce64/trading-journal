@@ -200,7 +200,11 @@ A single importer handles any tabular source: an oQuants export, a table copied 
 oQuants has no export, so the history is extracted from the user's own logged-in session, by hand, never by an automated crawler:
 
 - The repo ships a **browser extractor snippet** (`scripts/oquants-extract.js`) that the user pastes into the DevTools console on their Portfolio page. It expands every row, reads the table (instrument, strategy, structure, notes, open/close dates, per-leg type/expiry/strike/size, cost, P&L, P&L %), and downloads `oquants-trades.json`.
-- Preferred path where available: the page's own data request. If the Portfolio table is filled from a JSON API call, the snippet reads that response instead of the DOM, which is far more robust than parsing markup. The choice is made once the user supplies a sample response (§16).
+- **What the platform actually exposes** (observed 2026-09-22): oQuants is a Next.js App Router app on Vercel. The Portfolio page is server-rendered, and the only related request seen is an RSC prefetch (`text/x-component`) of the strategy designer. There is no plain JSON trades API to read, so the snippet works from the page itself, using two sources:
+  1. **The table rows** give instrument, strategy, structure, notes, open and close date/time, cost, P&L and P&L %.
+  2. **Each row's designer link** encodes the full position in its query string — `positions[i][buySell|size|type|strike|expiration]`, plus `name` (e.g. "Short Iron Condor") and the symbol. Legs therefore come from the href, and rows do not have to be expanded. Leg *prices* in that link are unreliable (mostly `0`), so prices come from the table or the expanded row.
+  - Fallback if the markup shifts: the Next.js flight payload embedded in the page (`self.__next_f`) carries the same records and can be parsed.
+- The snippet never touches session cookies or tokens, and none are stored in the repo or in the journal's data directory.
 - That JSON is dropped into the importer, which has a **built-in oQuants mapping**, so the column-mapping step is skipped.
 - The snippet only ever touches the user's own account data, it runs manually, and it stores no credentials. Re-running it and re-importing is safe: rows carry oQuants' own trade IDs in `external_ref`, so duplicates are detected.
 - Fallback if the page's markup changes: copy the table and paste it into the generic mapper (§7.2), which loses the per-leg detail but keeps the numbers.
@@ -442,7 +446,7 @@ Each phase ends usable, and each gets its own implementation plan.
 
 These are facts to confirm at the start of the relevant phase. None of them blocks the design.
 
-1. **oQuants extraction (Phase 1):** confirmed there is no export button, so the extractor snippet of §7.2b is the route. To decide between reading the page's API response and parsing the DOM, the user provides either a sample JSON response (DevTools → Network → reload the Portfolio page → the request that returns the trades) or the HTML of one expanded row. Numbers may be changed; nothing real is needed.
+1. **oQuants extraction (Phase 1):** there is no export button and no JSON trades API; the extractor snippet of §7.2b is the route, reading the table plus each row's designer link. Still needed to write the selectors: the **HTML of one portfolio row, expanded** (right-click the row → Inspect → right-click its `<tr>` → Copy → Copy outerHTML). Numbers can be changed. **Never paste request headers or cookies**, which carry a live session token.
 2. **IBKR Flex (Phase 2):**
    - whether paper accounts support the Flex Web Service (fallback: upload a Flex file);
    - which query type includes same-day executions;
