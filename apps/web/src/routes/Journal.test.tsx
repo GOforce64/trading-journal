@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Journal } from "./Journal.js";
 
@@ -15,6 +15,7 @@ const trade = {
   netPnl: 512,
   fees: 8,
   grade: "B",
+  notes: "Crush did the work; the short put was the loser. Next time hold into the open.",
   excluded: false,
   legs: [],
   ironFly: null,
@@ -25,11 +26,11 @@ const trade = {
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 
-function renderJournal() {
+function renderJournal(onOpenTrade?: (id: string) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <Journal />
+      <Journal onOpenTrade={onOpenTrade} />
     </QueryClientProvider>,
   );
 }
@@ -78,5 +79,42 @@ describe("Journal", () => {
       const urls = fetchMock.mock.calls.map((call) => String(call[0]));
       expect(urls.some((url) => url.includes("book=paper"))).toBe(true);
     });
+  });
+
+  it("shows the note, truncated, with the full text available on hover", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse([trade])),
+    );
+    renderJournal();
+    const note = await screen.findByTestId("note-t1");
+    expect(note.textContent).toContain("Crush did the work");
+    expect(note.className).toContain("truncate");
+    expect(note.getAttribute("title")).toBe(trade.notes);
+  });
+
+  it("opens the trade when the row is clicked anywhere", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse([trade])),
+    );
+    const onOpenTrade = vi.fn();
+    renderJournal(onOpenTrade);
+    const row = await screen.findByTestId("row-t1");
+    fireEvent.click(row);
+    expect(onOpenTrade).toHaveBeenCalledWith("t1");
+  });
+
+  it("opens the trade from the keyboard", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse([trade])),
+    );
+    const onOpenTrade = vi.fn();
+    renderJournal(onOpenTrade);
+    const row = await screen.findByTestId("row-t1");
+    expect(row.getAttribute("tabindex")).toBe("0");
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(onOpenTrade).toHaveBeenCalledWith("t1");
   });
 });

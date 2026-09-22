@@ -1,10 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { round2 } from "@tj/core";
 import type { ReactNode } from "react";
 import { api, type TradeView } from "../api.js";
 import { Chip, Money, Panel, Pct } from "../components/ui.js";
 
 const GRADES = ["A", "B", "C", "D", "F"] as const;
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
+
+/** Cash paid (positive) or received (negative) to open a leg. */
+const legCost = (leg: { quantity: number; multiplier: number; openPrice: number }) =>
+  round2(leg.quantity * leg.multiplier * leg.openPrice);
+
+/** Realised P&L of a closed leg; null while it is still open. */
+const legPnl = (leg: {
+  quantity: number;
+  multiplier: number;
+  openPrice: number;
+  closePrice: number | null;
+}) =>
+  leg.closePrice == null ? null : round2(leg.quantity * leg.multiplier * (leg.closePrice - leg.openPrice));
 
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -38,6 +52,11 @@ export function TradeDetail({ tradeId }: { tradeId: string }) {
   if (isLoading || !trade) return <p className="text-muted">Loading…</p>;
   const metrics = trade.metrics;
   const detail = trade.ironFly;
+  const totalCost = round2(trade.legs.reduce((sum, leg) => sum + legCost(leg), 0));
+  const closedLegPnl = trade.legs.map(legPnl).filter((value): value is number => value !== null);
+  const totalLegPnl = closedLegPnl.length
+    ? round2(closedLegPnl.reduce((sum, value) => sum + value, 0))
+    : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -94,40 +113,65 @@ export function TradeDetail({ tradeId }: { tradeId: string }) {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
-        <Panel>
-          <details data-testid="legs-details">
-            <summary className="cursor-pointer text-[10px] text-muted uppercase tracking-wider">
-              Legs ({trade.legs.length})
-            </summary>
-            <table className="num mt-2 w-full border-collapse text-[11px]">
-              <thead className="text-[9px] text-muted uppercase tracking-wider">
-                <tr>
-                  <th className="text-left font-medium">Side</th>
-                  <th className="text-left font-medium">Type</th>
-                  <th className="text-left font-medium">Strike</th>
-                  <th className="text-left font-medium">Exp</th>
-                  <th className="text-right font-medium">Size</th>
-                  <th className="text-right font-medium">Open</th>
-                  <th className="text-right font-medium">Close</th>
+        <Panel title="Legs">
+          <div
+            data-testid="legs-total"
+            className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-line border-b pb-2 font-semibold text-[12px]"
+          >
+            <span className="text-muted uppercase tracking-wider">Total</span>
+            <span>
+              <span className="mr-1 text-[10px] text-muted uppercase">cost</span>
+              <Money value={totalCost} />
+            </span>
+            <span>
+              <span className="mr-1 text-[10px] text-muted uppercase">legs P&amp;L</span>
+              <Money value={totalLegPnl} />
+            </span>
+            <span>
+              <span className="mr-1 text-[10px] text-muted uppercase">fees</span>
+              <span className="num">{usd(trade.fees)}</span>
+            </span>
+            <span>
+              <span className="mr-1 text-[10px] text-muted uppercase">net</span>
+              <Money value={trade.netPnl} />
+            </span>
+          </div>
+          <table className="num w-full border-collapse text-[11px]">
+            <thead className="text-[9px] text-muted uppercase tracking-wider">
+              <tr>
+                <th className="text-left font-medium">Side</th>
+                <th className="text-left font-medium">Type</th>
+                <th className="text-left font-medium">Strike</th>
+                <th className="text-left font-medium">Exp</th>
+                <th className="text-right font-medium">Size</th>
+                <th className="text-right font-medium">Open</th>
+                <th className="text-right font-medium">Close</th>
+                <th className="text-right font-medium">Cost</th>
+                <th className="text-right font-medium">P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trade.legs.map((leg) => (
+                <tr key={leg.id} data-testid={`leg-row-${leg.id}`} className="border-line border-t">
+                  <td className={leg.quantity < 0 ? "text-down" : "text-up"}>
+                    {leg.quantity < 0 ? "SHORT" : "LONG"}
+                  </td>
+                  <td>{leg.right === "C" ? "Call" : "Put"}</td>
+                  <td>{leg.strike.toFixed(2)}</td>
+                  <td>{leg.expiry.slice(5)}</td>
+                  <td className="text-right">{leg.quantity}</td>
+                  <td className="text-right">{leg.openPrice.toFixed(2)}</td>
+                  <td className="text-right">{leg.closePrice?.toFixed(2) ?? "—"}</td>
+                  <td className="text-right">
+                    <Money value={legCost(leg)} />
+                  </td>
+                  <td className="text-right">
+                    <Money value={legPnl(leg)} />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {trade.legs.map((leg) => (
-                  <tr key={leg.id} className="border-line border-t">
-                    <td className={leg.quantity < 0 ? "text-down" : "text-up"}>
-                      {leg.quantity < 0 ? "SHORT" : "LONG"}
-                    </td>
-                    <td>{leg.right === "C" ? "Call" : "Put"}</td>
-                    <td>{leg.strike.toFixed(2)}</td>
-                    <td>{leg.expiry.slice(5)}</td>
-                    <td className="text-right">{leg.quantity}</td>
-                    <td className="text-right">{leg.openPrice.toFixed(2)}</td>
-                    <td className="text-right">{leg.closePrice?.toFixed(2) ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
+              ))}
+            </tbody>
+          </table>
           {detail?.sourceNotes && (
             <>
               <div className="mt-3 text-[10px] text-muted uppercase tracking-wider">Source notes</div>

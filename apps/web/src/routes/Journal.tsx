@@ -36,30 +36,36 @@ const ET = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-export function Journal() {
-  const [filter, setFilter] = useState<JournalFilter>({});
-  const { data, isLoading, error } = useTrades(filter);
+export interface JournalProps {
+  /** Fixed part of the filter, e.g. the Iron Flies page pins the strategy. */
+  lockedFilter?: JournalFilter;
+  title?: string;
+  actions?: React.ReactNode;
+  onOpenTrade?: (id: string) => void;
+}
 
-  const toggleBook = (book: JournalFilter["book"]) =>
-    setFilter((current) => ({ ...current, book: current.book === book ? undefined : book }));
+export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade }: JournalProps) {
+  const [book, setBook] = useState<JournalFilter["book"]>(undefined);
+  const { data, isLoading, error } = useTrades({ ...lockedFilter, book });
 
   return (
     <Panel
-      title="Journal"
+      title={title}
       right={
-        <span className="flex gap-1">
-          {BOOKS.map((book) => (
+        <span className="flex items-center gap-1">
+          {BOOKS.map((option) => (
             <button
-              key={book}
+              key={option}
               type="button"
-              onClick={() => toggleBook(book)}
+              onClick={() => setBook((current) => (current === option ? undefined : option))}
               className={`rounded-[2px] border px-2 py-0.5 uppercase ${
-                filter.book === book ? "border-accent bg-[#2962ff1a] text-fg" : "border-line text-muted"
+                book === option ? "border-accent bg-[#2962ff1a] text-fg" : "border-line text-muted"
               }`}
             >
-              {book}
+              {option}
             </button>
           ))}
+          {actions}
         </span>
       }
     >
@@ -69,33 +75,52 @@ export function Journal() {
         <p className="text-muted">No trades yet. Add one from Iron Flies → New trade.</p>
       )}
       {data && data.length > 0 && (
-        <table className="w-full border-collapse text-[12px]">
+        <table className="w-full table-fixed border-collapse text-[12px]">
           <thead>
             <tr className="text-[9px] text-muted uppercase tracking-wider">
-              <th className="py-1 text-left font-medium">Opened</th>
-              <th className="text-left font-medium">Symbol</th>
-              <th className="text-left font-medium">Strategy</th>
-              <th className="text-left font-medium">Book</th>
-              <th className="text-right font-medium">Net P&amp;L</th>
-              <th className="text-right font-medium">Return on risk</th>
-              <th className="text-right font-medium">Grade</th>
+              <th className="w-28 py-1 text-left font-medium">Opened</th>
+              <th className="w-20 text-left font-medium">Symbol</th>
+              <th className="w-24 text-left font-medium">Strategy</th>
+              <th className="w-32 text-left font-medium">Book</th>
+              <th className="text-left font-medium">Notes</th>
+              <th className="w-28 text-right font-medium">Net P&amp;L</th>
+              <th className="w-28 text-right font-medium">Return on risk</th>
+              <th className="w-12 text-right font-medium">Grade</th>
             </tr>
           </thead>
           <tbody>
             {data.map((trade) => (
-              <tr key={trade.id} className="border-line border-t">
+              // The whole row opens the trade; hovering makes that obvious.
+              <tr
+                key={trade.id}
+                data-testid={`row-${trade.id}`}
+                tabIndex={0}
+                onClick={() => onOpenTrade?.(trade.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenTrade?.(trade.id);
+                  }
+                }}
+                className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"
+              >
                 <td className="num py-1 text-muted">{ET.format(new Date(trade.openedAt))}</td>
-                <td>
-                  <a className="text-fg hover:text-[#82a8ff]" href={`/trades/${trade.id}`}>
-                    {trade.underlying}
-                  </a>
-                </td>
+                <td className="text-fg">{trade.underlying}</td>
                 <td>
                   <Chip tone={trade.strategy}>{trade.strategy === "iron_fly" ? "IRON FLY" : "SCALP"}</Chip>
                 </td>
                 <td>
                   <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>{" "}
                   {trade.excluded && <Chip tone="excluded">EXCLUDED</Chip>}
+                </td>
+                <td className="max-w-0 pr-3">
+                  <span
+                    data-testid={`note-${trade.id}`}
+                    title={trade.notes ?? undefined}
+                    className="block truncate text-muted"
+                  >
+                    {trade.notes ?? ""}
+                  </span>
                 </td>
                 <td className="text-right">
                   <Money value={trade.netPnl} />

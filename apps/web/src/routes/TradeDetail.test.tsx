@@ -53,6 +53,26 @@ const trade = {
       openPrice: 1.6,
       closePrice: 0.8,
     },
+    {
+      id: "l3",
+      right: "C",
+      strike: 58,
+      expiry: "2026-10-16",
+      quantity: 4,
+      multiplier: 100,
+      openPrice: 0.35,
+      closePrice: 0.05,
+    },
+    {
+      id: "l4",
+      right: "P",
+      strike: 45,
+      expiry: "2026-10-16",
+      quantity: 4,
+      multiplier: 100,
+      openPrice: 0.35,
+      closePrice: 0.05,
+    },
   ],
   metrics: {
     putWingWidth: 5,
@@ -99,7 +119,8 @@ describe("TradeDetail", () => {
     expect(screen.getByTestId("tile-max-loss").textContent).toContain("call side");
     expect(screen.getByTestId("tile-structure").textContent).toContain("broken");
     expect(screen.getByTestId("tile-breakevens").textContent).toContain("47.02");
-    expect(screen.getByText("+$512.00")).toBeTruthy();
+    // Net P&L shows in the header and again in the legs total.
+    expect(screen.getAllByText("+$512.00").length).toBeGreaterThan(0);
   });
 
   it("marks fields the source did not provide", async () => {
@@ -112,14 +133,39 @@ describe("TradeDetail", () => {
     expect(screen.getByTestId("tile-implied-move").textContent).toContain("add");
   });
 
-  it("keeps legs collapsed until the expander is opened", async () => {
+  it("shows every leg straight away, no expander", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse()),
     );
     renderDetail();
-    await waitFor(() => expect(screen.getByText(/legs \(2\)/i)).toBeTruthy());
-    expect(screen.getByTestId("legs-details").hasAttribute("open")).toBe(false);
+    await waitFor(() => expect(screen.getAllByTestId(/^leg-row-/)).toHaveLength(4));
+    expect(screen.queryByTestId("legs-details")).toBeNull();
+  });
+
+  it("totals the legs in bold above the table", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    const totals = await screen.findByTestId("legs-total");
+    expect(totals.textContent).toContain("1,200.00"); // cost: credit received
+    expect(totals.textContent).toContain("520.00"); // P&L before fees
+    expect(totals.textContent).toContain("8.00"); // fees
+    expect(totals.textContent).toContain("512.00"); // net
+    expect(totals.className).toContain("font-semibold");
+  });
+
+  it("shows each leg's own cost and P&L", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    const shortCall = await screen.findByTestId("leg-row-l1");
+    expect(shortCall.textContent).toContain("840.00"); // 4 x 100 x 2.10 credit
+    expect(shortCall.textContent).toContain("440.00"); // bought back at 1.00
   });
 
   it("patches the grade when a grade button is pressed", async () => {

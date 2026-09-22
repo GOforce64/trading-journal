@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
+import { ComingSoon } from "./routes/ComingSoon.js";
+import { IronFlies } from "./routes/IronFlies.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
@@ -14,7 +16,16 @@ function RootLayout() {
   );
 }
 
-const rootRoute = createRootRoute({ component: RootLayout });
+const rootRoute = createRootRoute({
+  component: RootLayout,
+  notFoundComponent: () => (
+    <Panel title="Not found">
+      <p className="text-muted">That page does not exist. Try Journal or Iron Flies.</p>
+    </Panel>
+  ),
+});
+
+const openTrade = (id: string) => router.navigate({ to: "/trades/$id", params: { id } });
 
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -29,13 +40,21 @@ const dashboardRoute = createRoute({
 const journalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/journal",
-  component: Journal,
+  component: () => <Journal onOpenTrade={openTrade} />,
+});
+
+const ironFliesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/iron-flies",
+  component: () => (
+    <IronFlies onOpenTrade={openTrade} onNewTrade={() => router.navigate({ to: "/iron-flies/new" })} />
+  ),
 });
 
 const newIronFlyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/iron-flies/new",
-  component: () => <NewIronFly onCreated={(id) => router.navigate({ to: "/trades/$id", params: { id } })} />,
+  component: () => <NewIronFly onCreated={openTrade} />,
 });
 
 const tradeDetailRoute = createRoute({
@@ -47,8 +66,61 @@ const tradeDetailRoute = createRoute({
   },
 });
 
+/** Nav destinations whose features arrive in later plans; better than a dead link. */
+const PLACEHOLDERS = [
+  {
+    path: "/analytics",
+    title: "Analytics",
+    phase: "a later Phase 1 plan",
+    blurb: "Equity curve, P&L calendar, time-of-day buckets and per-setup breakdowns.",
+  },
+  {
+    path: "/missed",
+    title: "Missed",
+    phase: "Phase 2",
+    blurb: "Setups you spotted but skipped, marked on the chart and scored in R.",
+  },
+  {
+    path: "/playbook",
+    title: "Playbook",
+    phase: "a later Phase 1 plan",
+    blurb: "Your named setups, each with its own win rate, average R and P&L.",
+  },
+  {
+    path: "/import",
+    title: "Import / Sync",
+    phase: "a later Phase 1 plan",
+    blurb: "The oQuants extractor, the CSV/paste importer, and IBKR Flex sync.",
+  },
+  {
+    path: "/settings",
+    title: "Settings",
+    phase: "a later Phase 1 plan",
+    blurb: "Data directory, API tokens, risk-free rate and chart defaults.",
+  },
+];
+
+const placeholderRoutes = PLACEHOLDERS.map((page) =>
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: page.path,
+    component: () => (
+      <ComingSoon title={page.title} phase={page.phase}>
+        {page.blurb}
+      </ComingSoon>
+    ),
+  }),
+);
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([dashboardRoute, journalRoute, newIronFlyRoute, tradeDetailRoute]),
+  routeTree: rootRoute.addChildren([
+    dashboardRoute,
+    journalRoute,
+    ironFliesRoute,
+    newIronFlyRoute,
+    tradeDetailRoute,
+    ...placeholderRoutes,
+  ]),
 });
 
 declare module "@tanstack/react-router" {
