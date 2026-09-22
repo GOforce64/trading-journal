@@ -3,6 +3,7 @@ import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
+import { TradeDetail } from "./routes/TradeDetail.js";
 
 function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -34,12 +35,20 @@ const journalRoute = createRoute({
 const newIronFlyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/iron-flies/new",
-  // The trade detail route arrives in the next task; until then, back to the journal.
-  component: () => <NewIronFly onCreated={() => router.navigate({ to: "/journal" })} />,
+  component: () => <NewIronFly onCreated={(id) => router.navigate({ to: "/trades/$id", params: { id } })} />,
+});
+
+const tradeDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/trades/$id",
+  component: function TradeDetailRoute() {
+    const { id } = tradeDetailRoute.useParams();
+    return <TradeDetail tradeId={id} />;
+  },
 });
 
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([dashboardRoute, journalRoute, newIronFlyRoute]),
+  routeTree: rootRoute.addChildren([dashboardRoute, journalRoute, newIronFlyRoute, tradeDetailRoute]),
 });
 
 declare module "@tanstack/react-router" {
