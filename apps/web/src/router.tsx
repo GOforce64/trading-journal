@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
+import { Journal } from "./routes/Journal.js";
 
 function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -23,7 +24,15 @@ const dashboardRoute = createRoute({
   ),
 });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([dashboardRoute]) });
+const journalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/journal",
+  component: Journal,
+});
+
+export const router = createRouter({
+  routeTree: rootRoute.addChildren([dashboardRoute, journalRoute]),
+});
 
 declare module "@tanstack/react-router" {
   interface Register {
