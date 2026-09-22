@@ -6,6 +6,9 @@
     },
     {
       "path": "packages/db"
+    },
+    {
+      "path": "apps/server"
     }
   ]
 }
