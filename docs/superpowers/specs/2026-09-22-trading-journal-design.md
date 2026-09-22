@@ -147,7 +147,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
   - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "Macy's Inc"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
   - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
   - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`
-  - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID, used for duplicate detection on re-import)
+  - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants does not, so those trades key on the natural-key hash of §7.2b)
   - merge: `edited_at` (last *user* edit; see §12). Set at creation for manual and imported trades, which are user-authored. Null for IBKR-synced trades until the user first edits one.
 - **legs**: `trade_id`, `right` (C/P), `strike`, `expiry`, `multiplier`, `side` (long/short), `quantity`, `avg_open_price`, `avg_close_price`, `broker_conid`.
 - **fills**: `trade_id`, `leg_id`, `executed_at`, `side`, `quantity`, `price`, `commission`, `broker_exec_id`, `raw` (JSON of the source row, for audit). Fills are immutable facts.
@@ -200,11 +200,20 @@ A single importer handles any tabular source: an oQuants export, a table copied 
 oQuants has no export, so the history is extracted from the user's own logged-in session, by hand, never by an automated crawler:
 
 - The repo ships a **browser extractor snippet** (`scripts/oquants-extract.js`) that the user pastes into the DevTools console on their Portfolio page. It expands every row, reads the table (instrument, strategy, structure, notes, open/close dates, per-leg type/expiry/strike/size, cost, P&L, P&L %), and downloads `oquants-trades.json`.
-- **What the platform actually exposes** (observed 2026-09-22): oQuants is a Next.js App Router app on Vercel. The Portfolio page is server-rendered, and the only related request seen is an RSC prefetch (`text/x-component`) of the strategy designer. There is no plain JSON trades API to read, so the snippet works from the page itself, using two sources:
-  1. **The table rows** give instrument, strategy, structure, notes, open and close date/time, cost, P&L and P&L %.
-  2. **Each row's designer link** encodes the full position in its query string — `positions[i][buySell|size|type|strike|expiration]`, plus `name` (e.g. "Short Iron Condor") and the symbol. Legs therefore come from the href, and rows do not have to be expanded. Leg *prices* in that link are unreliable (mostly `0`), so prices come from the table or the expanded row.
-  - Fallback if the markup shifts: the Next.js flight payload embedded in the page (`self.__next_f`) carries the same records and can be parsed.
-- The snippet never touches session cookies or tokens, and none are stored in the repo or in the journal's data directory.
+- **What the platform exposes** (confirmed from live markup, 2026-09-22): oQuants is a Next.js App Router app on Vercel. The Portfolio page is server-rendered; the only related request is an RSC prefetch (`text/x-component`) of the strategy designer. There is no JSON trades API, so the snippet reads the page itself, from three sources:
+  1. **The parent row** (MUI table): instrument ticker (`p.oq-ticker-symbol`, one of the few stable class names) and company name, strategy chip ("Earnings"), structure chip ("Short Iron Butterfly"), notes, open date/time, close date/time with holding days, cost, P&L, P&L %.
+  2. **The expanded child rows**, one per leg: type (Call/Put), expiry, strike, size (signed: `-5` short, `+5` long), cost, P&L, P&L %.
+  3. **The row's designer link**, whose query string encodes every leg — `positions[i][buySell|size|type|strike|expiration]` — plus the structure `name` and the symbol. This is where the **ISO expiry** comes from (`2026-09-11`); the table only shows "Sep 11 (2d)". Leg `price` values in the link are unreliable (mostly `0`) and are ignored.
+  - MUI class names are hashed and unstable, so cells are read **by column index resolved from the header labels**, never by class.
+- **Derived on import** (verified against a real row, a 5-lot M iron fly):
+  - leg open price = |leg cost| ÷ (size × 100); leg close cash = leg P&L − leg open cash, giving the close price;
+  - **fees = Σ leg cost − row cost** (that row: −775.00 vs −764.06, so $10.94). The same difference appears in P&L (+235.00 vs +224.06), so the numbers reconcile and fees need not be guessed;
+  - the import preview shows this reconciliation per trade and flags any row where it doesn't balance.
+- **No stable identifier exists.** The link's `portfolio-0-1790108523081` is generated at render time and changes on reload. Identity therefore comes from a **natural key**: ticker + open timestamp + close timestamp + sorted (right, strike, size) legs. The trade's UUID is UUIDv5 of that key, which makes re-imports idempotent and keeps both machines in agreement (§12).
+- **Dates need repair.** Displayed dates carry no year ("Sep 9"), so the year is taken from the link's ISO expiry, stepping back one year if that would place the open after expiry. Times are rendered in the viewer's timezone, so the snippet records `Intl.DateTimeFormat().resolvedOptions().timeZone` in its output, and the import preview shows both the original text and the converted ET time for confirmation.
+- **Collection mechanics:** the snippet expands every collapsed row (clicking the chevron buttons), waits for the leg rows, walks all pages of the table, and accumulates. It then downloads `oquants-trades.json`.
+- Fallback if the markup shifts: the Next.js flight payload embedded in the page (`self.__next_f`) carries the same records and can be parsed.
+- The snippet never reads session cookies or tokens, and none are stored in the repo or in the journal's data directory.
 - That JSON is dropped into the importer, which has a **built-in oQuants mapping**, so the column-mapping step is skipped.
 - The snippet only ever touches the user's own account data, it runs manually, and it stores no credentials. Re-running it and re-importing is safe: rows carry oQuants' own trade IDs in `external_ref`, so duplicates are detected.
 - Fallback if the page's markup changes: copy the table and paste it into the generic mapper (§7.2), which loses the per-leg detail but keeps the numbers.
@@ -446,7 +455,7 @@ Each phase ends usable, and each gets its own implementation plan.
 
 These are facts to confirm at the start of the relevant phase. None of them blocks the design.
 
-1. **oQuants extraction (Phase 1):** there is no export button and no JSON trades API; the extractor snippet of §7.2b is the route, reading the table plus each row's designer link. Still needed to write the selectors: the **HTML of one portfolio row, expanded** (right-click the row → Inspect → right-click its `<tr>` → Copy → Copy outerHTML). Numbers can be changed. **Never paste request headers or cookies**, which carry a live session token.
+1. **oQuants extraction (Phase 1):** resolved. Markup for a parent row and its four leg rows was captured, the field mapping is written up in §7.2b, and the totals reconcile. Two small unknowns remain, both answerable while building the snippet against the live page: how the table paginates (page-size control vs infinite scroll), and confirmation that displayed times are in the viewer's timezone rather than ET.
 2. **IBKR Flex (Phase 2):**
    - whether paper accounts support the Flex Web Service (fallback: upload a Flex file);
    - which query type includes same-day executions;
