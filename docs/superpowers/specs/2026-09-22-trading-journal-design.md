@@ -170,7 +170,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **setups**: `name`, `description`, `strategy` (nullable = both), `color`, `archived`.
 - **tags**: `name`, `kind` (`mistake` | `emotion`), `color`, `archived`. **trade_tags**: `trade_id`, `tag_id`.
 - **attachments**: `trade_id`, `sha256`, `ext`, `mime`, `bytes`, `caption`.
-- **import_batches** and **import_batch_items**: see the oQuants importer spec §7. Enable **Undo import**.
+- Imports tag their trades with `import_batch_id` (one id per run); there is no batches table. A backup taken before every import is the undo.
 - **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `ts`, `o`, `h`, `l`, `c`, `v`, `source`. Primary key `(symbol, timeframe, ts)`.
 - **sync_state**: `account_id`, `last_run_at`, `last_status`, `last_error`.
 - **settings**: key/value, per machine.
@@ -200,7 +200,7 @@ Deferred. The generic mapper was planned for oQuants and old spreadsheets, but e
 
 ### 7.2b Getting trades out of oQuants (no export button exists)
 
-Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oquants-importer-design.md). In short: a DevTools snippet copies the Portfolio table's raw cell text to the clipboard; the journal parses it (Earnings rows only, into the paper book), previews new, updated and skipped trades, and commits one undoable batch after a backup. Identity is a natural key of ticker, open time and legs, without close time, so open trades can be re-imported once they close. oQuants has no stable trade id.
+Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oquants-importer-design.md). In short: a DevTools snippet copies the Portfolio table's raw cell text to the clipboard; the journal parses it (Earnings rows only, into the paper book), previews new, already-imported and skipped trades, and inserts the new ones in one transaction after a backup. oQuants has no stable trade id, so identity is a UUIDv5 of ticker, open time and legs; re-running the import only adds trades it has not seen, and never modifies existing ones.
 
 ### 7.3 Iron fly metrics (computed in `core`)
 
@@ -394,7 +394,7 @@ Each phase ends usable, and each gets its own implementation plan.
 3. App shell in the Terminal theme: nav, global filter bar, command palette skeleton.
 4. Journal grid and trade detail page; manual iron fly entry; exclude flag; soft delete.
 5. ~~CSV/paste importer with column mapping~~ (deferred, §7.2).
-6. oQuants importer: extractor snippet, parser, preview, backup, undo, duplicate guard (§7.2b and its own spec).
+6. oQuants importer: extractor snippet, parser, preview, backup, duplicate guard (§7.2b and its own spec).
 7. Iron fly metrics and P&L attribution in `core`; dashboard, calendar, equity curve, breakdowns, iron fly page.
 8. Setups, mistake/emotion tags, grades, notes.
 9. Export bundle and merge import.
