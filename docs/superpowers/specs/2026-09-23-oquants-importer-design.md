@@ -140,11 +140,11 @@ Cells are always read **by header label**, never by position or CSS class (MUI c
 5. **Money.**
    - Leg entry price = |leg cost| ÷ (|size| × 100).
    - Leg exit price = |leg cost + leg P&L| ÷ (|size| × 100). Example: a 5-lot short call with cost −400 and P&L +375 exits at |−400 + 375| ÷ 500 = 0.05.
-   - `fees` = Σ leg cost − row cost. `feesOpen` and `feesClose` stay null, because oQuants does not show the split.
+   - `fees` = row cost − Σ leg cost (round-trip fees make the row's credit smaller: −1,192.00 vs −1,200.00 gives $8.00). `feesOpen` and `feesClose` stay null, because oQuants does not show the split. Fees below zero: skip, `fees came out negative ($x)`.
    - `netCost` = row cost (negative = credit). `netPnl` = row P&L. `creditPerShare` = −Σ leg cost ÷ (contracts × 100).
    - Open trades: no exit prices, `netPnl` and `closedAt` null.
 6. **Reconciliation.** Σ leg P&L − row P&L should equal `fees` within $0.01. If not, the trade is still imported and flagged `doesn't reconcile ($x)`.
-7. **Identity.** Key = `ticker | openedAt (minute) | legs sorted by (right, strike, signed size)`. Id = UUIDv5(key, a fixed project namespace).
+7. **Identity.** Key = `ticker | openedAt (minute) | legs sorted by (right, strike, signed size)`. Id = UUIDv5(key, a fixed project namespace). A second row with the same id in one payload (e.g. a page read twice): skip, `duplicate row`.
 8. **Fixed fields.** `source = "oquants_extract"`, `book = "paper"`, `strategy = "iron_fly"`, `underlyingName` from the Instrument cell, `structureLabel` from Structure, `ironFly.sourceNotes` from Notes.
 
 **Counter check.** When the number of trades collected differs from the total in `pageCounter`, the result carries a warning. It does not block the import.
@@ -180,7 +180,7 @@ Existing trades are never modified. Running the import again later therefore onl
 
 Body: the same payload. The server parses and looks up again (so nothing from the preview is trusted), then:
 
-1. Backs up the database with SQLite's online backup API (`better-sqlite3`'s `backup()`) into `backups/`, keeping the last 10. The migration backup moves onto the same `backupDatabase()` helper, because a plain file copy is unsafe while the database is open in WAL mode.
+1. Backs up the database with `VACUUM INTO` on a separate read-only connection into `backups/`, keeping the last 10. The migration backup moves onto the same `backupDatabase()` helper, because a plain file copy is unsafe while the database is open in WAL mode. When nothing is new, no backup is taken.
 2. Inserts every **New** trade, with its legs and iron-fly details, in one transaction through the existing trades repository. Any failure rolls back everything.
 3. Returns the count inserted and the backup file name.
 
