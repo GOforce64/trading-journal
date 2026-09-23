@@ -124,6 +124,7 @@ Cells are always read **by header label**, never by position or CSS class (MUI c
 `parseOquants(payload)` returns, per trade, either `{ kind: "trade", key, trade: NewTrade, flags, original }` or `{ kind: "skip", ticker, reason, original }`. `original` is the raw cell text, kept for the preview. Steps run in order, and the first failure skips the trade with that reason. A trade is never half-parsed.
 
 1. **Filter.** Strategy must be `Earnings`. Otherwise skip: `strategy <value>`.
+   A trade with no leg rows (it never expanded): skip, `no legs collected — the row did not expand; run the snippet again`.
 2. **Legs.** Side and quantity from the signed Size (`-5` = short 5, `+5` = long 5). Right from Type, strike from Strike. The ISO expiry comes from the designer link's `positions[i][expiration]`, matched to the leg by type and strike. The link's `price` values are ignored.
 3. **Shape.** Every leg must have the same absolute size, which becomes `contracts`. The legs must be:
    - one short put and one short call (the body; equal strikes for a fly, different for a condor);

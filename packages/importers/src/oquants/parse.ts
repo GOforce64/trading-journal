@@ -184,6 +184,8 @@ function parseTrade(raw: OquantsTradeCells, cell: CellReader, timeZone: string):
   const strategy = cell(raw.cells, "Strategy");
   if (strategy !== "Earnings") throw new Skip(`strategy ${strategy || "(none)"}`);
 
+  if (raw.legs.length === 0)
+    throw new Skip("no legs collected — the row did not expand; run the snippet again");
   const legs = readLegs(raw, cell);
   const structure = classify(legs);
   const flags = structure.putWingStrike === 0 ? ["1 wing"] : [];

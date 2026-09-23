@@ -130,6 +130,12 @@ describe("parseOquants", () => {
     );
   });
 
+  it("says when a row's legs were never collected", () => {
+    expect(skipReason({ legs: [] })).toBe(
+      "no legs collected — the row did not expand; run the snippet again",
+    );
+  });
+
   it("skips an unparseable date", () => {
     expect(skipReason({ open: "yesterday" })).toBe('unparseable date "yesterday"');
   });
