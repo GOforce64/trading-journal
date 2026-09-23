@@ -87,11 +87,13 @@ export function ironFlyStructureFromLegs(legs: PricedLeg[]): IronFlyStructure | 
   const shortPut = legs.find((leg) => leg.right === "P" && leg.quantity < 0);
   const longCall = legs.find((leg) => leg.right === "C" && leg.quantity > 0);
   const longPut = legs.find((leg) => leg.right === "P" && leg.quantity > 0);
-  if (!shortCall || !shortPut || !longCall || !longPut) return null;
+  // Without a long call the upside is unlimited, which this model does not cover.
+  if (!shortCall || !shortPut || !longCall) return null;
   return {
     bodyPutStrike: shortPut.strike,
     bodyCallStrike: shortCall.strike,
-    putWingStrike: longPut.strike,
+    // A 1-wing trade: the stock cannot fall below zero, so 0 is the put side's wing.
+    putWingStrike: longPut?.strike ?? 0,
     callWingStrike: longCall.strike,
   };
 }

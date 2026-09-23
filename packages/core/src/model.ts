@@ -31,7 +31,8 @@ export const legInputSchema = z.object({
 export const ironFlyDetailsSchema = z.object({
   bodyPutStrike: z.number().positive(),
   bodyCallStrike: z.number().positive(),
-  putWingStrike: z.number().positive(),
+  /** 0 marks a 1-wing trade: with no long put, the stock going to zero caps the put side. */
+  putWingStrike: z.number().nonnegative(),
   callWingStrike: z.number().positive(),
   contracts: z.number().int().positive(),
   /** Gross credit per share, before fees. */
