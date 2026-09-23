@@ -96,7 +96,7 @@ trading-journal/
 │  ├─ core/           PURE domain logic, no I/O: Zod models, fill grouping, P&L, Black-Scholes/IV,
 │  │                  R and MAE/MFE, iron-fly metrics, indicators, stats, merge algorithm
 │  ├─ db/             Drizzle schema, migrations, repositories (sync SQLite API)
-│  ├─ importers/      IBKR Flex parser, CSV/paste parser, column mapping, presets (oQuants)
+│  ├─ importers/      IBKR Flex parser, oQuants parser
 │  └─ market-data/    MarketDataProvider interface, Massive adapter, rate-limited queue, bar cache
 ├─ scripts/           start.sh / start.cmd, demo data generator
 └─ docs/
@@ -149,7 +149,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
   - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "XYZ Industries"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
   - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees` (round trip), `fees_open`, `fees_close`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
   - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`
-  - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants does not, so those trades key on the natural-key hash of §7.2b)
+  - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants has none, so its trades are identified by the UUIDv5 of a natural key instead, see §7.2b)
   - merge: `edited_at` (last *user* edit; see §12). Set at creation for manual and imported trades, which are user-authored. Null for IBKR-synced trades until the user first edits one.
 - **legs**: `trade_id`, `right` (C/P), `strike`, `expiry`, `multiplier`, `side` (long/short), `quantity`, `avg_open_price`, `avg_close_price`, `broker_conid`.
 - **fills**: `trade_id`, `leg_id`, `executed_at`, `side`, `quantity`, `price`, `commission`, `broker_exec_id`, `raw` (JSON of the source row, for audit). Fills are immutable facts.
@@ -170,8 +170,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **setups**: `name`, `description`, `strategy` (nullable = both), `color`, `archived`.
 - **tags**: `name`, `kind` (`mistake` | `emotion`), `color`, `archived`. **trade_tags**: `trade_id`, `tag_id`.
 - **attachments**: `trade_id`, `sha256`, `ext`, `mime`, `bytes`, `caption`.
-- **import_batches**: `source`, `file_name`, `mapping_id`, `imported_at`, `row_counts`. Enables **Undo import**.
-- **import_mappings**: `name`, `strategy`, `columns` (JSON: source column → field + transform), `date_format`, `number_format`.
+- **import_batches** and **import_batch_items**: see the oQuants importer spec §7. Enable **Undo import**.
 - **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `ts`, `o`, `h`, `l`, `c`, `v`, `source`. Primary key `(symbol, timeframe, ts)`.
 - **sync_state**: `account_id`, `last_run_at`, `last_status`, `last_error`.
 - **settings**: key/value, per machine.
@@ -195,39 +194,13 @@ Positions are built the way oQuants shows them: **leg by leg, priced individuall
 
 Scalps and any structure that is not a four-legged fly need a general multi-leg editor. That is deliberately **out of scope here** and gets its own plan alongside the Phase 2 scalp work.
 
-### 7.2 Import: CSV and pasted tables with column mapping
+### 7.2 Import: CSV and pasted tables with column mapping (deferred)
 
-A single importer handles any tabular source: an oQuants export, a table copied from a web page, or an old spreadsheet.
-
-1. **Input:** upload a `.csv`, or paste a table. Tab-separated text from a copied HTML table is detected automatically.
-2. **Map:** each source column is assigned to a journal field or "ignore". Transforms are available for date formats, `%` vs decimal, `$`/thousands separators, and `BMO`/`AMC` synonyms. Mappings can be saved by name and reused.
-3. **Preview:** the first 50 rows are parsed, with per-row errors highlighted (e.g. "row 12: unparseable date"). Invalid rows are skipped, never half-imported.
-4. **Book:** choose Live or Paper for the whole batch, then bulk-edit individual trades afterwards.
-5. **Commit:** everything goes in one transaction after an automatic DB backup, and gets an `import_batch_id`. **Undo import** soft-deletes the whole batch.
-6. **Duplicate guard:** when a row matches an existing trade on underlying, earnings date, body strike and contracts, it is flagged in the preview and skipped by default.
+Deferred. The generic mapper was planned for oQuants and old spreadsheets, but every iron fly lives in oQuants, which now has its own importer (§7.2b), and scalps will arrive through IBKR Flex (§8.1). It comes back only if a source appears that needs it.
 
 ### 7.2b Getting trades out of oQuants (no export button exists)
 
-oQuants has no export, so the history is extracted from the user's own logged-in session, by hand, never by an automated crawler:
-
-- The repo ships a **browser extractor snippet** (`scripts/oquants-extract.js`) that the user pastes into the DevTools console on their Portfolio page. It expands every row, reads the table (instrument, strategy, structure, notes, open/close dates, per-leg type/expiry/strike/size, cost, P&L, P&L %), and downloads `oquants-trades.json`.
-- **What the platform exposes** (confirmed from live markup, 2026-09-22): oQuants is a Next.js App Router app on Vercel. The Portfolio page is server-rendered; the only related request is an RSC prefetch (`text/x-component`) of the strategy designer. There is no JSON trades API, so the snippet reads the page itself, from three sources:
-  1. **The parent row** (MUI table): instrument ticker (`p.oq-ticker-symbol`, one of the few stable class names) and company name, strategy chip ("Earnings"), structure chip ("Short Iron Butterfly"), notes, open date/time, close date/time with holding days, cost, P&L, P&L %.
-  2. **The expanded child rows**, one per leg: type (Call/Put), expiry, strike, size (signed: `-5` short, `+5` long), cost, P&L, P&L %.
-  3. **The row's designer link**, whose query string encodes every leg — `positions[i][buySell|size|type|strike|expiration]` — plus the structure `name` and the symbol. This is where the **ISO expiry** comes from (`2026-09-11`); the table only shows "Sep 11 (2d)". Leg `price` values in the link are unreliable (mostly `0`) and are ignored.
-  - MUI class names are hashed and unstable, so cells are read **by column index resolved from the header labels**, never by class.
-- **Derived on import** (worked through on a sample row, a 4-lot broken-wing fly):
-  - leg open price = |leg cost| ÷ (size × 100); leg close cash = leg P&L − leg open cash, giving the close price;
-  - **fees = Σ leg cost − row cost** (that row: −1,200.00 vs −1,192.00, so $8.00). The same difference appears in P&L (+520.00 vs +512.00), so the numbers reconcile and fees need not be guessed;
-  - the import preview shows this reconciliation per trade and flags any row where it doesn't balance.
-- **No stable identifier exists.** The link's `portfolio-0-1790108523081` is generated at render time and changes on reload. Identity therefore comes from a **natural key**: ticker + open timestamp + close timestamp + sorted (right, strike, size) legs. The trade's UUID is UUIDv5 of that key, which makes re-imports idempotent and keeps both machines in agreement (§12).
-- **Dates need repair.** Displayed dates carry no year ("Sep 9"), so the year is taken from the link's ISO expiry, stepping back one year if that would place the open after expiry. Times are rendered in the viewer's timezone, so the snippet records `Intl.DateTimeFormat().resolvedOptions().timeZone` in its output, and the import preview shows both the original text and the converted ET time for confirmation.
-- **Collection mechanics:** the snippet expands every collapsed row (clicking the chevron buttons), waits for the leg rows, walks all pages of the table, and accumulates. It then downloads `oquants-trades.json`.
-- Fallback if the markup shifts: the Next.js flight payload embedded in the page (`self.__next_f`) carries the same records and can be parsed.
-- The snippet never reads session cookies or tokens, and none are stored in the repo or in the journal's data directory.
-- That JSON is dropped into the importer, which has a **built-in oQuants mapping**, so the column-mapping step is skipped.
-- The snippet only ever touches the user's own account data, it runs manually, and it stores no credentials. Re-running it and re-importing is safe: rows carry oQuants' own trade IDs in `external_ref`, so duplicates are detected.
-- Fallback if the page's markup changes: copy the table and paste it into the generic mapper (§7.2), which loses the per-leg detail but keeps the numbers.
+Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oquants-importer-design.md). In short: a DevTools snippet copies the Portfolio table's raw cell text to the clipboard; the journal parses it (Earnings rows only, into the paper book), previews new, updated and skipped trades, and commits one undoable batch after a backup. Identity is a natural key of ticker, open time and legs, without close time, so open trades can be re-imported once they close. oQuants has no stable trade id.
 
 ### 7.3 Iron fly metrics (computed in `core`)
 
@@ -401,7 +374,7 @@ oQuants has no export, so the history is extracted from the user's own logged-in
   - **Fills:** set union by ID. They are immutable broker facts, and IDs are deterministic (§8.1). Legs and P&L are recomputed from the merged fills.
   - **User-editable fields** (stop, target, setup, tags, grade, emotion, notes, excluded, details for manual/imported trades): **last writer wins by `edited_at`**. A trade that was only synced and never edited has `edited_at = null`, so it never overwrites someone's annotations.
   - **Deletes:** a tombstone (`deleted_at`) beats an edit only if it is newer.
-  - **Other syncable tables** (accounts, setups, tags, mappings): the record with the newer `updated_at` wins.
+  - **Other syncable tables** (accounts, setups, tags): the record with the newer `updated_at` wins.
   - **Attachments:** files missing locally are copied by sha256.
 - **Summary** after merge: counts of added, updated from the bundle, kept local, deleted, and fills added.
 - **Guarantees** (property-tested with fast-check):
@@ -420,8 +393,8 @@ Each phase ends usable, and each gets its own implementation plan.
 2. Data directory, secrets, backups; Drizzle schema, migrations and repositories.
 3. App shell in the Terminal theme: nav, global filter bar, command palette skeleton.
 4. Journal grid and trade detail page; manual iron fly entry; exclude flag; soft delete.
-5. CSV/paste importer with column mapping, saved mappings, preview, undo, duplicate guard.
-6. oQuants browser extractor snippet plus its built-in mapping (§7.2b), including per-leg detail.
+5. ~~CSV/paste importer with column mapping~~ (deferred, §7.2).
+6. oQuants importer: extractor snippet, parser, preview, backup, undo, duplicate guard (§7.2b and its own spec).
 7. Iron fly metrics and P&L attribution in `core`; dashboard, calendar, equity curve, breakdowns, iron fly page.
 8. Setups, mistake/emotion tags, grades, notes.
 9. Export bundle and merge import.
@@ -467,9 +440,9 @@ Each phase ends usable, and each gets its own implementation plan.
   - fill grouping edge cases: scale in/out, partials, a position open across a sync;
   - stats definitions; iron fly metrics; indicators against hand-computed fixtures (VWAP anchoring, EMA warm-up, premarket window across DST);
   - merge properties (idempotence, convergence) with fast-check.
-- **`importers`:** fixture files (a sanitized IBKR Flex XML, and the oQuants sample once provided), mapping transforms, duplicate detection.
+- **`importers`:** fixture files (a sanitized IBKR Flex XML, and a synthetic oQuants payload), parser rules, duplicate detection.
 - **`server`:** the Hono app via `app.request()` on in-memory SQLite, covering routes, validation, the import transaction and rollback, and the DNS-rebinding guard.
-- **`web`:** focused component tests for the mapping wizard and chart marking. A **Playwright** smoke run on the demo build: open, filter, open a trade, tag it.
+- **`web`:** focused component tests for the import preview and chart marking. A **Playwright** smoke run on the demo build: open, filter, open a trade, tag it.
 - **CI** runs everything on Ubuntu and Windows. Fixture data is fake or sanitized; real data never enters the repo.
 
 ---
@@ -478,7 +451,7 @@ Each phase ends usable, and each gets its own implementation plan.
 
 These are facts to confirm at the start of the relevant phase. None of them blocks the design.
 
-1. **oQuants extraction (Phase 1):** resolved. Markup for a parent row and its four leg rows was captured, the field mapping is written up in §7.2b, and the totals reconcile. Two small unknowns remain, both answerable while building the snippet against the live page: how the table paginates (page-size control vs infinite scroll), and confirmation that displayed times are in the viewer's timezone rather than ET.
+1. **oQuants extraction (Phase 1):** resolved. Markup for a full page and a parent row with its leg rows was captured, and the totals reconcile. The table paginates with MUI TablePagination, and displayed times are in the viewer's timezone. One unknown remains, confirmed on the first live run: how an open trade's Close Date is shown. See the oQuants importer spec.
 2. **IBKR Flex (Phase 2):**
    - whether paper accounts support the Flex Web Service (fallback: upload a Flex file);
    - which query type includes same-day executions;
