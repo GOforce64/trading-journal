@@ -47,6 +47,17 @@ describe("IronFlyForm", () => {
     expect(payload.ironFly.putWingStrike).toBe(0);
   });
 
+  it("saves a trade with no call wing when the long call is left blank", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    for (const field of ["strike", "size", "entry", "exit"]) fill(`Long call ${field}`, "");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload.legs).toHaveLength(3);
+    expect(payload.ironFly.callWingStrike).toBeNull();
+  });
+
   it("keeps the structure label it was given", () => {
     const { onSubmit } = setup({ structureLabel: "Short Iron Condor" });
     priceTheSampleFly();

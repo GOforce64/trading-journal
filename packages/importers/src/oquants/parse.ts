@@ -58,7 +58,8 @@ interface Structure {
   bodyPutStrike: number;
   bodyCallStrike: number;
   putWingStrike: number;
-  callWingStrike: number;
+  /** Null when there is no long call. */
+  callWingStrike: number | null;
 }
 
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
@@ -111,7 +112,7 @@ function readLegs(raw: OquantsTradeCells, cell: CellReader): RawLeg[] {
   });
 }
 
-/** A short put and call body, a long call above, and optionally a long put below. */
+/** A short put and call body, with a long call above and/or a long put below. */
 function classify(legs: RawLeg[]): Structure {
   const pick = (right: "C" | "P", short: boolean) =>
     legs.filter((leg) => leg.right === right && leg.quantity < 0 === short);
@@ -119,21 +120,19 @@ function classify(legs: RawLeg[]): Structure {
   const shortPuts = pick("P", true);
   const longCalls = pick("C", false);
   const longPuts = pick("P", false);
-  if (shortCalls.length === 1 && shortPuts.length === 1 && longCalls.length === 0 && longPuts.length <= 1) {
-    throw new Skip("no call wing — unlimited risk, enter manually");
-  }
   const [shortCall] = shortCalls;
   const [shortPut] = shortPuts;
   const [longCall] = longCalls;
   const [longPut] = longPuts;
-  if (!shortCall || !shortPut || !longCall || shortCalls.length > 1 || shortPuts.length > 1) {
+  if (!shortCall || !shortPut || shortCalls.length > 1 || shortPuts.length > 1) {
     throw new Skip("unrecognized structure");
   }
   if (longCalls.length > 1 || longPuts.length > 1) throw new Skip("unrecognized structure");
+  if (!longCall && !longPut) throw new Skip("no wings — enter manually");
   const size = Math.abs(shortCall.quantity);
   if (legs.some((leg) => Math.abs(leg.quantity) !== size)) throw new Skip("unrecognized structure");
   if (
-    longCall.strike <= shortCall.strike ||
+    (longCall && longCall.strike <= shortCall.strike) ||
     shortPut.strike > shortCall.strike ||
     (longPut && longPut.strike >= shortPut.strike)
   ) {
@@ -143,7 +142,7 @@ function classify(legs: RawLeg[]): Structure {
     bodyPutStrike: shortPut.strike,
     bodyCallStrike: shortCall.strike,
     putWingStrike: longPut?.strike ?? 0,
-    callWingStrike: longCall.strike,
+    callWingStrike: longCall?.strike ?? null,
   };
 }
 
@@ -188,7 +187,9 @@ function parseTrade(raw: OquantsTradeCells, cell: CellReader, timeZone: string):
     throw new Skip("no legs collected — the row did not expand; run the snippet again");
   const legs = readLegs(raw, cell);
   const structure = classify(legs);
-  const flags = structure.putWingStrike === 0 ? ["1 wing"] : [];
+  const flags: string[] = [];
+  if (structure.putWingStrike === 0) flags.push("1 wing");
+  if (structure.callWingStrike === null) flags.push("no call wing");
 
   const open = readDate(cell(raw.cells, "Open Date"));
   const closeText = cell(raw.cells, "Close Date");

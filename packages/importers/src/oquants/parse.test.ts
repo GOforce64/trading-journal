@@ -118,9 +118,21 @@ describe("parseOquants", () => {
     expect(skipReason({ strategy: "VRP" })).toBe("strategy VRP");
   });
 
-  it("skips a trade with no call wing", () => {
-    expect(skipReason({ legs: [shortCall, shortPut, longPut] })).toBe(
-      "no call wing — unlimited risk, enter manually",
+  it("imports a trade with no call wing, flagged, with the call wing left empty", () => {
+    const { trade, flags } = parsed({
+      legs: [shortCall, shortPut, longPut],
+      cost: "-1,332.00",
+      pnl: "+632.00",
+    });
+    expect(flags).toEqual(["no call wing"]);
+    expect(trade.legs).toHaveLength(3);
+    expect(trade.ironFly?.callWingStrike).toBeNull();
+    expect(trade.ironFly?.putWingStrike).toBe(45);
+  });
+
+  it("skips a trade with no wings at all", () => {
+    expect(skipReason({ legs: [shortCall, shortPut], cost: "-1,472.00", pnl: "+752.00" })).toBe(
+      "no wings — enter manually",
     );
   });
 

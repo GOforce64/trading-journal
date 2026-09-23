@@ -1,6 +1,6 @@
 // oQuants → Trading Journal extractor.
 // On oQuants, open Portfolio, press F12 → Console, paste this whole file, press Enter.
-// It walks every page, expands every trade, and copies the table's text to the
+// It walks every page, expands each trade in turn, and copies the table's text to the
 // clipboard. It reads only what the page shows; no cookies, tokens or storage.
 (async () => {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,10 +44,12 @@
     return [...new URL(link.href).searchParams.keys()].filter((key) => /^positions\[\d+\]\[type\]$/.test(key))
       .length;
   };
-  const pageKey = () =>
-    tradeRows()
-      .map((tr) => tr.querySelector(DESIGNER)?.getAttribute("href"))
-      .join("|");
+  // Ticker + open time names a trade; the designer link's ids change on every render.
+  const openColumn = headers.indexOf("Open Date");
+  const rowKey = (tr) => `${text(tr.querySelector(".oq-ticker-symbol"))}|${text(tr.cells[openColumn])}`;
+  const findRow = (key) => tradeRows().find((tr) => rowKey(tr) === key);
+  const toggle = (tr) => tr.cells[0].querySelector("button.MuiIconButton-root")?.click();
+  const pageKey = () => tradeRows().map(rowKey).join("\n");
   const button = (label) => pagination().querySelector(`[aria-label="${label}"]`);
 
   const first = button("Go to first page");
@@ -57,25 +59,80 @@
     await waitFor(() => pageKey() !== before);
   }
 
+  // oQuants pages by rows and leg rows count toward the 50, so an expanded trade
+  // pushes others off the page. Work one trade at a time: expand, read, collapse.
+  const collapseAll = async () => {
+    for (let guard = 0; guard < 100; guard++) {
+      const open = tradeRows().find((tr) => legRowsOf(tr).length > 0);
+      if (!open) return;
+      const key = rowKey(open);
+      toggle(open);
+      await waitFor(() => !findRow(key) || legRowsOf(findRow(key)).length === 0, 3000);
+    }
+  };
+
+  const cellsOf = (row) => ({ cells: [...row.cells].map(text) });
+  const goTo = async (label) => {
+    const target = button(label);
+    if (!target || target.disabled) return false;
+    const before = pageKey();
+    target.click();
+    return waitFor(() => pageKey() !== before);
+  };
+  const isLastOnPage = (tr) => {
+    let next = tr.nextElementSibling;
+    while (next && !next.querySelector(".oq-ticker-symbol")) next = next.nextElementSibling;
+    return !next;
+  };
+  // An expanded trade at the bottom of a page has its later legs pushed onto the
+  // next page, where they lead the table before its first trade row.
+  const spilledLegs = async () => {
+    if (!(await goTo("Go to next page"))) return [];
+    const legs = [];
+    for (const row of table().querySelectorAll("tbody tr")) {
+      if (row.querySelector(".oq-ticker-symbol")) break;
+      if (/^(Call|Put)$/.test(text(row.cells[typeColumn]))) legs.push(cellsOf(row));
+    }
+    await goTo("Go to previous page");
+    return legs;
+  };
+
   const trades = [];
   for (let page = 1; page <= 100; page++) {
-    for (const tr of tradeRows()) {
-      const expected = legCountInLink(tr);
-      // Only click rows showing no legs: the toggle would collapse one that is already open.
-      if (legRowsOf(tr).length === 0) {
-        tr.cells[0].querySelector("button.MuiIconButton-root")?.click();
-        if (!(await waitFor(() => legRowsOf(tr).length >= expected, 3000))) {
-          console.warn(
-            `oQuants extract: ${text(tr.querySelector(".oq-ticker-symbol"))} did not expand; its legs may be missing.`,
-          );
-        }
+    await collapseAll();
+    for (const key of tradeRows().map(rowKey)) {
+      const row = findRow(key);
+      if (!row) {
+        console.warn(`oQuants extract: ${key} vanished from the page; it may be missing.`);
+        continue;
       }
-      trades.push({
+      const expected = Math.max(1, legCountInLink(row));
+      toggle(row);
+      await waitFor(() => findRow(key) && legRowsOf(findRow(key)).length >= expected, 3000);
+      await sleep(100);
+      let tr = findRow(key);
+      if (!tr) {
+        console.warn(`oQuants extract: ${key} vanished from the page; it may be missing.`);
+        continue;
+      }
+      const trade = {
         ticker: text(tr.querySelector(".oq-ticker-symbol")),
         cells: [...tr.cells].map(text),
         designerHref: tr.querySelector(DESIGNER)?.getAttribute("href") ?? "",
-        legs: legRowsOf(tr).map((leg) => ({ cells: [...leg.cells].map(text) })),
-      });
+        legs: legRowsOf(tr).map(cellsOf),
+      };
+      if (trade.legs.length < expected && isLastOnPage(tr)) {
+        trade.legs.push(...(await spilledLegs()));
+        tr = findRow(key);
+      }
+      if (trade.legs.length === 0) {
+        console.warn(`oQuants extract: ${key} did not expand; its legs may be missing.`);
+      }
+      trades.push(trade);
+      if (tr && legRowsOf(tr).length > 0) {
+        toggle(tr);
+        await waitFor(() => !findRow(key) || legRowsOf(findRow(key)).length === 0, 3000);
+      }
     }
     const next = button("Go to next page");
     if (!next || next.disabled) break;
@@ -99,12 +156,9 @@
   });
 
   window.oquantsExport = payload;
-  if (typeof copy === "function") {
-    copy(payload);
-    console.log(
-      `Copied ${trades.length} trades (counter said "${pageCounter}"). Paste into the journal's Import page.`,
-    );
-  } else {
-    console.log(`Collected ${trades.length} trades. Run copy(oquantsExport) to copy them.`);
-  }
+  // Some browsers ignore copy() this late in a long-running script, so always say how to copy by hand.
+  if (typeof copy === "function") copy(payload);
+  console.log(
+    `Collected ${trades.length} trades (counter said "${pageCounter}"). If the clipboard is empty, run copy(oquantsExport) here, then paste into the journal's Import page.`,
+  );
 })();

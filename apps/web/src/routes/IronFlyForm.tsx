@@ -61,8 +61,8 @@ function toPricedLegs(values: IronFlyFormValues): PricedLeg[] | null | "fraction
   const legs: PricedLeg[] = [];
   for (const role of LEG_ROLES) {
     const fields = values.legs[role.key];
-    // A 1-wing trade has no long put; its put wing then counts as strike 0.
-    if (role.key === "longPut" && isBlank(fields)) continue;
+    // A 1-wing trade leaves one long leg blank; the structure check rejects both.
+    if (!role.short && isBlank(fields)) continue;
     const strike = num(fields.strike);
     const size = num(fields.size);
     const entry = num(fields.entry);
@@ -114,14 +114,18 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       close: zeroIfBlank(values.feesClose),
     });
     const structure = ironFlyStructureFromLegs(legs);
-    const metrics = structure
-      ? ironFlyMetrics({
-          ...structure,
-          contracts: cash.contracts,
-          creditPerShare: -(cash.netCost - cash.fees) / cash.shares,
-          fees: cash.fees,
-        })
-      : null;
+    const callWingStrike = structure?.callWingStrike ?? null;
+    // Without a call wing the upside is uncapped, so there is no max loss to show.
+    const metrics =
+      structure && callWingStrike !== null
+        ? ironFlyMetrics({
+            ...structure,
+            callWingStrike,
+            contracts: cash.contracts,
+            creditPerShare: -(cash.netCost - cash.fees) / cash.shares,
+            fees: cash.fees,
+          })
+        : null;
     return { legs, cash, structure, metrics };
   }, [values]);
 
@@ -131,7 +135,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       return;
     }
     if (!derived?.structure) {
-      setProblem("Every leg needs a strike, a size and an entry price.");
+      setProblem("Every leg needs a strike, a size and an entry price, and at least one wing is required.");
       return;
     }
     setProblem(null);
@@ -255,7 +259,8 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
             </tbody>
           </table>
           <p className="mt-1 text-[10px] text-muted">
-            Leave the long put blank for a 1-wing trade: the put wing counts as strike 0.
+            Leave one long leg blank for a 1-wing trade: a missing put wing counts as strike 0, a missing call
+            wing leaves max loss empty.
           </p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {input("Entry fees", values.feesOpen, set("feesOpen"), "number")}

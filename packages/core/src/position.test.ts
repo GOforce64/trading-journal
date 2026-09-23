@@ -98,8 +98,17 @@ describe("ironFlyStructureFromLegs", () => {
     });
   });
 
-  it("returns null without a long call, since that side's risk is unlimited", () => {
-    expect(ironFlyStructureFromLegs([shortCall, shortPut, longPut])).toBeNull();
+  it("leaves the call wing empty when there is no long call", () => {
+    expect(ironFlyStructureFromLegs([shortCall, shortPut, longPut])).toEqual({
+      bodyPutStrike: 50,
+      bodyCallStrike: 50,
+      putWingStrike: 45,
+      callWingStrike: null,
+    });
+  });
+
+  it("returns null with no wings at all", () => {
+    expect(ironFlyStructureFromLegs([shortCall, shortPut])).toBeNull();
   });
 
   it("keeps an unequal body, as a broken fly can have", () => {

@@ -20,7 +20,6 @@ Success means:
 
 - The generic CSV/paste importer with column mapping (parent spec §7.2). All flies live in oQuants, and scalps will arrive through IBKR Flex in Phase 2, so there is no source that needs it yet.
 - Market data backfill of earnings dates, IV and moves. Imported trades leave those empty for the user to fill.
-- Unlimited-risk structures (no call wing). They are skipped with a reason.
 - Updating trades that already exist (e.g. filling in close data on a trade imported while open). Open trades are closed in the journal's builder instead.
 - An undo button and import history. The pre-import backup is the undo.
 
@@ -35,7 +34,7 @@ Success means:
 | Book | Always `paper`. |
 | Strategy | Always `iron_fly`. Condors fit unchanged, because the body put and call strikes are already separate fields. |
 | One wing | The user never trades without at least one wing. A trade with no long put (e.g. ENVX, labelled "Short Straddle" by oQuants) imports with a **theoretical put wing at strike 0**, because the stock cannot fall below zero. Max loss and return on risk stay defined by the existing formulas. It is flagged **1 wing**. |
-| No call wing | Skipped: "no call wing — unlimited risk, enter manually". |
+| No call wing | Imported with `callWingStrike` null and flagged **no call wing** (e.g. ENVX: short straddle plus a long put). Max loss and return on risk stay empty, because the upside is uncapped. A trade with neither wing is skipped: `no wings — enter manually`. (Changed after the first live run, 2026-09-24.) |
 | Identity | Natural key = ticker + open time (to the minute) + legs sorted by (type, strike, signed size). The trade id is the UUIDv5 of that key. A re-import skips any id that already exists. |
 | Existing trades | Never modified by import, so the user's edits and annotations are always safe. |
 | Field mapping | Structure → `structureLabel`. Notes → `ironFly.sourceNotes`, keeping the user's own `notes` empty. Strategy is used only for the filter. Earnings date and timing, IV and moves stay null. |
@@ -83,7 +82,9 @@ Plain JavaScript with no build step, pasted into the DevTools console on the oQu
    - per leg row: every cell's `innerText`;
    - the "Totals" row is skipped.
 4. Click `aria-label="Go to next page"` until it is disabled, waiting for the table body to change after each click.
-5. Build the payload (§5), call the console's built-in `copy(payload)`, and log `Copied N trades (counter said "1–50 of 72")`.
+5. Build the payload (§5), store it as `window.oquantsExport`, call the console's `copy(payload)`, and log how to run `copy(oquantsExport)` by hand (Firefox ignores `copy()` at the end of a long async script).
+
+Found on the first live run: oQuants pages by *rows*, and leg rows count toward the 50 per page. So the snippet expands, reads and collapses one trade at a time, finding rows by ticker + open time, and collapses any open rows at the start of each page. When the last trade on a page has legs spilling onto the next page, it reads them from the top of that page and comes back.
 
 If the table or pagination cannot be found, it logs a clear error and copies nothing. The snippet is not unit tested; its first live run is its test.
 
@@ -128,10 +129,10 @@ Cells are always read **by header label**, never by position or CSS class (MUI c
 2. **Legs.** Side and quantity from the signed Size (`-5` = short 5, `+5` = long 5). Right from Type, strike from Strike. The ISO expiry comes from the designer link's `positions[i][expiration]`, matched to the leg by type and strike. The link's `price` values are ignored.
 3. **Shape.** Every leg must have the same absolute size, which becomes `contracts`. The legs must be:
    - one short put and one short call (the body; equal strikes for a fly, different for a condor);
-   - one long call above the body call strike;
+   - optionally one long call above the body call strike (at least one wing is required);
    - optionally one long put below the body put strike. With none, `putWingStrike = 0` and the trade is flagged **1 wing**.
 
-   No long call: skip, `no call wing — unlimited risk, enter manually`. Unequal sizes or any other shape: skip, `unrecognized structure`.
+   No long call: `callWingStrike` is null and the trade is flagged **no call wing**. Neither wing: skip, `no wings — enter manually`. Unequal sizes or any other shape: skip, `unrecognized structure`.
 4. **Dates.** Displayed dates carry no year.
    - The open date takes the leg expiry's year, stepping back one year if that would put the open after expiry.
    - The close date takes the open's year, plus one if its month and day fall before the open's.
@@ -156,7 +157,7 @@ Flags (`1 wing`, `doesn't reconcile`) are shown only in the preview and are not 
 
 ## 7. Data model changes
 
-- `ironFlyDetailsSchema.putWingStrike` becomes `nonnegative()` (was `positive()`), in the model and the builder form, so a 1-wing trade can be edited after import.
+- `ironFlyDetailsSchema.putWingStrike` becomes `nonnegative()` (was `positive()`), and `callWingStrike` becomes nullable, in the model and the builder form (either long leg may be left blank, not both), so 1-wing trades can be edited after import.
 - No new tables or columns. Imported trades get the existing `trades.import_batch_id` (one random id per import run) and `source = "oquants_extract"`.
 
 The parent spec's planned `import_mappings` table and `mapping_id` column are dropped, along with the generic mapper.

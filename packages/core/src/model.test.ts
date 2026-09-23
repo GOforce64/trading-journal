@@ -36,6 +36,11 @@ describe("newTradeSchema", () => {
     expect(newTradeSchema.parse(oneWing).ironFly?.putWingStrike).toBe(0);
   });
 
+  it("accepts a missing call wing, for a trade with only a put wing", () => {
+    const putWingOnly = { ...sampleFly, ironFly: { ...sampleFly.ironFly, callWingStrike: null } };
+    expect(newTradeSchema.parse(putWingOnly).ironFly?.callWingStrike).toBeNull();
+  });
+
   it("rejects a negative put wing", () => {
     const broken = { ...sampleFly, ironFly: { ...sampleFly.ironFly, putWingStrike: -1 } };
     expect(newTradeSchema.safeParse(broken).success).toBe(false);

@@ -74,26 +74,27 @@ export interface IronFlyStructure {
   bodyPutStrike: number;
   bodyCallStrike: number;
   putWingStrike: number;
-  callWingStrike: number;
+  /** Null when there is no long call. */
+  callWingStrike: number | null;
 }
 
 /**
  * A short iron butterfly is a short call and put at the body, with a long call
  * above and a long put below. Reading the structure back off the legs keeps the
- * stored detail honest when legs are edited.
+ * stored detail honest when legs are edited. One wing may be missing: without a
+ * long put the stock going to zero caps the put side (wing 0); without a long
+ * call the call wing is left empty. With neither wing it is not a fly.
  */
 export function ironFlyStructureFromLegs(legs: PricedLeg[]): IronFlyStructure | null {
   const shortCall = legs.find((leg) => leg.right === "C" && leg.quantity < 0);
   const shortPut = legs.find((leg) => leg.right === "P" && leg.quantity < 0);
   const longCall = legs.find((leg) => leg.right === "C" && leg.quantity > 0);
   const longPut = legs.find((leg) => leg.right === "P" && leg.quantity > 0);
-  // Without a long call the upside is unlimited, which this model does not cover.
-  if (!shortCall || !shortPut || !longCall) return null;
+  if (!shortCall || !shortPut || (!longCall && !longPut)) return null;
   return {
     bodyPutStrike: shortPut.strike,
     bodyCallStrike: shortCall.strike,
-    // A 1-wing trade: the stock cannot fall below zero, so 0 is the put side's wing.
     putWingStrike: longPut?.strike ?? 0,
-    callWingStrike: longCall.strike,
+    callWingStrike: longCall?.strike ?? null,
   };
 }
