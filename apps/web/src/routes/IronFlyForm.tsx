@@ -124,7 +124,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       setProblem("Sizes are whole contracts.");
       return;
     }
-    if (!derived || !derived.structure) {
+    if (!derived?.structure) {
       setProblem("Every leg needs a strike, a size and an entry price.");
       return;
     }
