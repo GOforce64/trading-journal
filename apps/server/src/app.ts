@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Db } from "@tj/db";
 import { Hono } from "hono";
+import { importRoutes } from "./routes/import.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { tradeRoutes } from "./routes/trades.js";
 
@@ -11,6 +12,8 @@ export interface AppDeps {
   now?: () => number;
   /** Directory holding the built UI. Omitted in development, where Vite serves it. */
   webDir?: string;
+  /** Snapshots the database before an import writes; returns the backup's path. */
+  backup?: () => string;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -28,7 +31,8 @@ export function createApp(deps: AppDeps) {
     .get("/api/health", (c) => c.json({ ok: true }))
     .route("/api/trades", tradeRoutes(deps.db, deps.now))
     .route("/api/setups", setups)
-    .route("/api/tags", tags);
+    .route("/api/tags", tags)
+    .route("/api/import", importRoutes(deps.db, deps.backup, deps.now));
 
   if (deps.webDir) {
     const webDir = deps.webDir;

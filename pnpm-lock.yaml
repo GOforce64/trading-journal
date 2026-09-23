@@ -35,6 +35,9 @@ importers:
       '@tj/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@tj/importers':
+        specifier: workspace:*
+        version: link:../../packages/importers
       hono:
         specifier: ^4.13.8
         version: 4.13.8
