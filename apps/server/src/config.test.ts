@@ -17,8 +17,8 @@ describe("resolveDataDir", () => {
   });
 
   it("uses APPDATA on Windows", () => {
-    expect(resolveDataDir({ APPDATA: "C:\\Users\\t\\AppData\\Roaming" }, "win32", "C:\\Users\\t")).toContain(
-      "trading-journal",
+    expect(resolveDataDir({ APPDATA: "C:\\Users\\t\\AppData\\Roaming" }, "win32", "C:\\Users\\t")).toBe(
+      "C:\\Users\\t\\AppData\\Roaming\\trading-journal",
     );
   });
 });
