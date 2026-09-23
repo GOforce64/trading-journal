@@ -61,7 +61,8 @@
   for (let page = 1; page <= 100; page++) {
     for (const tr of tradeRows()) {
       const expected = legCountInLink(tr);
-      if (legRowsOf(tr).length < expected) {
+      // Only click rows showing no legs: the toggle would collapse one that is already open.
+      if (legRowsOf(tr).length === 0) {
         tr.cells[0].querySelector("button.MuiIconButton-root")?.click();
         if (!(await waitFor(() => legRowsOf(tr).length >= expected, 3000))) {
           console.warn(

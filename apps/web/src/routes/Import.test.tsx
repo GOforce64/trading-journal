@@ -68,6 +68,18 @@ describe("Import", () => {
     expect(screen.getByText(/journal-x\.db/)).toBeTruthy();
   });
 
+  it("drops the preview when the pasted text changes, so only what was previewed can be imported", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(preview)));
+    setup();
+
+    paste('{"format":"oquants-cells/1"}');
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Import 1" })).toBeTruthy());
+
+    paste('{"format":"oquants-cells/1","trades":[]}');
+    expect(screen.queryByRole("button", { name: "Import 1" })).toBeNull();
+  });
+
   it("says so, without calling the server, when the paste is not JSON", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

@@ -107,7 +107,11 @@ export function Import({ onDone }: { onDone?: () => void }) {
         <textarea
           aria-label="Snippet output"
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            // A preview only vouches for the text it was made from.
+            setPreview(null);
+          }}
           className="num min-h-24 w-full rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[12px] text-fg outline-none focus:border-accent"
         />
         <div className="mt-2 flex items-center gap-3">
