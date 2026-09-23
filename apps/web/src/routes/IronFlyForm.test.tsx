@@ -36,6 +36,24 @@ function setup(initial?: Partial<IronFlyFormValues>) {
 }
 
 describe("IronFlyForm", () => {
+  it("saves a 1-wing trade when the long put is left blank", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    for (const field of ["strike", "size", "entry", "exit"]) fill(`Long put ${field}`, "");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload.legs).toHaveLength(3);
+    expect(payload.ironFly.putWingStrike).toBe(0);
+  });
+
+  it("keeps the structure label it was given", () => {
+    const { onSubmit } = setup({ structureLabel: "Short Iron Condor" });
+    priceTheSampleFly();
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit.mock.calls[0]?.[0].structureLabel).toBe("Short Iron Condor");
+  });
+
   it("derives the cash from the leg prices instead of asking for it", () => {
     setup();
     priceTheSampleFly();
