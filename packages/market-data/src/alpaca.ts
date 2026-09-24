@@ -46,7 +46,7 @@ export function alpacaQuotes(keys: AlpacaKeys, options: AlpacaOptions = {}): Quo
         // One unknown symbol fails the whole batch, so leave it out and ask again for the rest.
         const rejected = res.status === 400 ? INVALID_SYMBOL.exec(message)?.[1] : undefined;
         if (!rejected || !pending.includes(rejected))
-          throw new Error(`Alpaca answered ${res.status}: ${message}`);
+          throw new Error(`Alpaca answered ${res.status}${message ? `: ${message}` : ""}`);
         pending = pending.filter((symbol) => symbol !== rejected);
       }
       return new Map();
@@ -63,11 +63,11 @@ function toQuotes(reply: z.infer<typeof latestTradesSchema>): Map<string, Quote>
   );
 }
 
+/** Alpaca explains errors in JSON. Anything else, such as the web page sent for a wrong key, adds nothing. */
 async function errorMessage(res: Response): Promise<string> {
-  const text = await res.text();
   try {
-    return errorSchema.parse(JSON.parse(text)).message;
+    return errorSchema.parse(JSON.parse(await res.text())).message;
   } catch {
-    return text.slice(0, 200);
+    return "";
   }
 }

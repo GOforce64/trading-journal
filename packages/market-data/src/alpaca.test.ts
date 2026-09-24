@@ -117,6 +117,21 @@ describe("alpacaQuotes", () => {
     expect(String(error)).not.toContain(KEYS.secretKey);
   });
 
+  it("keeps an error page out of the message", async () => {
+    // What Alpaca's front end sends for a wrong key, seen on a live call.
+    const page =
+      "<html>\r\n<head><title>401 Authorization Required</title></head>\r\n<body>…</body>\r\n</html>\r\n";
+    const { fetch } = fakeFetch(
+      new Response(page, { status: 401, headers: { "content-type": "text/html" } }),
+    );
+    const error = await alpacaQuotes(KEYS, { fetch })
+      .latest(["M"])
+      .catch((caught: unknown) => caught);
+
+    expect(String(error)).toContain("401");
+    expect(String(error)).not.toContain("<html>");
+  });
+
   it("rejects a reply that is not in Alpaca's format rather than show a wrong price", async () => {
     const { fetch } = fakeFetch(json({ trades: { M: { p: "22.68", t: "2026-09-24T19:58:31Z" } } }));
     await expect(alpacaQuotes(KEYS, { fetch }).latest(["M"])).rejects.toThrow();
