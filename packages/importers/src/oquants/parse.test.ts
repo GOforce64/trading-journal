@@ -93,6 +93,16 @@ describe("parseOquants", () => {
     expect(open.id).toBe(parsed().id);
   });
 
+  it('reads a leg size shown as "current / original" by its original size', () => {
+    const raw = fixtureTrade();
+    const size = OQUANTS_HEADERS.indexOf("Size");
+    for (const leg of raw.legs) leg.cells[size] = `0 / ${leg.cells[size]}`;
+    const row = only(fixturePayload([raw]));
+    if (row.kind !== "trade") throw new Error(`skipped: ${row.reason}`);
+    expect(row.trade.legs.map((leg) => leg.quantity)).toEqual([-4, -4, 4, 4]);
+    expect(row.id).toBe(parsed().id);
+  });
+
   it("gives different trades different ids", () => {
     expect(parsed({ ticker: "ABC" }).id).not.toBe(parsed().id);
   });

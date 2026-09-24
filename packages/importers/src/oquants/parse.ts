@@ -94,7 +94,8 @@ function readLegs(raw: OquantsTradeCells, cell: CellReader): RawLeg[] {
     if (type !== "Call" && type !== "Put") throw new Skip("unrecognized structure");
     const right = type === "Call" ? "C" : "P";
     const strike = money(cell(leg.cells, "Strike"));
-    const quantity = money(cell(leg.cells, "Size"));
+    // A closed leg can read "0 / -4" (current / original); the original is what was traded.
+    const quantity = money(cell(leg.cells, "Size").split("/").at(-1) ?? "");
     if (!Number.isInteger(quantity) || quantity === 0) throw new Skip("unrecognized structure");
     const expiry = fromLink.find(
       (link) => link.right === right && Math.abs(link.strike - strike) < 1e-6,
