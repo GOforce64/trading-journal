@@ -38,6 +38,9 @@ importers:
       '@tj/importers':
         specifier: workspace:*
         version: link:../../packages/importers
+      '@tj/market-data':
+        specifier: workspace:*
+        version: link:../../packages/market-data
       hono:
         specifier: ^4.13.8
         version: 4.13.8
@@ -128,6 +131,12 @@ importers:
       '@tj/core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^4.0.0
+        version: 4.6.5
+
+  packages/market-data:
+    dependencies:
       zod:
         specifier: ^4.0.0
         version: 4.6.5

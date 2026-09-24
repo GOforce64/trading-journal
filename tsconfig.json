@@ -11,6 +11,9 @@
       "path": "packages/importers"
     },
     {
+      "path": "packages/market-data"
+    },
+    {
       "path": "apps/server"
     },
     {
