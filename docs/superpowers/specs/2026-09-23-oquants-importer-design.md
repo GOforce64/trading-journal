@@ -37,7 +37,7 @@ Success means:
 | No call wing | Imported with `callWingStrike` null and flagged **no call wing** (e.g. ENVX: short straddle plus a long put). Max loss and return on risk stay empty, because the upside is uncapped. A trade with neither wing is skipped: `no wings — enter manually`. (Changed after the first live run, 2026-09-24.) |
 | Identity | Natural key = ticker + open time (to the minute) + legs sorted by (type, strike, signed size). The trade id is the UUIDv5 of that key. A re-import skips any id that already exists. |
 | Existing trades | Never modified by import, so the user's edits and annotations are always safe. |
-| Field mapping | Structure → `structureLabel`. Notes → `ironFly.sourceNotes`, keeping the user's own `notes` empty. Strategy is used only for the filter. Earnings date and timing, IV and moves stay null. |
+| Field mapping | Structure → `structureLabel`. Notes → the trade's own `notes`: one notes field per trade, which is safe because import never touches an existing trade (changed 2026-09-24 at the user's request; the first 42 imported trades were migrated the same way). Strategy is used only for the filter. Earnings date and timing, IV and moves stay null. |
 | Transport | The snippet reads cell text only, copies it to the clipboard, and all interpretation happens in the journal (§3). |
 
 ---
@@ -147,7 +147,7 @@ Cells are always read **by header label**, never by position or CSS class (MUI c
    - Open trades: no exit prices, `netPnl` and `closedAt` null.
 6. **Reconciliation.** Σ leg P&L − row P&L should equal `fees` within $0.01. If not, the trade is still imported and flagged `doesn't reconcile ($x)`.
 7. **Identity.** Key = `ticker | openedAt (minute) | legs sorted by (right, strike, signed size)`. Id = UUIDv5(key, a fixed project namespace). A second row with the same id in one payload (e.g. a page read twice): skip, `duplicate row`.
-8. **Fixed fields.** `source = "oquants_extract"`, `book = "paper"`, `strategy = "iron_fly"`, `underlyingName` from the Instrument cell, `structureLabel` from Structure, `ironFly.sourceNotes` from Notes.
+8. **Fixed fields.** `source = "oquants_extract"`, `book = "paper"`, `strategy = "iron_fly"`, `underlyingName` from the Instrument cell, `structureLabel` from Structure, `notes` from Notes.
 
 **Counter check.** When the number of trades collected differs from the total in `pageCounter`, the result carries a warning. It does not block the import.
 

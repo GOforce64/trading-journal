@@ -239,13 +239,14 @@ function parseTrade(raw: OquantsTradeCells, cell: CellReader, timeZone: string):
     fees,
     feesOpen: null,
     feesClose: null,
+    // One notes field per trade: import never touches an existing trade, so it can own them.
+    notes: cell(raw.cells, "Notes") || null,
     legs: legInputs,
     ironFly: {
       ...structure,
       contracts,
       creditPerShare: round4(-legCost / (contracts * 100)),
       netCost: rowCost,
-      sourceNotes: cell(raw.cells, "Notes") || null,
     },
   });
   if (!result.success) throw new Skip(`invalid trade: ${result.error.issues[0]?.message ?? "unknown"}`);

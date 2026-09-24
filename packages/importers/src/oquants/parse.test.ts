@@ -45,7 +45,7 @@ describe("parseOquants", () => {
       fees: 8,
       feesOpen: null,
       feesClose: null,
-      notes: null,
+      notes: "filled at mid",
     });
     expect(trade.ironFly).toMatchObject({
       bodyPutStrike: 50,
@@ -55,7 +55,7 @@ describe("parseOquants", () => {
       contracts: 4,
       creditPerShare: 3,
       netCost: -1192,
-      sourceNotes: "filled at mid",
+      sourceNotes: null,
     });
     const call = trade.legs.find((leg) => leg.right === "C" && leg.quantity < 0);
     expect(call).toMatchObject({ strike: 50, expiry: "2026-09-11", openPrice: 2.1, closePrice: 1 });
