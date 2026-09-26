@@ -1,7 +1,24 @@
-import { ironFlyMetrics, ironFlyStructureFromLegs, type PricedLeg, positionCash } from "@tj/core";
-import { type ReactNode, useMemo, useState } from "react";
+import {
+  closeEstimate,
+  ironFlyMetrics,
+  ironFlyStructureFromLegs,
+  type MarkableLeg,
+  type OptionQuote,
+  type PricedLeg,
+  positionCash,
+} from "@tj/core";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ESTIMATE_STYLE, estimateTitle, signedUsd } from "../components/Estimate.js";
 import { Money, Panel } from "../components/ui.js";
-import { todayNy, useChain, useQuotes, useSettled } from "../market.js";
+import {
+  openContracts,
+  todayNy,
+  useChain,
+  useCompanyName,
+  useOptionQuotes,
+  useQuotes,
+  useSettled,
+} from "../market.js";
 import { ExpirySelect, nearestStrike, StrikeSelect } from "./ChainPickers.js";
 
 /** The four legs of a short iron butterfly, in the order oQuants shows them. */
@@ -15,6 +32,7 @@ const LEG_ROLES = [
 type LegKey = (typeof LEG_ROLES)[number]["key"];
 
 const FIELD_LABEL = "flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider";
+const NO_QUOTES = new Map<string, OptionQuote>();
 
 export interface LegFields {
   strike: string;
@@ -127,6 +145,22 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
   const { data: stockQuotes } = useQuotes(pickers && openedOn === today ? [symbol] : []);
   const atm = nearestStrike(strikes, stockQuotes?.[symbol]?.price);
 
+  // Fill a blank Company from Alpaca, or replace a name this form filled in for another symbol.
+  // A name typed by hand is never touched.
+  const company = useCompanyName(symbol);
+  const autoName = useRef<string | null>(null);
+  useEffect(() => {
+    const name = company.data;
+    if (!name) return;
+    const previous = autoName.current;
+    autoName.current = name;
+    setValues((current) =>
+      current.underlyingName.trim() === "" || current.underlyingName === previous
+        ? { ...current, underlyingName: name }
+        : current,
+    );
+  }, [company.data]);
+
   /** Switching expiry keeps the strikes it lists and clears the others, naming them. */
   function pickExpiry(expiry: string) {
     const listed = new Set(
@@ -172,6 +206,37 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
         : null;
     return { legs, cash, structure, metrics };
   }, [values]);
+
+  // What closing the open legs now would realise: exit-field hints and a Derived row, never a value (spec §8).
+  const markLegs = useMemo<MarkableLeg[]>(
+    () =>
+      values.expiry && derived
+        ? derived.legs.map((leg) => ({
+            right: leg.right,
+            strike: leg.strike,
+            expiry: values.expiry,
+            quantity: leg.quantity,
+            multiplier: leg.multiplier ?? 100,
+            openPrice: leg.openPrice,
+            closePrice: leg.closePrice ?? null,
+          }))
+        : [],
+    [derived, values.expiry],
+  );
+  const markTrade = {
+    underlying: symbol,
+    legs: markLegs,
+    fees: derived?.cash.fees ?? 0,
+    feesOpen: zeroIfBlank(values.feesOpen),
+    feesClose: zeroIfBlank(values.feesClose),
+  };
+  const { data: optionQuotes } = useOptionQuotes(openContracts(markTrade, today));
+  const estimate = markLegs.length > 0 ? closeEstimate(markTrade, optionQuotes ?? NO_QUOTES, today) : null;
+  const markFor = (role: (typeof LEG_ROLES)[number]) => {
+    if (estimate?.kind !== "estimate") return undefined;
+    const index = markLegs.findIndex((leg) => leg.right === role.right && leg.quantity < 0 === role.short);
+    return estimate.legs.find((marked) => marked.index === index)?.mark.toFixed(2);
+  };
 
   function submit() {
     if (toPricedLegs(values) === "fractional-size") {
@@ -237,15 +302,16 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     </label>
   );
 
-  const legInput = (key: LegKey, label: string, field: keyof LegFields) => (
+  const legInput = (key: LegKey, label: string, field: keyof LegFields, placeholder?: string) => (
     <input
       aria-label={label}
       type="number"
       step={field === "size" ? "1" : "0.01"}
       min={field === "size" ? 1 : undefined}
       value={values.legs[key][field]}
+      placeholder={placeholder}
       onChange={setLeg(key, field)}
-      className="num w-full rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-right text-[13px] text-fg outline-none focus:border-accent"
+      className="num w-full rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-right text-[13px] text-fg outline-none placeholder:text-[#4a5163] placeholder:italic focus:border-accent"
     />
   );
 
@@ -343,7 +409,9 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
                     </td>
                     <td className="px-1">{legInput(role.key, `${role.label} size`, "size")}</td>
                     <td className="px-1">{legInput(role.key, `${role.label} entry`, "entry")}</td>
-                    <td className="px-1">{legInput(role.key, `${role.label} exit`, "exit")}</td>
+                    <td className="px-1">
+                      {legInput(role.key, `${role.label} exit`, "exit", markFor(role))}
+                    </td>
                     <td className="text-right">
                       <Money value={leg ? leg.quantity * 100 * leg.openPrice : null} />
                     </td>
@@ -399,6 +467,17 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
                 <Money value={derived.cash.netPnl} />
               </span>
             </Row>
+            {estimate?.kind === "estimate" && (
+              <Row label="Est. P&L if closed now">
+                <span
+                  data-testid="derived-estimate"
+                  className={ESTIMATE_STYLE}
+                  title={estimateTitle(estimate)}
+                >
+                  est {signedUsd(estimate.netPnl)}
+                </span>
+              </Row>
+            )}
             {derived.metrics && (
               <>
                 <Row label="Max profit">{usd(derived.metrics.maxProfit)}</Row>

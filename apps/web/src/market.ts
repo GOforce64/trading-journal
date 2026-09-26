@@ -73,3 +73,17 @@ export function useChain(symbol: string, since: string | undefined) {
     staleTime: 15 * 60_000,
   });
 }
+
+/** The company's name from Alpaca, for filling in a blank Company field. Names don't change, so each is asked once. */
+export function useCompanyName(symbol: string) {
+  return useQuery({
+    queryKey: ["company", symbol],
+    queryFn: async () => {
+      const res = await api.api.company[":symbol"].$get({ param: { symbol } });
+      if (!res.ok) throw new Error(`company failed: ${res.status}`);
+      return (await res.json()).name;
+    },
+    enabled: TICKER.test(symbol),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}

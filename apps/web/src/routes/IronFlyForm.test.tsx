@@ -318,4 +318,53 @@ describe("IronFlyForm with an option chain", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText("An expiry is required.")).toBeTruthy();
   });
+
+  it("fills Company from the symbol, and follows the symbol while the name is its own", async () => {
+    setup(undefined, { companies: { M: "Macy's Inc.", NVDA: "NVIDIA Corporation" } });
+    fill("Underlying", "M");
+    await waitFor(() => expect(value("Company")).toBe("Macy's Inc."));
+    fill("Underlying", "NVDA");
+    await waitFor(() => expect(value("Company")).toBe("NVIDIA Corporation"));
+  });
+
+  it("never replaces a company name typed by hand", async () => {
+    const { fetchMock } = setup(undefined, { companies: { M: "Macy's Inc." } });
+    fill("Company", "Macy's");
+    fill("Underlying", "M");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/company/M"))).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(value("Company")).toBe("Macy's");
+  });
+
+  it("shows each open leg's mark as a hint in its empty exit, and never saves it", async () => {
+    const at = Date.UTC(2026, 8, 25, 19, 59, 51);
+    const { onSubmit } = setup(undefined, {
+      chain: M_CHAIN,
+      optionQuotes: {
+        M991002C00022500: { bid: 0.44, ask: 0.58, at },
+        M991002P00022500: { bid: 0.31, ask: 0.42, at },
+        M991002C00026000: { bid: 0.01, ask: 0.06, at },
+        M991002P00020000: { bid: 0.01, ask: 0.05, at },
+      },
+    });
+    await priceFromTheChain();
+    fill("Entry fees", "7.80");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Short call exit").getAttribute("placeholder")).toBe("0.58"),
+    );
+    expect(screen.getByLabelText("Long put exit").getAttribute("placeholder")).toBe("0.01");
+    expect(screen.getByTestId("derived-estimate").textContent).toBe("est -$46.80");
+
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload.legs.map((leg: { closePrice: number | null }) => leg.closePrice)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(payload.netPnl).toBeNull();
+  });
 });
