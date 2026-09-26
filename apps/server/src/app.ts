@@ -5,6 +5,7 @@ import type { Db } from "@tj/db";
 import { Hono } from "hono";
 import type { MarketData } from "./marketData.js";
 import { importRoutes } from "./routes/import.js";
+import { marketRoutes } from "./routes/market.js";
 import { quoteRoutes } from "./routes/quotes.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { tradeRoutes } from "./routes/trades.js";
@@ -37,7 +38,8 @@ export function createApp(deps: AppDeps) {
     .route("/api/setups", setups)
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
-    .route("/api/quotes", quoteRoutes(deps.market));
+    .route("/api/quotes", quoteRoutes(deps.market))
+    .route("/api", marketRoutes(deps.market));
 
   if (deps.webDir) {
     const webDir = deps.webDir;
