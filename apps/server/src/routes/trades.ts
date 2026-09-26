@@ -45,7 +45,12 @@ export function withMetrics(trade: TradeRecord): TradeView {
     creditPerShare: detail.creditPerShare,
     fees: trade.fees,
   });
-  return { ...trade, metrics: { ...metrics, ...ironFlyOutcome(metrics, trade.netPnl ?? 0) } };
+  // An open trade has no P&L yet, so its return stays empty rather than reading 0%.
+  const outcome: IronFlyOutcome =
+    trade.netPnl == null
+      ? { returnOnRisk: null, pctOfMaxProfit: null, pnlPctOfCost: null }
+      : ironFlyOutcome(metrics, trade.netPnl);
+  return { ...trade, metrics: { ...metrics, ...outcome } };
 }
 
 export function tradeRoutes(db: Db, now?: () => number) {
