@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { backupDatabase, openDatabase, runMigrations } from "@tj/db";
-import { alpacaQuotes, cachedQuotes } from "@tj/market-data";
+import { alpacaQuotes, cachedLatest } from "@tj/market-data";
 import { createApp } from "./app.js";
 import { dataPaths, readSecrets, resolveDataDir, type Secrets } from "./config.js";
 
@@ -28,7 +28,7 @@ try {
   console.warn(`Live quotes off: ${(error as Error).message}`);
 }
 const quotes = secrets.alpaca
-  ? cachedQuotes(alpacaQuotes(secrets.alpaca), {
+  ? cachedLatest(alpacaQuotes(secrets.alpaca), {
       // Shorter than the page's one-minute refresh, so every refresh gets a new price.
       ttlMs: 30_000,
       onError: (error) => console.warn(`Live quotes unavailable: ${(error as Error).message}`),
