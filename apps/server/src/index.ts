@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { backupDatabase, openDatabase, runMigrations } from "@tj/db";
-import type { AlpacaKeys } from "@tj/market-data";
+import { type AlpacaKeys, checkAlpacaKeys } from "@tj/market-data";
 import { createApp } from "./app.js";
 import { dataPaths, readSecrets, resolveDataDir } from "./config.js";
 import { createMarketData } from "./marketData.js";
@@ -35,6 +35,11 @@ const app = createApp({
   webDir,
   backup: () => backupDatabase(paths.dbFile, paths.backupDir),
   market,
+  settings: {
+    dataDir: paths.dataDir,
+    secretsFile: paths.secretsFile,
+    checkKeys: (keys) => checkAlpacaKeys(keys),
+  },
 });
 
 serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {

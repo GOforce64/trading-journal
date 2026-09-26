@@ -7,6 +7,7 @@ import type { MarketData } from "./marketData.js";
 import { importRoutes } from "./routes/import.js";
 import { marketRoutes } from "./routes/market.js";
 import { quoteRoutes } from "./routes/quotes.js";
+import { type SettingsDeps, settingsRoutes } from "./routes/settings.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { tradeRoutes } from "./routes/trades.js";
 
@@ -19,6 +20,8 @@ export interface AppDeps {
   backup?: () => string;
   /** Live market data. Omitted in tests that don't need it; the app then answers as if no key were set up. */
   market?: MarketData;
+  /** Where Settings saves the key, and how it tests one first. Omitted in tests that don't need it. */
+  settings?: SettingsDeps;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -39,6 +42,7 @@ export function createApp(deps: AppDeps) {
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
     .route("/api/quotes", quoteRoutes(deps.market))
+    .route("/api/settings", settingsRoutes(deps.market, deps.settings))
     .route("/api", marketRoutes(deps.market));
 
   if (deps.webDir) {
