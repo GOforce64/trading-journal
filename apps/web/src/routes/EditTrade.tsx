@@ -30,6 +30,7 @@ export function toFormValues(trade: TradeView): Partial<IronFlyFormValues> {
   return {
     underlying: trade.underlying,
     underlyingName: trade.underlyingName ?? "",
+    structureLabel: trade.structureLabel ?? "Short Iron Butterfly",
     book: trade.book === "paper" ? "paper" : "live",
     openedAt: toLocalInput(trade.openedAt),
     closedAt: toLocalInput(trade.closedAt),
@@ -44,6 +45,16 @@ export function toFormValues(trade: TradeView): Partial<IronFlyFormValues> {
       longPut: legFields(trade.legs, "P", false),
     },
   };
+}
+
+/**
+ * The builder only knows the position, but saving replaces the iron-fly details
+ * wholesale, so carry over what it cannot see (source notes, earnings data).
+ */
+function keepIronFlyExtras(payload: Record<string, unknown>, trade: TradeView): Record<string, unknown> {
+  if (!trade.ironFly || !payload.ironFly) return payload;
+  const { tradeId: _tradeId, ...stored } = trade.ironFly;
+  return { ...payload, ironFly: { ...stored, ...(payload.ironFly as Record<string, unknown>) } };
 }
 
 export function EditTrade({ tradeId, onSaved }: { tradeId: string; onSaved?: (id: string) => void }) {
@@ -90,7 +101,7 @@ export function EditTrade({ tradeId, onSaved }: { tradeId: string; onSaved?: (id
       submitLabel="Save changes"
       busy={save.isPending}
       error={save.error ? String(save.error) : null}
-      onSubmit={(payload) => save.mutate(payload)}
+      onSubmit={(payload) => save.mutate(keepIronFlyExtras(payload, trade))}
     />
   );
 }

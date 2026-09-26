@@ -3,6 +3,7 @@ import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { EditTrade } from "./routes/EditTrade.js";
+import { Import } from "./routes/Import.js";
 import { IronFlies } from "./routes/IronFlies.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
@@ -77,6 +78,12 @@ const editTradeRoute = createRoute({
   },
 });
 
+const importRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/import",
+  component: () => <Import onDone={() => router.navigate({ to: "/iron-flies" })} />,
+});
+
 /** Nav destinations whose features arrive in later plans; better than a dead link. */
 const PLACEHOLDERS = [
   {
@@ -96,12 +103,6 @@ const PLACEHOLDERS = [
     title: "Playbook",
     phase: "a later Phase 1 plan",
     blurb: "Your named setups, each with its own win rate, average R and P&L.",
-  },
-  {
-    path: "/import",
-    title: "Import / Sync",
-    phase: "a later Phase 1 plan",
-    blurb: "The oQuants extractor, the CSV/paste importer, and IBKR Flex sync.",
   },
   {
     path: "/settings",
@@ -131,6 +132,7 @@ export const router = createRouter({
     newIronFlyRoute,
     tradeDetailRoute,
     editTradeRoute,
+    importRoute,
     ...placeholderRoutes,
   ]),
 });
