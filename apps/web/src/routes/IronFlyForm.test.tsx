@@ -327,6 +327,14 @@ describe("IronFlyForm with an option chain", () => {
     await waitFor(() => expect(value("Company")).toBe("NVIDIA Corporation"));
   });
 
+  it("clears an auto-filled company when the new symbol has no name", async () => {
+    setup(undefined, { companies: { M: "Macy's Inc." } });
+    fill("Underlying", "M");
+    await waitFor(() => expect(value("Company")).toBe("Macy's Inc."));
+    fill("Underlying", "ZZZZ");
+    await waitFor(() => expect(value("Company")).toBe(""));
+  });
+
   it("never replaces a company name typed by hand", async () => {
     const { fetchMock } = setup(undefined, { companies: { M: "Macy's Inc." } });
     fill("Company", "Macy's");

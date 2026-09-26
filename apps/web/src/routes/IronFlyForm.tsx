@@ -12,6 +12,7 @@ import { ESTIMATE_STYLE, estimateTitle, signedUsd } from "../components/Estimate
 import { Money, Panel } from "../components/ui.js";
 import {
   openContracts,
+  TICKER,
   todayNy,
   useChain,
   useCompanyName,
@@ -145,21 +146,23 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
   const { data: stockQuotes } = useQuotes(pickers && openedOn === today ? [symbol] : []);
   const atm = nearestStrike(strikes, stockQuotes?.[symbol]?.price);
 
-  // Fill a blank Company from Alpaca, or replace a name this form filled in for another symbol.
-  // A name typed by hand is never touched.
+  // Fill a blank Company from Alpaca, or replace a name this form filled in for another symbol, clearing
+  // it when the new symbol has none. A name typed by hand is never touched.
   const company = useCompanyName(symbol);
   const autoName = useRef<string | null>(null);
+  const companySettled = !TICKER.test(symbol) || company.isSuccess || company.isError;
+  const companyName = company.isSuccess ? company.data : null;
   useEffect(() => {
-    const name = company.data;
-    if (!name) return;
+    if (!companySettled) return;
     const previous = autoName.current;
-    autoName.current = name;
-    setValues((current) =>
-      current.underlyingName.trim() === "" || current.underlyingName === previous
-        ? { ...current, underlyingName: name }
-        : current,
-    );
-  }, [company.data]);
+    autoName.current = companyName;
+    setValues((current) => {
+      const untouched =
+        current.underlyingName.trim() === "" || (previous !== null && current.underlyingName === previous);
+      const next = companyName ?? "";
+      return untouched && current.underlyingName !== next ? { ...current, underlyingName: next } : current;
+    });
+  }, [companySettled, companyName]);
 
   /** Switching expiry keeps the strikes it lists and clears the others, naming them. */
   function pickExpiry(expiry: string) {
