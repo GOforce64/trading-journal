@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { round2 } from "@tj/core";
+import { closeEstimate, type OptionQuote, round2 } from "@tj/core";
 import type { ReactNode } from "react";
 import { api, type TradeView } from "../api.js";
+import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct } from "../components/ui.js";
+import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 
 const GRADES = ["A", "B", "C", "D", "F"] as const;
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -28,6 +30,8 @@ const ET = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
+const NO_QUOTES = new Map<string, OptionQuote>();
+
 export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id: string) => void }) {
   const queryClient = useQueryClient();
 
@@ -49,9 +53,16 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trade", tradeId] }),
   });
 
+  const today = todayNy();
+  const { data: optionQuotes } = useOptionQuotes(trade && isOpen(trade) ? openContracts(trade, today) : []);
+
   if (isLoading || !trade) return <p className="text-muted">Loading…</p>;
   const metrics = trade.metrics;
   const detail = trade.ironFly;
+  // What closing now would realise; shown, never stored (spec §9).
+  const estimate = isOpen(trade) ? closeEstimate(trade, optionQuotes ?? NO_QUOTES, today) : null;
+  const markOf = (index: number) =>
+    estimate?.kind === "estimate" ? estimate.legs.find((marked) => marked.index === index) : undefined;
   const totalCost = round2(trade.legs.reduce((sum, leg) => sum + legCost(leg), 0));
   const closedLegPnl = trade.legs.map(legPnl).filter((value): value is number => value !== null);
   const totalLegPnl = closedLegPnl.length
@@ -71,7 +82,11 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
           {trade.closedAt ? ` → ${ET.format(new Date(trade.closedAt))}` : ""}
         </span>
         <span className="ml-auto text-[18px]">
-          <Money value={trade.netPnl} />
+          {estimate ? (
+            <EstimatedPnl estimate={estimate} testId="header-estimate" />
+          ) : (
+            <Money value={trade.netPnl} />
+          )}
         </span>
         <span className="text-[18px]">
           <Pct value={metrics?.pnlPctOfCost ?? null} />
@@ -155,30 +170,57 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
                 <th className="text-right font-medium">Close</th>
                 <th className="text-right font-medium">Cost</th>
                 <th className="text-right font-medium">P&amp;L</th>
+                {estimate && (
+                  <>
+                    <th className="text-right font-medium">Mark (to close)</th>
+                    <th className="text-right font-medium">Est. P&amp;L</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {trade.legs.map((leg) => (
-                <tr key={leg.id} data-testid={`leg-row-${leg.id}`} className="border-line border-t">
-                  <td className={leg.quantity < 0 ? "text-down" : "text-up"}>
-                    {leg.quantity < 0 ? "SHORT" : "LONG"}
-                  </td>
-                  <td>{leg.right === "C" ? "Call" : "Put"}</td>
-                  <td>{leg.strike.toFixed(2)}</td>
-                  <td>{leg.expiry.slice(5)}</td>
-                  <td className="text-right">{leg.quantity}</td>
-                  <td className="text-right">{leg.openPrice.toFixed(2)}</td>
-                  <td className="text-right">{leg.closePrice?.toFixed(2) ?? "—"}</td>
-                  <td className="text-right">
-                    <Money value={legCost(leg)} />
-                  </td>
-                  <td className="text-right">
-                    <Money value={legPnl(leg)} />
-                  </td>
-                </tr>
-              ))}
+              {trade.legs.map((leg, index) => {
+                const mark = markOf(index);
+                return (
+                  <tr key={leg.id} data-testid={`leg-row-${leg.id}`} className="border-line border-t">
+                    <td className={leg.quantity < 0 ? "text-down" : "text-up"}>
+                      {leg.quantity < 0 ? "SHORT" : "LONG"}
+                    </td>
+                    <td>{leg.right === "C" ? "Call" : "Put"}</td>
+                    <td>{leg.strike.toFixed(2)}</td>
+                    <td>{leg.expiry.slice(5)}</td>
+                    <td className="text-right">{leg.quantity}</td>
+                    <td className="text-right">{leg.openPrice.toFixed(2)}</td>
+                    <td className="text-right">{leg.closePrice?.toFixed(2) ?? "—"}</td>
+                    <td className="text-right">
+                      <Money value={legCost(leg)} />
+                    </td>
+                    <td className="text-right">
+                      <Money value={legPnl(leg)} />
+                    </td>
+                    {estimate && (
+                      <>
+                        <td className={`text-right ${ESTIMATE_STYLE}`}>
+                          {mark ? `${mark.mark.toFixed(2)} ${mark.side}` : "—"}
+                        </td>
+                        <td className={`text-right ${ESTIMATE_STYLE}`}>{mark ? signedUsd(mark.pnl) : "—"}</td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {estimate?.kind === "estimate" && (
+            <p data-testid="estimate-note" className="mt-2 text-[10px] text-muted">
+              Estimate {signedUsd(estimate.grossPnl)} before fees, {signedUsd(estimate.netPnl)} after the{" "}
+              {usd(estimate.fees)} fees entered so far (exit fees not included). Quotes as of{" "}
+              {quotedAtText(estimate.quotedAt)} · indicative feed · refreshes every minute · never saved.
+            </p>
+          )}
+          {estimate?.kind === "unavailable" && (
+            <p className="mt-2 text-[10px] text-muted">Marks unavailable: {estimate.reason}.</p>
+          )}
           {detail?.sourceNotes && (
             <>
               <div className="mt-3 text-[10px] text-muted uppercase tracking-wider">Source notes</div>

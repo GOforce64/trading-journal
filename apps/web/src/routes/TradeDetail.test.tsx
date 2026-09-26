@@ -94,6 +94,35 @@ const trade = {
 const jsonResponse = () =>
   new Response(JSON.stringify(trade), { headers: { "content-type": "application/json" } });
 
+/** The sample fly while still open: no exits yet, expiring far ahead so it is open whenever the test runs. */
+const openTrade = {
+  ...trade,
+  closedAt: null,
+  netPnl: null,
+  feesOpen: 5,
+  feesClose: 0,
+  legs: trade.legs.map((leg) => ({ ...leg, expiry: "2099-10-16", closePrice: null })),
+  metrics: { ...trade.metrics, returnOnRisk: null, pctOfMaxProfit: null, pnlPctOfCost: null },
+};
+
+const QUOTED = Date.UTC(2026, 8, 25, 19, 59, 51);
+const openQuotes = {
+  XYZ991016C00050000: { bid: 1.0, ask: 1.2, at: QUOTED },
+  XYZ991016P00050000: { bid: 0.7, ask: 0.9, at: QUOTED },
+  XYZ991016C00058000: { bid: 0.1, ask: 0.15, at: QUOTED },
+  XYZ991016P00045000: { bid: 0.05, ask: 0.1, at: QUOTED },
+};
+
+/** Answers the trade for its own URL and the given quotes for option quotes. */
+function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const payload = String(input).includes("/api/option-quotes") ? { quotes } : body;
+    return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function renderDetail() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -191,5 +220,41 @@ describe("TradeDetail", () => {
       const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
       expect(JSON.parse(String(patch?.[1]?.body)).excluded).toBe(true);
     });
+  });
+
+  it("marks each open leg at its cost to close and estimates the trade", async () => {
+    stubTrade(openTrade);
+    renderDetail();
+    // Short call +360, short put +280, long call -100, long put -120, less $5 entry fees.
+    await waitFor(() => expect(screen.getByTestId("header-estimate").textContent).toBe("est +$415.00"));
+    const shortCall = screen.getByTestId("leg-row-l1");
+    expect(shortCall.textContent).toContain("1.20 ask");
+    expect(shortCall.textContent).toContain("+$360.00");
+    expect(screen.getByTestId("leg-row-l4").textContent).toContain("0.05 bid");
+    const note = screen.getByTestId("estimate-note").textContent;
+    expect(note).toContain("+$420.00 before fees");
+    expect(note).toContain("+$415.00 after the $5.00 fees entered so far");
+    expect(note).toContain("Sep 25, 03:59 PM ET");
+    expect(note).toContain("never saved");
+  });
+
+  it("flags an open trade past its expiry", async () => {
+    stubTrade({ ...openTrade, legs: openTrade.legs.map((leg) => ({ ...leg, expiry: "2020-01-17" })) });
+    renderDetail();
+    expect(await screen.findByText("EXPIRED · add exits")).toBeTruthy();
+  });
+
+  it("says why marks are missing", async () => {
+    stubTrade(openTrade, {});
+    renderDetail();
+    expect(await screen.findByText("Marks unavailable: no quote for the short call.")).toBeTruthy();
+  });
+
+  it("adds no mark columns to a closed trade and asks for no quotes", async () => {
+    const fetchMock = stubTrade(trade);
+    renderDetail();
+    await screen.findByText("XYZ Industries");
+    expect(screen.queryByText("Mark (to close)")).toBeNull();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/option-quotes"))).toBe(false);
   });
 });
