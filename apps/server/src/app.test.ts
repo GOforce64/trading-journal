@@ -36,7 +36,13 @@ interface TradeBody {
   underlying: string;
   grade: string | null;
   excluded: boolean;
-  metrics: { maxLoss: number; riskySide: string; returnOnRisk: number } | null;
+  metrics: {
+    maxLoss: number;
+    riskySide: string;
+    returnOnRisk: number | null;
+    pctOfMaxProfit: number | null;
+    pnlPctOfCost: number | null;
+  } | null;
 }
 
 /** Response.json() is typed as unknown, so tests state the shape they expect. */
@@ -67,6 +73,14 @@ describe("createApp", () => {
     expect(body.metrics?.maxLoss).toBe(2008);
     expect(body.metrics?.riskySide).toBe("call");
     expect(body.metrics?.returnOnRisk).toBeCloseTo(0.255, 4);
+  });
+
+  it("gives an open trade its risk but no return, since it has no P&L yet", async () => {
+    const body = await readJson<TradeBody>(await post({ ...sampleFly, closedAt: null, netPnl: null }));
+    expect(body.metrics?.maxLoss).toBe(2008);
+    expect(body.metrics?.returnOnRisk).toBeNull();
+    expect(body.metrics?.pctOfMaxProfit).toBeNull();
+    expect(body.metrics?.pnlPctOfCost).toBeNull();
   });
 
   it("rejects an invalid trade with 400 and a field path", async () => {
