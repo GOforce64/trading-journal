@@ -1,0 +1,25 @@
+{
+  "name": "trading-journal",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "dev:server": "pnpm --filter @tj/server dev",
+    "dev:web": "pnpm --filter @tj/web dev",
+    "build": "pnpm --filter @tj/web build",
+    "start": "pnpm build && pnpm --filter @tj/server start"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^26.6.2",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

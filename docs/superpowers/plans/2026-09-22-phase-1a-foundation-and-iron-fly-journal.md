@@ -159,11 +159,11 @@ describe("money", () => {
   it("rounds to cents, away from zero at the half", () => {
     expect(round2(1.005)).toBe(1.01);
     expect(round2(-1.005)).toBe(-1.01);
-    expect(round2(224.0649)).toBe(224.06);
+    expect(round2(512.0649)).toBe(512.06);
   });
 
   it("sums without float drift", () => {
-    expect(sumMoney([-440, -350, 5, 10])).toBe(-775);
+    expect(sumMoney([-840, -640, 140, 140])).toBe(-1200);
     expect(sumMoney([0.1, 0.2])).toBe(0.3);
   });
 });
@@ -271,58 +271,58 @@ git commit -m "chore: scaffold pnpm workspace, tooling and CI"
 import { describe, expect, it } from "vitest";
 import { newTradeSchema, tradePatchSchema } from "./model.js";
 
-const macys = {
+const sampleFly = {
   strategy: "iron_fly" as const,
   book: "live" as const,
-  underlying: "M",
-  underlyingName: "Macy's Inc",
+  underlying: "XYZ",
+  underlyingName: "XYZ Industries",
   structureLabel: "Short Iron Butterfly",
   openedAt: 1788_000_000_000,
   closedAt: 1788_086_400_000,
-  netPnl: 224.06,
-  fees: 10.94,
+  netPnl: 512,
+  fees: 8,
   source: "manual" as const,
   legs: [
-    { right: "C" as const, strike: 21.5, expiry: "2026-09-11", quantity: -5, openPrice: 0.88, closePrice: 0.05 },
-    { right: "P" as const, strike: 21.5, expiry: "2026-09-11", quantity: -5, openPrice: 0.7, closePrice: 1.03 },
-    { right: "C" as const, strike: 27, expiry: "2026-09-11", quantity: 5, openPrice: 0.01, closePrice: 0 },
-    { right: "P" as const, strike: 18, expiry: "2026-09-11", quantity: 5, openPrice: 0.02, closePrice: 0 },
+    { right: "C" as const, strike: 50, expiry: "2026-10-16", quantity: -4, openPrice: 2.1, closePrice: 1 },
+    { right: "P" as const, strike: 50, expiry: "2026-10-16", quantity: -4, openPrice: 1.6, closePrice: 0.8 },
+    { right: "C" as const, strike: 58, expiry: "2026-10-16", quantity: 4, openPrice: 0.35, closePrice: 0.05 },
+    { right: "P" as const, strike: 45, expiry: "2026-10-16", quantity: 4, openPrice: 0.35, closePrice: 0.05 },
   ],
   ironFly: {
-    bodyPutStrike: 21.5,
-    bodyCallStrike: 21.5,
-    putWingStrike: 18,
-    callWingStrike: 27,
-    contracts: 5,
-    creditPerShare: 1.55,
-    netCost: -764.06,
+    bodyPutStrike: 50,
+    bodyCallStrike: 50,
+    putWingStrike: 45,
+    callWingStrike: 58,
+    contracts: 4,
+    creditPerShare: 3,
+    netCost: -1192,
   },
 };
 
 describe("newTradeSchema", () => {
   it("accepts a complete iron fly", () => {
-    const parsed = newTradeSchema.parse(macys);
-    expect(parsed.underlying).toBe("M");
+    const parsed = newTradeSchema.parse(sampleFly);
+    expect(parsed.underlying).toBe("XYZ");
     expect(parsed.legs).toHaveLength(4);
     expect(parsed.ironFly?.contracts).toBe(5);
   });
 
   it("upper-cases the underlying and trims it", () => {
-    expect(newTradeSchema.parse({ ...macys, underlying: " m " }).underlying).toBe("M");
+    expect(newTradeSchema.parse({ ...sampleFly, underlying: " xyz " }).underlying).toBe("XYZ");
   });
 
   it("rejects an iron fly whose close precedes its open", () => {
-    const result = newTradeSchema.safeParse({ ...macys, closedAt: macys.openedAt - 1 });
+    const result = newTradeSchema.safeParse({ ...sampleFly, closedAt: sampleFly.openedAt - 1 });
     expect(result.success).toBe(false);
   });
 
   it("rejects a leg with zero quantity", () => {
-    const legs = [{ ...macys.legs[0], quantity: 0 }, ...macys.legs.slice(1)];
-    expect(newTradeSchema.safeParse({ ...macys, legs }).success).toBe(false);
+    const legs = [{ ...sampleFly.legs[0], quantity: 0 }, ...sampleFly.legs.slice(1)];
+    expect(newTradeSchema.safeParse({ ...sampleFly, legs }).success).toBe(false);
   });
 
   it("requires iron fly details for an iron_fly trade", () => {
-    const { ironFly, ...withoutDetails } = macys;
+    const { ironFly, ...withoutDetails } = sampleFly;
     expect(newTradeSchema.safeParse(withoutDetails).success).toBe(false);
   });
 
@@ -447,7 +447,7 @@ git commit -m "feat(core): add trade and iron fly schemas"
 
 ### Task 3: Iron fly metrics in core
 
-This is the task that makes the journal worth having. The fixture is the real Macy's trade from the spec, so the numbers are checkable against oQuants.
+This is the task that makes the journal worth having. The fixture is a synthetic broken-wing fly whose arithmetic reconciles end to end, so the numbers are checkable by hand.
 
 **Files:**
 - Create: `packages/core/src/ironFly.ts`, `packages/core/src/ironFly.test.ts`
@@ -469,54 +469,54 @@ This is the task that makes the journal worth having. The fixture is the real Ma
 import { describe, expect, it } from "vitest";
 import { derivedFees, ironFlyMetrics, ironFlyOutcome } from "./ironFly.js";
 
-/** The real M trade: short 21.50 straddle, wings 18 / 27, 5 lots, $775 credit, $10.94 fees. */
-const macys = {
-  bodyPutStrike: 21.5,
-  bodyCallStrike: 21.5,
-  putWingStrike: 18,
-  callWingStrike: 27,
-  contracts: 5,
-  creditPerShare: 1.55,
-  fees: 10.94,
+/** Sample broken-wing fly: short 50 straddle, wings 45 / 58, 4 lots, $1,200 credit, $8.00 fees. */
+const sampleFly = {
+  bodyPutStrike: 50,
+  bodyCallStrike: 50,
+  putWingStrike: 45,
+  callWingStrike: 58,
+  contracts: 4,
+  creditPerShare: 3,
+  fees: 8,
 };
 
 describe("ironFlyMetrics", () => {
   it("measures each wing separately when they are not equal", () => {
-    const m = ironFlyMetrics(macys);
-    expect(m.putWingWidth).toBe(3.5);
-    expect(m.callWingWidth).toBe(5.5);
+    const m = ironFlyMetrics(sampleFly);
+    expect(m.putWingWidth).toBe(5);
+    expect(m.callWingWidth).toBe(8);
     expect(m.isBrokenWing).toBe(true);
   });
 
   it("nets fees out of the credit", () => {
-    const m = ironFlyMetrics(macys);
-    expect(m.netCreditPerShare).toBeCloseTo(1.52812, 5);
-    expect(m.maxProfit).toBe(764.06);
+    const m = ironFlyMetrics(sampleFly);
+    expect(m.netCreditPerShare).toBeCloseTo(2.98, 5);
+    expect(m.maxProfit).toBe(1192);
   });
 
   it("takes max loss from the wider wing and names that side", () => {
-    const m = ironFlyMetrics(macys);
-    expect(m.putSideRisk).toBe(985.94);
-    expect(m.callSideRisk).toBe(1985.94);
-    expect(m.maxLoss).toBe(1985.94);
+    const m = ironFlyMetrics(sampleFly);
+    expect(m.putSideRisk).toBe(808);
+    expect(m.callSideRisk).toBe(2008);
+    expect(m.maxLoss).toBe(2008);
     expect(m.riskySide).toBe("call");
   });
 
   it("puts breakevens at the body plus and minus the net credit", () => {
-    const m = ironFlyMetrics(macys);
-    expect(m.breakevenLow).toBe(19.97);
-    expect(m.breakevenHigh).toBe(23.03);
+    const m = ironFlyMetrics(sampleFly);
+    expect(m.breakevenLow).toBe(47.02);
+    expect(m.breakevenHigh).toBe(52.98);
   });
 
   it("treats a symmetric fly as unbroken", () => {
-    const m = ironFlyMetrics({ ...macys, callWingStrike: 25, putWingStrike: 18 });
+    const m = ironFlyMetrics({ ...sampleFly, callWingStrike: 55, putWingStrike: 45 });
     expect(m.isBrokenWing).toBe(true);
-    const even = ironFlyMetrics({ ...macys, callWingStrike: 25, putWingStrike: 18, bodyPutStrike: 21.5 });
-    expect(even.putWingWidth).toBe(3.5);
+    const even = ironFlyMetrics({ ...sampleFly, callWingStrike: 55, putWingStrike: 45, bodyPutStrike: 50 });
+    expect(even.putWingWidth).toBe(5);
   });
 
   it("clamps risk at zero when the credit exceeds the wing", () => {
-    const m = ironFlyMetrics({ ...macys, creditPerShare: 6, fees: 0 });
+    const m = ironFlyMetrics({ ...sampleFly, creditPerShare: 6, fees: 0 });
     expect(m.putSideRisk).toBe(0);
     expect(m.maxLoss).toBe(0);
   });
@@ -524,15 +524,15 @@ describe("ironFlyMetrics", () => {
 
 describe("ironFlyOutcome", () => {
   it("reports return on risk, share of max profit, and P&L % of cost", () => {
-    const m = ironFlyMetrics(macys);
-    const o = ironFlyOutcome(m, 224.06);
-    expect(o.returnOnRisk).toBeCloseTo(0.1128, 4);
-    expect(o.pctOfMaxProfit).toBeCloseTo(0.2932, 4);
-    expect(o.pnlPctOfCost).toBeCloseTo(0.2932, 4);
+    const m = ironFlyMetrics(sampleFly);
+    const o = ironFlyOutcome(m, 512);
+    expect(o.returnOnRisk).toBeCloseTo(0.255, 4);
+    expect(o.pctOfMaxProfit).toBeCloseTo(0.4295, 4);
+    expect(o.pnlPctOfCost).toBeCloseTo(0.4295, 4);
   });
 
   it("returns null return-on-risk when there is no risk to divide by", () => {
-    const m = ironFlyMetrics({ ...macys, creditPerShare: 6, fees: 0 });
+    const m = ironFlyMetrics({ ...sampleFly, creditPerShare: 6, fees: 0 });
     expect(ironFlyOutcome(m, 100).returnOnRisk).toBeNull();
   });
 });
@@ -540,12 +540,12 @@ describe("ironFlyOutcome", () => {
 describe("derivedFees", () => {
   it("recovers fees from the gap between leg cash and the reported cost", () => {
     const legs = [
-      { quantity: -5, multiplier: 100, openPrice: 0.88 },
-      { quantity: -5, multiplier: 100, openPrice: 0.7 },
-      { quantity: 5, multiplier: 100, openPrice: 0.01 },
-      { quantity: 5, multiplier: 100, openPrice: 0.02 },
+      { quantity: -4, multiplier: 100, openPrice: 2.1 },
+      { quantity: -4, multiplier: 100, openPrice: 1.6 },
+      { quantity: 4, multiplier: 100, openPrice: 0.35 },
+      { quantity: 4, multiplier: 100, openPrice: 0.35 },
     ];
-    expect(derivedFees(legs, -764.06)).toBe(10.94);
+    expect(derivedFees(legs, -1192)).toBe(8);
   });
 });
 ```
@@ -629,7 +629,7 @@ export interface IronFlyOutcome {
 }
 
 /**
- * Ratios are fractions, not percentages: 0.1128 means +11.28%.
+ * Ratios are fractions, not percentages: 0.2550 means +25.50%.
  * pnlPctOfCost mirrors the number oQuants shows, so imported rows reconcile.
  */
 export function ironFlyOutcome(metrics: IronFlyMetrics, netPnl: number): IronFlyOutcome {
@@ -1029,16 +1029,16 @@ import { createTradesRepo } from "./trades.js";
 
 const MIGRATIONS = new URL("../../migrations", import.meta.url).pathname;
 
-const macys = {
+const sampleFly = {
   strategy: "iron_fly",
   book: "live",
-  underlying: "M",
-  underlyingName: "Macy's Inc",
+  underlying: "XYZ",
+  underlyingName: "XYZ Industries",
   structureLabel: "Short Iron Butterfly",
   openedAt: 1788_000_000_000,
   closedAt: 1788_086_400_000,
-  netPnl: 224.06,
-  fees: 10.94,
+  netPnl: 512,
+  fees: 8,
   notes: null,
   grade: null,
   excluded: false,
@@ -1047,17 +1047,17 @@ const macys = {
   setupId: null,
   tagIds: [],
   legs: [
-    { right: "C", strike: 21.5, expiry: "2026-09-11", quantity: -5, multiplier: 100, openPrice: 0.88, closePrice: 0.05 },
-    { right: "P", strike: 21.5, expiry: "2026-09-11", quantity: -5, multiplier: 100, openPrice: 0.7, closePrice: 1.03 },
+    { right: "C", strike: 50, expiry: "2026-10-16", quantity: -4, multiplier: 100, openPrice: 2.1, closePrice: 1 },
+    { right: "P", strike: 50, expiry: "2026-10-16", quantity: -4, multiplier: 100, openPrice: 1.6, closePrice: 0.8 },
   ],
   ironFly: {
-    bodyPutStrike: 21.5,
-    bodyCallStrike: 21.5,
-    putWingStrike: 18,
-    callWingStrike: 27,
-    contracts: 5,
-    creditPerShare: 1.55,
-    netCost: -764.06,
+    bodyPutStrike: 50,
+    bodyCallStrike: 50,
+    putWingStrike: 45,
+    callWingStrike: 58,
+    contracts: 4,
+    creditPerShare: 3,
+    netCost: -1192,
     earningsDate: "2026-09-10",
     earningsTiming: "AMC",
     impliedMovePct: null,
@@ -1081,9 +1081,9 @@ describe("trades repository", () => {
   });
 
   it("stores a trade with its legs and iron fly details", () => {
-    const created = repo().create({ ...macys });
+    const created = repo().create({ ...sampleFly });
     const found = repo().get(created.id);
-    expect(found?.underlying).toBe("M");
+    expect(found?.underlying).toBe("XYZ");
     expect(found?.legs).toHaveLength(2);
     expect(found?.ironFly?.callWingStrike).toBe(27);
     expect(found?.editedAt).toBe(1_000);
@@ -1091,22 +1091,22 @@ describe("trades repository", () => {
 
   it("filters by strategy and book, newest first", () => {
     const r = repo();
-    r.create({ ...macys, openedAt: 1000 });
-    r.create({ ...macys, openedAt: 5000, book: "paper" });
+    r.create({ ...sampleFly, openedAt: 1000 });
+    r.create({ ...sampleFly, openedAt: 5000, book: "paper" });
     expect(r.list({ book: "live" })).toHaveLength(1);
     expect(r.list()[0]?.openedAt).toBe(5000);
   });
 
   it("hides excluded trades unless asked for them", () => {
     const r = repo();
-    r.create({ ...macys, excluded: true, excludeReason: "test trade" });
+    r.create({ ...sampleFly, excluded: true, excludeReason: "test trade" });
     expect(r.list()).toHaveLength(0);
     expect(r.list({ includeExcluded: true })).toHaveLength(1);
   });
 
   it("updates a patch and bumps editedAt", () => {
     const r = repo();
-    const created = r.create({ ...macys });
+    const created = r.create({ ...sampleFly });
     clock = 2_000;
     const updated = r.update(created.id, { grade: "B", notes: "crush paid" });
     expect(updated?.grade).toBe("B");
@@ -1115,9 +1115,9 @@ describe("trades repository", () => {
 
   it("replaces legs wholesale when a patch includes them", () => {
     const r = repo();
-    const created = r.create({ ...macys });
+    const created = r.create({ ...sampleFly });
     const updated = r.update(created.id, {
-      legs: [{ right: "C", strike: 30, expiry: "2026-09-11", quantity: 1, multiplier: 100, openPrice: 0.05, closePrice: null }],
+      legs: [{ right: "C", strike: 61, expiry: "2026-10-16", quantity: 1, multiplier: 100, openPrice: 0.05, closePrice: null }],
     });
     expect(updated?.legs).toHaveLength(1);
     expect(updated?.legs[0]?.strike).toBe(30);
@@ -1125,7 +1125,7 @@ describe("trades repository", () => {
 
   it("soft deletes, hiding the trade from list but keeping the row", () => {
     const r = repo();
-    const created = r.create({ ...macys });
+    const created = r.create({ ...sampleFly });
     expect(r.softDelete(created.id)).toBe(true);
     expect(r.list()).toHaveLength(0);
     expect(r.get(created.id)).toBeNull();
@@ -1616,22 +1616,22 @@ import { createApp } from "./app.js";
 
 const MIGRATIONS = new URL("../../../packages/db/migrations", import.meta.url).pathname;
 
-const macys = {
+const sampleFly = {
   strategy: "iron_fly",
   book: "live",
-  underlying: "m",
+  underlying: "xyz",
   openedAt: 1788_000_000_000,
   closedAt: 1788_086_400_000,
-  netPnl: 224.06,
-  fees: 10.94,
+  netPnl: 512,
+  fees: 8,
   legs: [],
   ironFly: {
-    bodyPutStrike: 21.5,
-    bodyCallStrike: 21.5,
-    putWingStrike: 18,
-    callWingStrike: 27,
-    contracts: 5,
-    creditPerShare: 1.55,
+    bodyPutStrike: 50,
+    bodyCallStrike: 50,
+    putWingStrike: 45,
+    callWingStrike: 58,
+    contracts: 4,
+    creditPerShare: 3,
   },
 };
 
@@ -1657,30 +1657,30 @@ describe("createApp", () => {
   });
 
   it("creates a trade and returns it with computed metrics", async () => {
-    const res = await post(macys);
+    const res = await post(sampleFly);
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.underlying).toBe("M");
-    expect(body.metrics.maxLoss).toBe(1985.94);
-    expect(body.metrics.returnOnRisk).toBeCloseTo(0.1128, 4);
+    expect(body.underlying).toBe("XYZ");
+    expect(body.metrics.maxLoss).toBe(2008);
+    expect(body.metrics.returnOnRisk).toBeCloseTo(0.255, 4);
   });
 
   it("rejects an invalid trade with 400 and a field path", async () => {
-    const res = await post({ ...macys, openedAt: -5 });
+    const res = await post({ ...sampleFly, openedAt: -5 });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(JSON.stringify(body)).toContain("openedAt");
   });
 
   it("lists trades and honours the book filter", async () => {
-    await post(macys);
-    await post({ ...macys, book: "paper" });
+    await post(sampleFly);
+    await post({ ...sampleFly, book: "paper" });
     const res = await app.request("/api/trades?book=live", { headers: { host: "localhost" } });
     expect((await res.json()).length).toBe(1);
   });
 
   it("patches a trade", async () => {
-    const created = await (await post(macys)).json();
+    const created = await (await post(sampleFly)).json();
     const res = await app.request(`/api/trades/${created.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json", host: "localhost" },
@@ -2318,19 +2318,19 @@ const trade = {
   id: "t1",
   strategy: "iron_fly",
   book: "live",
-  underlying: "M",
-  underlyingName: "Macy's Inc",
+  underlying: "XYZ",
+  underlyingName: "XYZ Industries",
   structureLabel: "Short Iron Butterfly",
   openedAt: 1788_000_000_000,
   closedAt: 1788_086_400_000,
-  netPnl: 224.06,
-  fees: 10.94,
+  netPnl: 512,
+  fees: 8,
   grade: "B",
   excluded: false,
   legs: [],
   ironFly: null,
   tagIds: [],
-  metrics: { maxLoss: 1985.94, returnOnRisk: 0.1128, pctOfMaxProfit: 0.2932, pnlPctOfCost: 0.2932 },
+  metrics: { maxLoss: 2008, returnOnRisk: 0.255, pctOfMaxProfit: 0.4295, pnlPctOfCost: 0.4295 },
 };
 
 function renderJournal() {
@@ -2348,9 +2348,9 @@ describe("Journal", () => {
   it("lists trades with P&L and return on risk", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([trade]), { headers: { "content-type": "application/json" } })));
     renderJournal();
-    await waitFor(() => expect(screen.getByText("M")).toBeTruthy());
-    expect(screen.getByText("+$224.06")).toBeTruthy();
-    expect(screen.getByText("+11.28%")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("XYZ")).toBeTruthy());
+    expect(screen.getByText("+$512.00")).toBeTruthy();
+    expect(screen.getByText("+25.50%")).toBeTruthy();
   });
 
   it("shows an empty state when there are no trades", async () => {
@@ -2536,15 +2536,15 @@ const fill = (label: string, value: string) =>
 describe("NewIronFly", () => {
   it("previews metrics live as the structure is typed", () => {
     setup();
-    fill("Underlying", "M");
-    fill("Body strike", "21.5");
-    fill("Put wing", "18");
-    fill("Call wing", "27");
-    fill("Contracts", "5");
-    fill("Credit per share", "1.55");
-    fill("Fees", "10.94");
-    expect(screen.getByTestId("preview-max-loss").textContent).toContain("1,985.94");
-    expect(screen.getByTestId("preview-breakevens").textContent).toContain("19.97");
+    fill("Underlying", "XYZ");
+    fill("Body strike", "50");
+    fill("Put wing", "45");
+    fill("Call wing", "58");
+    fill("Contracts", "4");
+    fill("Credit per share", "3.00");
+    fill("Fees", "8.00");
+    expect(screen.getByTestId("preview-max-loss").textContent).toContain("2,008.00");
+    expect(screen.getByTestId("preview-breakevens").textContent).toContain("47.02");
     expect(screen.getByTestId("preview-broken").textContent).toContain("broken");
   });
 
@@ -2554,18 +2554,18 @@ describe("NewIronFly", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const { onCreated } = setup();
-    fill("Underlying", "M");
-    fill("Body strike", "21.5");
-    fill("Put wing", "18");
-    fill("Call wing", "27");
-    fill("Contracts", "5");
-    fill("Credit per share", "1.55");
-    fill("Net P&L", "224.06");
+    fill("Underlying", "XYZ");
+    fill("Body strike", "50");
+    fill("Put wing", "45");
+    fill("Call wing", "58");
+    fill("Contracts", "4");
+    fill("Credit per share", "3.00");
+    fill("Net P&L", "512.00");
     fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
     await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-id"));
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body.strategy).toBe("iron_fly");
-    expect(body.ironFly.callWingStrike).toBe(27);
+    expect(body.ironFly.callWingStrike).toBe(58);
     expect(body.legs).toHaveLength(4);
   });
 });
@@ -2814,37 +2814,37 @@ const trade = {
   id: "t1",
   strategy: "iron_fly",
   book: "live",
-  underlying: "M",
-  underlyingName: "Macy's Inc",
+  underlying: "XYZ",
+  underlyingName: "XYZ Industries",
   structureLabel: "Short Iron Butterfly",
   openedAt: 1788_000_000_000,
   closedAt: 1788_086_400_000,
-  netPnl: 224.06,
-  fees: 10.94,
+  netPnl: 512,
+  fees: 8,
   notes: "crush paid",
   grade: null,
   excluded: false,
   excludeReason: null,
   tagIds: [],
-  ironFly: { bodyPutStrike: 21.5, bodyCallStrike: 21.5, putWingStrike: 18, callWingStrike: 27, contracts: 5, creditPerShare: 1.55, sourceNotes: null },
+  ironFly: { bodyPutStrike: 50, bodyCallStrike: 50, putWingStrike: 45, callWingStrike: 58, contracts: 4, creditPerShare: 3, sourceNotes: null },
   legs: [
-    { id: "l1", right: "C", strike: 21.5, expiry: "2026-09-11", quantity: -5, multiplier: 100, openPrice: 0.88, closePrice: 0.05 },
-    { id: "l2", right: "P", strike: 21.5, expiry: "2026-09-11", quantity: -5, multiplier: 100, openPrice: 0.7, closePrice: 1.03 },
+    { id: "l1", right: "C", strike: 50, expiry: "2026-10-16", quantity: -4, multiplier: 100, openPrice: 2.1, closePrice: 1 },
+    { id: "l2", right: "P", strike: 50, expiry: "2026-10-16", quantity: -4, multiplier: 100, openPrice: 1.6, closePrice: 0.8 },
   ],
   metrics: {
-    putWingWidth: 3.5,
-    callWingWidth: 5.5,
+    putWingWidth: 5,
+    callWingWidth: 8,
     isBrokenWing: true,
-    maxProfit: 764.06,
-    putSideRisk: 985.94,
-    callSideRisk: 1985.94,
-    maxLoss: 1985.94,
+    maxProfit: 1192,
+    putSideRisk: 808,
+    callSideRisk: 2008,
+    maxLoss: 2008,
     riskySide: "call",
-    breakevenLow: 19.97,
-    breakevenHigh: 23.03,
-    returnOnRisk: 0.1128,
-    pctOfMaxProfit: 0.2932,
-    pnlPctOfCost: 0.2932,
+    breakevenLow: 47.02,
+    breakevenHigh: 52.98,
+    returnOnRisk: 0.255,
+    pctOfMaxProfit: 0.4295,
+    pnlPctOfCost: 0.4295,
   },
 };
 
@@ -2863,10 +2863,10 @@ describe("TradeDetail", () => {
   it("shows the headline metrics and marks the broken wing", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(trade), { headers: { "content-type": "application/json" } })));
     renderDetail();
-    await waitFor(() => expect(screen.getByText("Macy's Inc")).toBeTruthy());
-    expect(screen.getByTestId("tile-max-loss").textContent).toContain("1,985.94");
+    await waitFor(() => expect(screen.getByText("XYZ Industries")).toBeTruthy());
+    expect(screen.getByTestId("tile-max-loss").textContent).toContain("2,008.00");
     expect(screen.getByTestId("tile-structure").textContent).toContain("broken");
-    expect(screen.getByTestId("tile-breakevens").textContent).toContain("19.97");
+    expect(screen.getByTestId("tile-breakevens").textContent).toContain("47.02");
   });
 
   it("keeps legs collapsed until the expander is opened", async () => {
@@ -3187,7 +3187,7 @@ Run:
 TJ_DATA_DIR=/tmp/tj-e2e pnpm start
 ```
 
-In the browser at `http://127.0.0.1:4178`: go to Iron Flies → New trade, enter the Macy's trade (M, body 21.50, wings 18 and 27, 5 contracts, credit 1.55, fees 10.94, net P&L 224.06), save it, and confirm on the detail page that max loss reads **$1,985.94 (call side)**, breakevens read **19.97 / 23.03**, return on risk reads **+11.28%**, and the legs table stays collapsed until opened. Grade it B, tick Exclude from stats, reload, and confirm both stuck. Then `git status --short` — no data files may appear.
+In the browser at `http://127.0.0.1:4178`: go to Iron Flies → New trade, enter the sample fly (XYZ, body 50, wings 45 and 58, 4 contracts, credit 3.00, fees 8.00, net P&L 512.00), save it, and confirm on the detail page that max loss reads **$2,008.00 (call side)**, breakevens read **47.02 / 52.98**, return on risk reads **+25.50%**, and the legs table stays collapsed until opened. Grade it B, tick Exclude from stats, reload, and confirm both stuck. Then `git status --short` — no data files may appear.
 
 - [ ] **Step 7: Commit**
 
@@ -3223,3 +3223,53 @@ Deferred to later plans, by design: the CSV/paste importer and oQuants extractor
 **Placeholder scan:** no TBDs; every code step carries runnable code; the one prose-only step (Task 9 step 6 router wiring, Task 8 step 4 README) states exactly what to write.
 
 **Type consistency check:** `ironFlyMetrics`/`ironFlyOutcome` field names used in Tasks 7, 11 and 12 match Task 3 (`maxLoss`, `riskySide`, `breakevenLow`, `breakevenHigh`, `returnOnRisk`, `pnlPctOfCost`). `createTradesRepo(db, now)` signature matches its use in Task 7. `TradeRecord.tagIds` is produced in Task 5 and consumed in Tasks 10 and 12. `AppType` is exported in Task 7 and imported in Task 9.
+
+---
+
+## Addendum: what changed while executing (2026-09-22)
+
+All thirteen tasks were implemented. These are the deliberate departures from the plan above, so the next reader is not misled by it.
+
+**Toolchain**
+
+1. **`tsx` runs the server**, not `node --experimental-strip-types`. Node's type stripping does not resolve `./app.js` specifiers to TypeScript sources, so the entry point could not start.
+2. **`fileURLToPath` everywhere**, never `new URL(...).pathname`, which yields `/C:/...` on Windows and would have broken the Windows CI leg.
+3. **`emitDeclarationOnly`** in the base tsconfig: `tsc -b` was emitting JavaScript copies of the tests, which the runner then executed a second time.
+4. **pnpm 12 names the setting `allowBuilds`**, not `onlyBuiltDependencies`; better-sqlite3 and esbuild are approved there.
+5. **Biome** needed `css.parser.tailwindDirectives` for `@theme`, and generated `.d.ts` output excluded from linting.
+6. **A root `vitest.config.ts`** with `projects` so each package can bring its own environment (the web app needs jsdom, and Testing Library's cleanup must be registered explicitly because the suites run without globals).
+
+**Design**
+
+7. **Zod 4 keeps refinements inside the schema**, so `tradePatchSchema` derives from a shared field map rather than `.innerType()`. A test caught a real bug here: `.partial()` preserves defaults, so `PATCH {grade:"B"}` would have wiped legs, tags and the exclude flag. Creation defaults and patch fields are now defined separately.
+8. **shadcn/ui was not installed.** Its CLI is interactive, so the few primitives needed (`Panel`, `Money`, `Pct`, `Chip`) are hand-written against the same Tailwind tokens. Adding shadcn components later needs no rework.
+9. Task 3's "symmetric fly" test in this plan asserted `isBrokenWing` was **true**, contradicting its own name. The implemented test asserts equal wings are unbroken and carry equal risk.
+
+**Product changes requested after the first run-through**
+
+10. **Legs are always visible** on the trade page, with per-leg cost and P&L under a bold totals line (cost, legs P&L, fees, net). Only the raw imported row hides behind an expander.
+11. **Journal rows** highlight on hover and open the trade on click or Enter; the note shows truncated with the full text on hover.
+12. **`/iron-flies`** lists flies with a New trade button, and every other nav destination renders what it will hold rather than a dead "Not found".
+13. **`color-scheme: dark`**, so native number spinners, date pickers and checkboxes stop rendering white against the terminal theme.
+14. **The position builder replaced the simple entry form** (spec §7.1): one row per leg with strike, size, entry premium and exit premium, plus entry and exit fees. All cash figures are derived by `positionCash` in `core`; none are typed twice. Round-trip fees land in the cost line, matching oQuants. Sizes are whole contracts.
+15. **Trades can be edited** through the same builder, from an Edit button on the trade page; saving recomputes P&L from the edited prices.
+16. **`trades.fees_open` and `trades.fees_close`** were added (migration `0001`), keeping the two sides of the commission alongside the round-trip total.
+
+## Follow-on work, in order
+
+**Next plan — option chains and live marks (spec §8.6)**
+
+- Alpaca client in `packages/market-data`: listed expirations for an underlying, listed strikes for an expiration, and current quotes for a contract. Key in `secrets.json`, never in the repo.
+- The builder's expiry and strike fields become pickers fed by the chain, falling back to typed entry when the API is unreachable, so old trades can always be entered.
+- Open positions show the current premium per leg and the unrealised P&L it implies, in muted type and labelled an estimate. **Estimates are never written into exit prices and never stored as the trade's P&L**; exit fields stay empty until real fills are typed in.
+- A settings page to hold the key, replacing hand-editing `secrets.json`.
+
+**Then, in the order of the spec's Phase 1**
+
+- The oQuants extractor and the CSV/paste importer (§7.2, §7.2b).
+- The Analytics page (§9).
+- Export and merge bundles (§12).
+
+**Deferred deliberately**
+
+- A **general multi-leg editor** for scalps and structures that are not four-legged flies. It gets its own plan next to the Phase 2 scalp work; the iron fly builder covers everything being traded through this journal today.
