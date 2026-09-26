@@ -104,7 +104,7 @@ interface ChainSource {
 - Returns an empty list when nothing is listed; the route turns that into "none listed".
 - Error handling is the same as for quotes: Alpaca's JSON error `message` is passed on, and anything else (such as the HTML page for a bad key) is reduced to the status code.
 
-`cachedChains(source, { ttlMs = 15 min })` caches per symbol. The active part expires after `ttlMs`, and the inactive part per (symbol, `since`) is kept for the life of the process, since expired listings never change. A failed call is not cached.
+`cachedChains(source, { ttlMs = 15 min })` keeps each (symbol, `since`) answer for `ttlMs`. A failed call is not cached. (Keeping expired listings for the life of the process was considered; one cheap call per 15 minutes is not worth a second caching rule.)
 
 ### 5.2 Option quotes
 
@@ -189,7 +189,7 @@ interface MarketData {
 }
 ```
 
-`index.ts` builds it from `readSecrets` at startup, keeping today's startup lines, and passes it to `createApp` in place of `AppDeps.quotes`. Routes call `sources()` on every request, so a key saved in Settings takes effect on the next request. The state becomes `error`, with a short message, when Alpaca rejects the key (401 or 403) on a live call, and returns to `on` after the next successful call.
+`index.ts` builds it from `readSecrets` at startup, and passes it to `createApp` in place of `AppDeps.quotes`. The startup line reads `Market data: Alpaca (IEX stock prices, indicative option quotes)`, or `Market data: off (add an Alpaca key in Settings)`. Routes call `sources()` on every request, so a key saved in Settings takes effect on the next request. The state becomes `error`, with a short message, when Alpaca rejects the key (401 or 403) on a live call, and clears when a key is saved or removed. A revoked key does not recover by itself.
 
 ### 7.2 Read-only routes
 
@@ -234,7 +234,7 @@ interface MarketData {
 
 **Loading the chain**
 
-- When the Underlying field loses focus, or after 400 ms without typing, the builder asks for the chain with `since` set to the Opened date if that is in the past, otherwise today.
+- 400 ms after the last keystroke in Underlying, the builder asks for the chain with `since` set to the Opened date if that is in the past, otherwise today.
 - Changing Opened to an earlier date asks again.
 - If Company is blank, it asks for the company name and fills it in.
 
