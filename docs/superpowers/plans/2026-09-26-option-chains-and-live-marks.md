@@ -4395,3 +4395,50 @@ EOF
   - `OptionQuote` is defined once, in core (Task 1). market-data (Task 2) and the web (Task 9) both use it.
   - `ListedExpiration` (Task 3) is the shape the web receives as `Expiration` (Task 11).
   - `MarketSources` (Task 6) is the shape `fakeSources` builds.
+
+---
+
+## Execution record (2026-09-26)
+
+**Status:** all 14 tasks done inline on `feat/option-chains` (stacked on `feat/live-quotes`, PR #3), then a fresh whole-branch review (verdict "With fixes"), whose three Important findings are fixed, each with a test that failed first. 34 test files and 293 tests pass; lint, typecheck and the build are clean. There is no PR for this branch yet.
+
+**Still open (needs the user, on a weekday session):**
+- How fresh the indicative quotes are within the 60 s refresh (spec §14).
+- Saving the key again from Settings.
+
+The Saturday live check with the real paper key passed; it is recorded in spec §14.
+
+**Resuming on another machine:**
+1. `git fetch && git switch feat/option-chains`.
+2. `pnpm install`: `@tj/market-data` now depends on `@tj/core`.
+3. Save the Alpaca paper key on the Settings page. Keys live per machine in `secrets.json` and are never in the repo.
+
+**Review fixes:**
+- **Stale company (`5f31ff8`):** a company name the builder had filled in stayed when the symbol changed to one with no name. It now clears.
+- **Expired-chain window (`f3a5f7b`):** expired contracts are fetched for at most 90 days after the open date; spec §5.1 is updated.
+- **No-key trade page (`85b3fae`):** without a key, the trade page no longer shows mark columns or blames a missing quote. `/api/option-quotes` now returns `available`, and expired trades get no mark columns either.
+
+**Rulings made during execution** (each with its cost if wrong):
+- `testing.ts` `json()` has an explicit `: Response` return type (TS2742 under composite builds). Cost: none.
+- `quotes.test.ts` keeps `import type { createApp }`, which the plan's header dropped. Cost: none.
+- The Expiry picker's label uses `htmlFor="expiry-select"`, with an optional `id` on `ExpirySelect` (biome a11y). Cost: none.
+- The unused `waitFor` import was dropped from `Settings.test.tsx`. Cost: none.
+- The final review ran before the weekday live check. Cost: quote lag would go unnoticed until then, though the tooltip shows the quote time.
+- Expired contracts are fetched up to `since` + 90 days. Cost: a later expiry shows as "not listed" (kept and saved) or needs "type instead".
+- Left as they are, after the reviewer set them aside:
+  - Older routes against cross-site requests: JSON-only validators and preflights already refuse them.
+  - Split-adjusted roots in strike lists: rare, and the "type instead" and "not listed" paths cover them.
+  - A symlinked or read-only `secrets.json`.
+  - URLs over 16 KB, which needs about 800 open contracts.
+  - A subscription 403 shown as a rejected key.
+
+**Deferred minors** (not fixed; candidates for a follow-up):
+1. A typed strike with trailing zeros ("22.50") shows as "not listed", and an expiry change can clear it. Compare strikes numerically.
+2. A 401 from an in-flight call on the old key, after a new key is saved, marks the new key "rejected" until it is saved again. Give each build its own reporter (`marketData.ts`).
+3. Builder mark hints are all-or-nothing: every leg must be priced and every open leg quoted. Spec §8 describes them per leg.
+4. The pickers flip back to typed inputs while a new chain loads. Consider `placeholderData`.
+5. Expiry sits before Opened in the builder, so a past expiry appears only after Opened is filled. Add a hint, or reorder.
+6. A cross-site simple GET can spend the Alpaca quota. Refuse `Sec-Fetch-Site: cross-site` on `/api/*`; `/api/quotes` already had this exposure.
+7. Test gaps: Review Focus 1 for an unlisted expiry, and Review Focus 2 with an unlisted typed expiry.
+8. The `EXPIRED · add exits` chip shows even without a key (spec §11 says lists look as before). It is probably desirable; confirm with the user.
+9. `isoDate` accepts `2026-02-30`, and the tooltip shows "03:59 PM" where the spec writes "3:59 PM".
