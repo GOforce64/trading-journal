@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { type MarkableLeg, nyDate, type OptionQuote, occSymbol } from "@tj/core";
+import { useEffect, useState } from "react";
 import { api } from "./api.js";
 
 /** Today's date in New York, where options expire. */
@@ -43,5 +44,32 @@ export function useOptionQuotes(contracts: string[]) {
     },
     enabled: unique.length > 0,
     refetchInterval: 60_000,
+  });
+}
+
+/** A plain ticker such as M or BRK.B, the only thing worth asking the server about. */
+export const TICKER = /^[A-Z][A-Z0-9.]{0,9}$/;
+
+/** `value` once it has stopped changing for `ms`, so typing a symbol doesn't ask the server on every key. */
+export function useSettled<T>(value: T, ms = 400): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return settled;
+}
+
+/** The listed expirations and strikes for a symbol, back to `since` for a trade opened in the past. */
+export function useChain(symbol: string, since: string | undefined) {
+  return useQuery({
+    queryKey: ["chain", symbol, since ?? ""],
+    queryFn: async () => {
+      const res = await api.api.chains[":symbol"].$get({ param: { symbol }, query: { since } });
+      if (!res.ok) throw new Error(`chain failed: ${res.status}`);
+      return res.json();
+    },
+    enabled: TICKER.test(symbol),
+    staleTime: 15 * 60_000,
   });
 }

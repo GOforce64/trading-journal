@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IronFlyForm, type IronFlyFormValues } from "./IronFlyForm.js";
 
 const fill = (label: string, value: string) =>
@@ -29,10 +30,83 @@ function priceTheSampleFly() {
   fill("Exit fees", "3");
 }
 
-function setup(initial?: Partial<IronFlyFormValues>) {
+const NO_KEY = {
+  symbol: "XYZ",
+  expirations: [],
+  unavailable: { reason: "no_key", message: "Add an Alpaca key in Settings to pick from the chain." },
+};
+
+interface Stub {
+  /** The body /api/chains answers with. */
+  chain?: unknown;
+  /** Stock prices by symbol. */
+  quotes?: Record<string, { price: number; at: number }>;
+  /** Bid and ask by contract code. */
+  optionQuotes?: Record<string, { bid: number | null; ask: number | null; at: number }>;
+  /** Company names by symbol. */
+  companies?: Record<string, string>;
+}
+
+/** Answers the market-data calls the builder makes. Without a chain it behaves as if no key were set up. */
+function stubApi({ chain = NO_KEY, quotes = {}, optionQuotes = {}, companies = {} }: Stub = {}) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    let body: unknown = {};
+    if (path.startsWith("/api/chains/")) body = chain;
+    else if (path === "/api/option-quotes") body = { quotes: optionQuotes };
+    else if (path === "/api/quotes") body = { quotes };
+    else if (path.startsWith("/api/company/"))
+      body = { name: companies[path.slice("/api/company/".length)] ?? null };
+    return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function setup(initial?: Partial<IronFlyFormValues>, stub?: Stub) {
+  const fetchMock = stubApi(stub);
   const onSubmit = vi.fn();
-  render(<IronFlyForm initial={initial} submitLabel="Save trade" onSubmit={onSubmit} />);
-  return { onSubmit };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <IronFlyForm initial={initial} submitLabel="Save trade" onSubmit={onSubmit} />
+    </QueryClientProvider>,
+  );
+  return { onSubmit, fetchMock };
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+/** M's chain for two far-off Fridays, so the tests never go stale. */
+const M_CHAIN = {
+  symbol: "M",
+  expirations: [
+    { date: "2099-10-02", expired: false, strikes: [20, 21, 22, 22.5, 23, 26] },
+    { date: "2099-10-09", expired: false, strikes: [20, 22, 23, 26] },
+  ],
+  unavailable: null,
+};
+
+const isSelect = (label: string) => screen.getByLabelText(label).tagName === "SELECT";
+const options = (label: string) =>
+  [...(screen.getByLabelText(label) as HTMLSelectElement).options].map((option) => option.textContent);
+const value = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
+
+/** The open M fly from the design mockup, built from the chain: 3 lots, body 22.5, wings 20 / 26. */
+async function priceFromTheChain() {
+  fill("Underlying", "M");
+  await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+  fill("Expiry", "2099-10-02");
+  for (const [leg, strike, entry] of [
+    ["Short call", "22.5", "0.52"],
+    ["Short put", "22.5", "0.41"],
+    ["Long call", "26", "0.05"],
+    ["Long put", "20", "0.03"],
+  ] as const) {
+    fill(`${leg} strike`, strike);
+    fill(`${leg} size`, "3");
+    fill(`${leg} entry`, entry);
+  }
 }
 
 describe("IronFlyForm", () => {
@@ -142,5 +216,106 @@ describe("IronFlyForm", () => {
     setup();
     expect(screen.getByLabelText("Short call size").getAttribute("step")).toBe("1");
     expect(screen.getByLabelText("Short call entry").getAttribute("step")).toBe("0.01");
+  });
+});
+
+describe("IronFlyForm with an option chain", () => {
+  it("turns expiry and strikes into lists of what is listed", async () => {
+    setup(undefined, { chain: M_CHAIN });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    expect(options("Expiry")[1]).toMatch(/^Oct 2 · Fri · \d+d$/);
+    fill("Expiry", "2099-10-02");
+    expect(options("Short call strike")).toEqual(["—", "20", "21", "22", "22.5", "23", "26"]);
+  });
+
+  it("saves a 1-wing trade when a long leg's strike is left blank", async () => {
+    const { onSubmit } = setup(undefined, { chain: M_CHAIN });
+    await priceFromTheChain();
+    for (const field of ["strike", "size", "entry"]) fill(`Long put ${field}`, "");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload.legs).toHaveLength(3);
+    expect(payload.legs[0].expiry).toBe("2099-10-02");
+    expect(payload.ironFly.putWingStrike).toBe(0);
+  });
+
+  it("keeps the strikes a new expiry lists and clears the rest, saying which", async () => {
+    setup(undefined, { chain: M_CHAIN });
+    await priceFromTheChain();
+    fill("Expiry", "2099-10-09");
+    expect(value("Short call strike")).toBe("");
+    expect(value("Short put strike")).toBe("");
+    expect(value("Long call strike")).toBe("26");
+    expect(value("Long put strike")).toBe("20");
+    expect(
+      screen.getByText("Cleared strikes not listed for 2099-10-09: short call, short put."),
+    ).toBeTruthy();
+  });
+
+  it("keeps a saved strike the chain does not list, marked not listed, and saves it unchanged", async () => {
+    const { onSubmit } = setup(
+      {
+        underlying: "M",
+        expiry: "2099-10-02",
+        legs: {
+          shortCall: { strike: "22.25", size: "3", entry: "0.52", exit: "" },
+          shortPut: { strike: "22.25", size: "3", entry: "0.41", exit: "" },
+          longCall: { strike: "26", size: "3", entry: "0.05", exit: "" },
+          longPut: { strike: "20", size: "3", entry: "0.03", exit: "" },
+        },
+      },
+      { chain: M_CHAIN },
+    );
+    await waitFor(() => expect(isSelect("Short call strike")).toBe(true));
+    const select = screen.getByLabelText("Short call strike") as HTMLSelectElement;
+    expect(select.value).toBe("22.25");
+    expect(select.selectedOptions[0]?.textContent).toBe("22.25 · not listed");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit.mock.calls[0]?.[0].legs[0].strike).toBe(22.25);
+  });
+
+  it("keeps an expiry typed before the chain arrived", async () => {
+    setup(undefined, { chain: M_CHAIN });
+    fill("Underlying", "M");
+    fill("Expiry", "2099-10-09");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    expect(value("Expiry")).toBe("2099-10-09");
+  });
+
+  it("falls back to typing, with the reason, when there is no chain", async () => {
+    setup(undefined, { chain: NO_KEY });
+    fill("Underlying", "M");
+    expect(await screen.findByText("Add an Alpaca key in Settings to pick from the chain.")).toBeTruthy();
+    expect(isSelect("Expiry")).toBe(false);
+  });
+
+  it("switches to typing on request, and back", async () => {
+    setup(undefined, { chain: M_CHAIN });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "type instead" }));
+    expect(isSelect("Expiry")).toBe(false);
+    expect(isSelect("Short call strike")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "pick from the chain" }));
+    expect(isSelect("Expiry")).toBe(true);
+  });
+
+  it("labels the strike nearest the stock's price for a trade opened today", async () => {
+    setup(undefined, { chain: M_CHAIN, quotes: { M: { price: 22.64, at: Date.UTC(2026, 8, 25, 19, 59) } } });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    fill("Expiry", "2099-10-02");
+    await waitFor(() => expect(options("Short call strike")).toContain("22.5 (ATM)"));
+  });
+
+  it("refuses to save without an expiry", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    fill("Expiry", "");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("An expiry is required.")).toBeTruthy();
   });
 });
