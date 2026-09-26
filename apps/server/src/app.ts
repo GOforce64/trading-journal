@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Db } from "@tj/db";
-import type { QuoteSource } from "@tj/market-data";
 import { Hono } from "hono";
+import type { MarketData } from "./marketData.js";
 import { importRoutes } from "./routes/import.js";
 import { quoteRoutes } from "./routes/quotes.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
@@ -16,8 +16,8 @@ export interface AppDeps {
   webDir?: string;
   /** Snapshots the database before an import writes; returns the backup's path. */
   backup?: () => string;
-  /** Live reference prices. Omitted when no data key is set up, and the app carries on without them. */
-  quotes?: QuoteSource;
+  /** Live market data. Omitted in tests that don't need it; the app then answers as if no key were set up. */
+  market?: MarketData;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -37,7 +37,7 @@ export function createApp(deps: AppDeps) {
     .route("/api/setups", setups)
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
-    .route("/api/quotes", quoteRoutes(deps.quotes));
+    .route("/api/quotes", quoteRoutes(deps.market));
 
   if (deps.webDir) {
     const webDir = deps.webDir;

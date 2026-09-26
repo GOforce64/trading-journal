@@ -1,15 +1,10 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { openDatabase, runMigrations } from "@tj/db";
 import type { Quote, QuoteSource } from "@tj/market-data";
 import { describe, expect, it } from "vitest";
-import { type AppDeps, createApp } from "./app.js";
+import type { createApp } from "./app.js";
+import { createMarketData } from "./marketData.js";
+import { fakeSources, LOCAL, testApp } from "./testing.js";
 
-const MIGRATIONS = fileURLToPath(new URL("../../../packages/db/migrations", import.meta.url));
-const LOCAL = { host: "localhost" };
-
+const KEYS = { keyId: "PKTESTKEYID", secretKey: "test-secret-do-not-log" };
 const M = { price: 22.68, at: 1_790_279_911_052 };
 const ENVX = { price: 9.87, at: 1_790_279_999_246 };
 
@@ -28,10 +23,10 @@ function fakeSource() {
   return { source, asked };
 }
 
-function appWith(quotes?: AppDeps["quotes"]) {
-  const file = join(mkdtempSync(join(tmpdir(), "tj-quotes-")), "journal.db");
-  runMigrations(file, { migrationsFolder: MIGRATIONS });
-  return createApp({ db: openDatabase(file), quotes });
+function appWith(quotes?: QuoteSource) {
+  return testApp({
+    market: quotes ? createMarketData(KEYS, { build: () => fakeSources({ quotes }) }) : undefined,
+  });
 }
 
 const getQuotes = async (app: ReturnType<typeof createApp>, symbols: string) => {
@@ -63,5 +58,14 @@ describe("GET /api/quotes", () => {
     const { status, body } = await getQuotes(appWith(), "M");
     expect(status).toBe(200);
     expect(body).toEqual({ quotes: {} });
+  });
+
+  it("answers from a newly configured key on the very next request", async () => {
+    const { source } = fakeSource();
+    const market = createMarketData(null, { build: () => fakeSources({ quotes: source }) });
+    const app = testApp({ market });
+    expect((await getQuotes(app, "M")).body).toEqual({ quotes: {} });
+    market.configure(KEYS);
+    expect((await getQuotes(app, "M")).body).toEqual({ quotes: { M } });
   });
 });
