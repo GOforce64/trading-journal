@@ -9,6 +9,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/db" },
-    { "path": "../../packages/importers" }
+    { "path": "../../packages/importers" },
+    { "path": "../../packages/market-data" }
   ]
 }
