@@ -196,7 +196,7 @@ interface MarketData {
 | Route | Answer |
 |---|---|
 | `GET /api/chains/:symbol?since=YYYY-MM-DD` | `{ symbol, expirations: ListedExpiration[] }`, or `{ symbol, expirations: [], unavailable: { reason: "no_key" \| "none_listed" \| "unreachable", message } }` |
-| `GET /api/option-quotes?contracts=…` | `{ quotes: { [contract]: OptionQuote } }`. It is `{}` without a key or when Alpaca fails, as `/api/quotes` does today. |
+| `GET /api/option-quotes?contracts=…` | `{ quotes: { [contract]: OptionQuote }, available: boolean }`. `quotes` is `{}` without a key or when Alpaca fails, as `/api/quotes` does today. `available` is false without a key, so pages show no marks instead of blaming a missing quote. |
 | `GET /api/company/:symbol` | `{ name: string \| null }`; null without a key or when Alpaca fails |
 
 `:symbol` must be a plain ticker (the existing `TICKER` pattern), and `since` must be a valid date, or the route answers 400.
@@ -283,7 +283,7 @@ interface MarketData {
   - Return on risk stays "—".
 - **Trade page.**
   - The header shows the estimate in place of "—".
-  - For an open trade, the Legs panel adds **Mark (to close)**, showing the price and whether it is the ask or the bid, and **Est. P&L** per leg.
+  - For an open trade with marks (not without a key, and not once it has expired), the Legs panel adds **Mark (to close)**, showing the price and whether it is the ask or the bid, and **Est. P&L** per leg.
   - A footnote gives the estimate before and after fees, the quote time, and "refreshes every minute · never saved".
   - An expired open trade shows `EXPIRED · add exits` beside the Edit button.
 

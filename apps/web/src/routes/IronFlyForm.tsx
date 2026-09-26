@@ -234,7 +234,8 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     feesClose: zeroIfBlank(values.feesClose),
   };
   const { data: optionQuotes } = useOptionQuotes(openContracts(markTrade, today));
-  const estimate = markLegs.length > 0 ? closeEstimate(markTrade, optionQuotes ?? NO_QUOTES, today) : null;
+  const estimate =
+    markLegs.length > 0 ? closeEstimate(markTrade, optionQuotes?.quotes ?? NO_QUOTES, today) : null;
   const markFor = (role: (typeof LEG_ROLES)[number]) => {
     if (estimate?.kind !== "estimate") return undefined;
     const index = markLegs.findIndex((leg) => leg.right === role.right && leg.quantity < 0 === role.short);

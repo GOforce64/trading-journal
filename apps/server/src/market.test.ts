@@ -85,7 +85,7 @@ describe("GET /api/option-quotes", () => {
       optionQuotes: { latest: async () => new Map([["M261002C00022500", QUOTE]]) },
     });
     const { body } = await get(app, "/api/option-quotes?contracts=M261002C00022500,M261002C00022300");
-    expect(body).toEqual({ quotes: { M261002C00022500: QUOTE } });
+    expect(body).toEqual({ quotes: { M261002C00022500: QUOTE }, available: true });
   });
 
   it("asks for each well-formed contract once, in capitals", async () => {
@@ -124,9 +124,10 @@ describe("GET /api/option-quotes", () => {
     expect(asked).toEqual([150]);
   });
 
-  it("answers with no quotes without a key", async () => {
+  it("answers with no quotes, and says market data is off, without a key", async () => {
     expect((await get(testApp(), "/api/option-quotes?contracts=M261002C00022500")).body).toEqual({
       quotes: {},
+      available: false,
     });
   });
 });

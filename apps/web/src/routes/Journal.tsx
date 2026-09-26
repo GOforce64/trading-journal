@@ -156,7 +156,8 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                 <td className="text-right">
                   {isOpen(trade) ? (
                     <EstimatedPnl
-                      estimate={closeEstimate(trade, optionQuotes ?? NO_QUOTES, today)}
+                      estimate={closeEstimate(trade, optionQuotes?.quotes ?? NO_QUOTES, today)}
+                      explain={optionQuotes?.available === true}
                       testId={`est-${trade.id}`}
                     />
                   ) : (

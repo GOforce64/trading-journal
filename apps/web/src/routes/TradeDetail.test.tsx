@@ -114,9 +114,9 @@ const openQuotes = {
 };
 
 /** Answers the trade for its own URL and the given quotes for option quotes. */
-function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes) {
+function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes, available = true) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-    const payload = String(input).includes("/api/option-quotes") ? { quotes } : body;
+    const payload = String(input).includes("/api/option-quotes") ? { quotes, available } : body;
     return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -242,6 +242,19 @@ describe("TradeDetail", () => {
     stubTrade({ ...openTrade, legs: openTrade.legs.map((leg) => ({ ...leg, expiry: "2020-01-17" })) });
     renderDetail();
     expect(await screen.findByText("EXPIRED · add exits")).toBeTruthy();
+    expect(screen.queryByText("Mark (to close)")).toBeNull();
+  });
+
+  it("shows no marks, and blames no quote, without a market data key", async () => {
+    const fetchMock = stubTrade(openTrade, {}, false);
+    renderDetail();
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/option-quotes"))).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText("Mark (to close)")).toBeNull();
+    expect(screen.queryByText(/Marks unavailable/)).toBeNull();
+    expect(screen.getByTestId("header-estimate").textContent).toBe("—");
   });
 
   it("says why marks are missing", async () => {

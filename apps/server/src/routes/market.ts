@@ -58,7 +58,8 @@ export function marketRoutes(market?: MarketData) {
         sources && contracts.length > 0
           ? await sources.optionQuotes.latest(contracts)
           : new Map<string, OptionQuote>();
-      return c.json({ quotes: Object.fromEntries(found) }, 200);
+      // `available` lets the page tell "no key" (show nothing) from "Alpaca has no quote" (say so).
+      return c.json({ quotes: Object.fromEntries(found), available: sources != null }, 200);
     })
     .get("/company/:symbol", async (c) => {
       const symbol = c.req.param("symbol").toUpperCase();

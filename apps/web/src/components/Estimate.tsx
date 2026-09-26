@@ -22,8 +22,19 @@ export function estimateTitle(estimate: Extract<CloseEstimate, { kind: "estimate
   return `Estimated cost to close, from quotes at ${quotedAtText(estimate.quotedAt)} (indicative feed), after the fees entered so far. Not saved.`;
 }
 
-/** An open trade's estimated P&L, or why there is none. */
-export function EstimatedPnl({ estimate, testId }: { estimate: CloseEstimate; testId?: string }) {
+/**
+ * An open trade's estimated P&L, or why there is none. `explain` is false without a market data key,
+ * when a missing quote says nothing about the trade.
+ */
+export function EstimatedPnl({
+  estimate,
+  testId,
+  explain = true,
+}: {
+  estimate: CloseEstimate;
+  testId?: string;
+  explain?: boolean;
+}) {
   switch (estimate.kind) {
     case "estimate":
       return (
@@ -35,7 +46,11 @@ export function EstimatedPnl({ estimate, testId }: { estimate: CloseEstimate; te
       return <Chip>EXPIRED · add exits</Chip>;
     case "unavailable":
       return (
-        <span data-testid={testId} className="num text-muted" title={`No estimate: ${estimate.reason}.`}>
+        <span
+          data-testid={testId}
+          className="num text-muted"
+          title={explain ? `No estimate: ${estimate.reason}.` : undefined}
+        >
           —
         </span>
       );

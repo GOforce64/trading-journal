@@ -32,14 +32,17 @@ interface StubbedApi {
   quotes?: Record<string, { price: number; at: number }> | number;
   /** Bid and ask by contract code. */
   optionQuotes?: Record<string, { bid: number | null; ask: number | null; at: number }>;
+  /** Whether a market data key is set up. */
+  marketOn?: boolean;
 }
 
 /** Answers the calls the journal makes: its trades, live prices, and option quotes for open trades. */
-function stubApi({ trades = [trade], quotes = {}, optionQuotes = {} }: StubbedApi = {}) {
+function stubApi({ trades = [trade], quotes = {}, optionQuotes = {}, marketOn = true }: StubbedApi = {}) {
   // Typed parameters so the recorded call arguments can be inspected.
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
-    if (url.includes("/api/option-quotes")) return jsonResponse({ quotes: optionQuotes });
+    if (url.includes("/api/option-quotes"))
+      return jsonResponse({ quotes: optionQuotes, available: marketOn });
     if (!url.includes("/api/quotes")) return jsonResponse(trades);
     return typeof quotes === "number" ? new Response("down", { status: quotes }) : jsonResponse({ quotes });
   });
@@ -247,5 +250,15 @@ describe("Journal", () => {
     const cell = await screen.findByTestId("est-t2");
     expect(cell.textContent).toBe("—");
     expect(cell.getAttribute("title")).toBe("No estimate: no quote for the short call.");
+  });
+
+  it("shows a plain dash for an open trade without a market data key", async () => {
+    const fetchMock = stubApi({ trades: [openTrade], marketOn: false });
+    renderJournal();
+    await waitFor(() => expect(optionQuoteUrls(fetchMock)).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const cell = screen.getByTestId("est-t2");
+    expect(cell.textContent).toBe("—");
+    expect(cell.getAttribute("title")).toBeNull();
   });
 });

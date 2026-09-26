@@ -32,15 +32,19 @@ export function useQuotes(symbols: string[]) {
   });
 }
 
-/** Bid and ask per contract, refreshed each minute and never stored. Empty without a data key. */
+/**
+ * Bid and ask per contract, refreshed each minute and never stored, plus whether market data is on
+ * at all: "no key" shows nothing, while "Alpaca has no quote" is worth saying.
+ */
 export function useOptionQuotes(contracts: string[]) {
   const unique = [...new Set(contracts)].sort();
   return useQuery({
     queryKey: ["option-quotes", unique],
-    queryFn: async (): Promise<Map<string, OptionQuote>> => {
+    queryFn: async (): Promise<{ quotes: Map<string, OptionQuote>; available: boolean }> => {
       const res = await api.api["option-quotes"].$get({ query: { contracts: unique.join(",") } });
       if (!res.ok) throw new Error(`option quotes failed: ${res.status}`);
-      return new Map(Object.entries((await res.json()).quotes));
+      const body = await res.json();
+      return { quotes: new Map(Object.entries(body.quotes)), available: body.available };
     },
     enabled: unique.length > 0,
     refetchInterval: 60_000,

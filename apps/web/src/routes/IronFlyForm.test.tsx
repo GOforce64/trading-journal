@@ -53,7 +53,7 @@ function stubApi({ chain = NO_KEY, quotes = {}, optionQuotes = {}, companies = {
     const path = new URL(String(input), "http://localhost").pathname;
     let body: unknown = {};
     if (path.startsWith("/api/chains/")) body = chain;
-    else if (path === "/api/option-quotes") body = { quotes: optionQuotes };
+    else if (path === "/api/option-quotes") body = { quotes: optionQuotes, available: true };
     else if (path === "/api/quotes") body = { quotes };
     else if (path.startsWith("/api/company/"))
       body = { name: companies[path.slice("/api/company/".length)] ?? null };

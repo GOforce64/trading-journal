@@ -60,9 +60,11 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
   const metrics = trade.metrics;
   const detail = trade.ironFly;
   // What closing now would realise; shown, never stored (spec §9).
-  const estimate = isOpen(trade) ? closeEstimate(trade, optionQuotes ?? NO_QUOTES, today) : null;
-  const markOf = (index: number) =>
-    estimate?.kind === "estimate" ? estimate.legs.find((marked) => marked.index === index) : undefined;
+  const marketOn = optionQuotes?.available === true;
+  const estimate = isOpen(trade) ? closeEstimate(trade, optionQuotes?.quotes ?? NO_QUOTES, today) : null;
+  // Mark columns only when there are marks: not without a key, and not on an expired trade.
+  const marked = estimate?.kind === "estimate" ? estimate : null;
+  const markOf = (index: number) => marked?.legs.find((leg) => leg.index === index);
   const totalCost = round2(trade.legs.reduce((sum, leg) => sum + legCost(leg), 0));
   const closedLegPnl = trade.legs.map(legPnl).filter((value): value is number => value !== null);
   const totalLegPnl = closedLegPnl.length
@@ -83,7 +85,7 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
         </span>
         <span className="ml-auto text-[18px]">
           {estimate ? (
-            <EstimatedPnl estimate={estimate} testId="header-estimate" />
+            <EstimatedPnl estimate={estimate} testId="header-estimate" explain={marketOn} />
           ) : (
             <Money value={trade.netPnl} />
           )}
@@ -170,7 +172,7 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
                 <th className="text-right font-medium">Close</th>
                 <th className="text-right font-medium">Cost</th>
                 <th className="text-right font-medium">P&amp;L</th>
-                {estimate && (
+                {marked && (
                   <>
                     <th className="text-right font-medium">Mark (to close)</th>
                     <th className="text-right font-medium">Est. P&amp;L</th>
@@ -198,7 +200,7 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
                     <td className="text-right">
                       <Money value={legPnl(leg)} />
                     </td>
-                    {estimate && (
+                    {marked && (
                       <>
                         <td className={`text-right ${ESTIMATE_STYLE}`}>
                           {mark ? `${mark.mark.toFixed(2)} ${mark.side}` : "—"}
@@ -218,7 +220,7 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
               {quotedAtText(estimate.quotedAt)} · indicative feed · refreshes every minute · never saved.
             </p>
           )}
-          {estimate?.kind === "unavailable" && (
+          {marketOn && estimate?.kind === "unavailable" && (
             <p className="mt-2 text-[10px] text-muted">Marks unavailable: {estimate.reason}.</p>
           )}
           {detail?.sourceNotes && (
