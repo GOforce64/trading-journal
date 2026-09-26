@@ -90,6 +90,13 @@ describe("alpacaChains", () => {
     ]);
   });
 
+  it("asks for expired contracts only up to 90 days after `since`, so an old trade stays cheap", async () => {
+    const { fetch, calls } = fakeFetch(page([]), page([]));
+    await alpacaChains(KEYS, { fetch, today }).listed("NVDA", "2026-01-15");
+    expect(calls[1]?.url.searchParams.get("expiration_date_gte")).toBe("2026-01-15");
+    expect(calls[1]?.url.searchParams.get("expiration_date_lte")).toBe("2026-04-15");
+  });
+
   it("does not ask for expired contracts when `since` is today or later", async () => {
     for (const since of ["2026-09-26", "2026-10-01"]) {
       const { fetch, calls } = fakeFetch(page([]));

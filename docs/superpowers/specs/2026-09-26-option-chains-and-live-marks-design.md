@@ -98,7 +98,7 @@ interface ChainSource {
 `alpacaChains(keys, { fetch?, timeoutMs = 10_000, today? })`, where "today" is always the New York date (injectable for tests):
 
 - Asks for **active** contracts with `expiration_date_gte` = today and `expiration_date_lte` = today + 3 years.
-- When `since` is before today, it also asks for **inactive** contracts with `expiration_date_gte` = `since` and `expiration_date_lte` = today.
+- When `since` is before today, it also asks for **inactive** contracts with `expiration_date_gte` = `since` and `expiration_date_lte` = the earlier of today and `since` + 90 days. That is far enough for any trade in the journal to find its expiry, and it keeps editing a year-old trade on a busy name to a small call. A stored expiry outside the window is still kept, marked `not listed` (§8).
 - Follows `next_page_token` (also accepted as `page_token`) until it is empty.
 - Merges the results by expiration date. Strikes are the union of call and put strikes, deduplicated and sorted ascending. `expired` is true for dates before today.
 - Returns an empty list when nothing is listed; the route turns that into "none listed".

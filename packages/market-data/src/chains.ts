@@ -7,6 +7,15 @@ const CONTRACTS = `${TRADING_API}/v2/options/contracts`;
 /** A runaway page token must not loop forever; 20 pages of 10,000 is far beyond any real chain. */
 const MAX_PAGES = 20;
 
+/**
+ * Expired contracts are asked for this far past `since`: far enough for any trade this journal holds
+ * to find its expiry, without pulling a year of a busy name's expired chains.
+ */
+const EXPIRED_WINDOW_DAYS = 90;
+
+const addDays = (date: string, days: number) =>
+  new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
 export interface ListedExpiration {
   /** YYYY-MM-DD */
   date: string;
@@ -71,7 +80,7 @@ export function alpacaChains(keys: AlpacaKeys, options: ChainOptions = {}): Chai
             underlying_symbols: symbol,
             status: "inactive",
             expiration_date_gte: since,
-            expiration_date_lte: now,
+            expiration_date_lte: [now, addDays(since, EXPIRED_WINDOW_DAYS)].sort()[0] ?? now,
           })),
         );
       }
