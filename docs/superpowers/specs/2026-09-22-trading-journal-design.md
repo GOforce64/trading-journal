@@ -97,7 +97,7 @@ trading-journal/
 │  │                  R and MAE/MFE, iron-fly metrics, indicators, stats, merge algorithm
 │  ├─ db/             Drizzle schema, migrations, repositories (sync SQLite API)
 │  ├─ importers/      IBKR Flex parser, oQuants parser
-│  └─ market-data/    MarketDataProvider interface, Massive adapter, rate-limited queue, bar cache
+│  └─ market-data/    Alpaca clients (prices, option chains and quotes); later the Massive adapter, rate-limited queue, bar cache
 ├─ scripts/           start.sh / start.cmd, demo data generator
 └─ docs/
 ```
@@ -132,7 +132,7 @@ The code repository contains **no user data, ever**.
   - `journal.db`: all trades and settings
   - `attachments/<sha256>.<ext>`: screenshots, content-addressed
   - `backups/`: automatic DB snapshot before every migration, import and merge (the last 10 are kept)
-  - `secrets.json`: IBKR Flex tokens and the Massive API key; file mode `0600` on Linux
+  - `secrets.json`: the Alpaca key (saved from Settings), IBKR Flex tokens and the Massive API key; file mode `0600` on Linux
   - `machine.json`: this installation's random `machineId`
 - `.gitignore` also blocks `*.db`, `*.tjbundle`, `secrets.json`, `data/` and `.env*` as a second line of defense.
 - Secrets are **never** included in export bundles. Each machine enters its own.
@@ -275,6 +275,7 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Live marks.** While a position is open, the builder and the trade page show the **current premium per leg** and the unrealised P&L it implies, clearly labelled as an estimate and shown in muted type.
 - **Estimates never become records.** A live mark is never written into an exit price, and never stored as the trade's P&L. Exit fields stay empty until the real fills are typed in. A trade only counts as closed once its exit prices are entered.
 - **Credentials** live in `secrets.json` in the data directory (§5), never in the repository or an export bundle. Without a key the app still works; only the pickers and marks go quiet.
+- **Detailed design:** [2026-09-26-option-chains-and-live-marks-design.md](2026-09-26-option-chains-and-live-marks-design.md). Marks use the cost to close (shorts at the ask, longs at the bid), and chains need a paper-account key.
 
 ### 8.3 Risk and R (Black-Scholes, in `core/pricing`)
 
@@ -456,7 +457,7 @@ These are facts to confirm at the start of the relevant phase. None of them bloc
    - whether paper accounts support the Flex Web Service (fallback: upload a Flex file);
    - which query type includes same-day executions;
    - the exact field names for execution ID, order ID and conid.
-3. **Alpaca (next):** confirm the free plan's chain endpoint coverage and rate limits, and how quickly indicative quotes update, before relying on live marks during the session.
+3. **Alpaca:** resolved 2026-09-26 by the option chains spec, §3. Still open: how fresh indicative quotes are during a session (that spec, §14).
 4. **Massive free tier (Phase 2):** when a session's minute bars become available, whether extended hours are included, and the current rate limits.
 5. **Lightweight Charts (Phase 2):** confirm the current attribution requirement.
 6. **In-browser demo (Phase 3):** the spike in Phase 3, step 1 (§13) confirms that Hono and Drizzle/sql.js work in-page within a reasonable bundle size.
