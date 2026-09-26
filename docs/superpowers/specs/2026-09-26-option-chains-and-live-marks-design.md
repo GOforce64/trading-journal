@@ -370,3 +370,5 @@ Test-first throughout, and real data never enters fixtures. Probe responses are 
 ## 14. Open items
 
 1. **Indicative quote freshness during the session.** The probe ran on a Saturday. Confirm on a weekday that quotes update within the 60 s refresh. If they lag badly, the tooltip should say how old they are rather than just when.
+
+**Checked so far (Saturday 2026-09-26, the app on the real paper key):** the startup line, Settings status, company name, M's chain (16 expirations), BB's chain back to its expired 2026-09-25 expiry, and option quotes (Friday's closing bid/ask; the expired BB contract left out) all come through correctly. Still to check on a weekday session: quote freshness within the 60 s refresh, and saving the key again from Settings.
