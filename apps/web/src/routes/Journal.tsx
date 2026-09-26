@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { closeEstimate, type OptionQuote } from "@tj/core";
 import { useState } from "react";
 import { api, type TradeView } from "../api.js";
+import { EstimatedPnl } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct } from "../components/ui.js";
+import { isOpen, openContracts, todayNy, useOptionQuotes, useQuotes } from "../market.js";
 
 export interface JournalFilter {
   strategy?: "scalp" | "iron_fly";
@@ -28,21 +31,6 @@ export function useTrades(filter: JournalFilter) {
   });
 }
 
-/** Live reference prices, refreshed each minute and never stored. None at all without a data key. */
-export function useQuotes(symbols: string[]) {
-  const unique = [...new Set(symbols)].sort();
-  return useQuery({
-    queryKey: ["quotes", unique],
-    queryFn: async () => {
-      const res = await api.api.quotes.$get({ query: { symbols: unique.join(",") } });
-      if (!res.ok) throw new Error(`quotes failed: ${res.status}`);
-      return (await res.json()).quotes;
-    },
-    enabled: unique.length > 0,
-    refetchInterval: 60_000,
-  });
-}
-
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short",
@@ -52,6 +40,8 @@ const ET = new Intl.DateTimeFormat("en-US", {
 });
 
 const PRICE = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const NO_QUOTES = new Map<string, OptionQuote>();
 
 function LivePrice({ tradeId, quote }: { tradeId: string; quote?: { price: number; at: number } }) {
   if (!quote) return null;
@@ -78,6 +68,11 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
   const [book, setBook] = useState<JournalFilter["book"]>(undefined);
   const { data, isLoading, error } = useTrades({ ...lockedFilter, book });
   const { data: quotes } = useQuotes(data?.map((trade) => trade.underlying) ?? []);
+  const today = todayNy();
+  // One call for the open legs of every open trade on screen; the server splits it for Alpaca.
+  const { data: optionQuotes } = useOptionQuotes(
+    data?.filter(isOpen).flatMap((trade) => openContracts(trade, today)) ?? [],
+  );
 
   return (
     <Panel
@@ -159,7 +154,14 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                   </span>
                 </td>
                 <td className="text-right">
-                  <Money value={trade.netPnl} />
+                  {isOpen(trade) ? (
+                    <EstimatedPnl
+                      estimate={closeEstimate(trade, optionQuotes ?? NO_QUOTES, today)}
+                      testId={`est-${trade.id}`}
+                    />
+                  ) : (
+                    <Money value={trade.netPnl} />
+                  )}
                 </td>
                 <td className="text-right">
                   <Pct value={trade.metrics?.returnOnRisk ?? null} />
