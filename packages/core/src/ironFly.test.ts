@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivedFees, ironFlyMetrics, ironFlyOutcome } from "./ironFly.js";
+import { derivedFees, flyMaxProfit, ironFlyMetrics, ironFlyOutcome, pctKept } from "./ironFly.js";
 
 /** Sample broken-wing fly: short 50 straddle, wings 45 / 58, 4 lots, $1,200 credit, $8.00 fees. */
 const sampleFly = {
@@ -89,5 +89,38 @@ describe("derivedFees", () => {
 
   it("reports no fees when the legs already account for the whole cost", () => {
     expect(derivedFees([{ quantity: -1, multiplier: 100, openPrice: 1.5 }], -150)).toBe(0);
+  });
+});
+
+describe("flyMaxProfit", () => {
+  it("is the credit on every contract, less all the fees", () => {
+    expect(flyMaxProfit(3, 4, 8)).toBe(1192);
+  });
+
+  it("needs no wings, so a 1-wing fly has one too", () => {
+    expect(flyMaxProfit(2.04, 1, 4)).toBe(200);
+  });
+
+  it("uses the multiplier it is given", () => {
+    expect(flyMaxProfit(1, 2, 0, 10)).toBe(20);
+  });
+});
+
+describe("pctKept", () => {
+  const fly = { creditPerShare: 2.04, contracts: 1 };
+
+  it("is net P&L over max profit", () => {
+    expect(pctKept({ netPnl: 100, fees: 4, ironFly: fly })).toBe(0.5);
+    expect(pctKept({ netPnl: -300, fees: 4, ironFly: fly })).toBe(-1.5);
+  });
+
+  it("is null for an open trade, a trade that isn't a fly, and a fly without its credit", () => {
+    expect(pctKept({ netPnl: null, fees: 4, ironFly: fly })).toBeNull();
+    expect(pctKept({ netPnl: 100, fees: 4, ironFly: null })).toBeNull();
+    expect(pctKept({ netPnl: 100, fees: 4, ironFly: { creditPerShare: null, contracts: 1 } })).toBeNull();
+  });
+
+  it("is null when fees eat the whole credit", () => {
+    expect(pctKept({ netPnl: -10, fees: 204, ironFly: fly })).toBeNull();
   });
 });

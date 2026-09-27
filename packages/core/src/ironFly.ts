@@ -29,6 +29,37 @@ export interface IronFlyMetrics {
 }
 
 /**
+ * What a fly keeps if every leg expires worthless: the credit on every contract, less all fees.
+ * It needs no wings, so a 1-wing fly has one too.
+ */
+export function flyMaxProfit(
+  creditPerShare: number,
+  contracts: number,
+  fees: number,
+  multiplier = 100,
+): number {
+  return round2(creditPerShare * contracts * multiplier - fees);
+}
+
+export interface KeptInput {
+  netPnl: number | null;
+  fees: number;
+  ironFly: { creditPerShare: number | null; contracts: number | null } | null;
+}
+
+/**
+ * Net P&L as a share of max profit: 0.5 means half the credit was kept, -1 a loss equal to it.
+ * Null with nothing to measure against: an open trade, a trade that isn't a fly, or fees at or above the credit.
+ */
+export function pctKept(trade: KeptInput): number | null {
+  const credit = trade.ironFly?.creditPerShare;
+  const contracts = trade.ironFly?.contracts;
+  if (trade.netPnl == null || credit == null || contracts == null) return null;
+  const maxProfit = flyMaxProfit(credit, contracts, trade.fees);
+  return maxProfit > 0 ? trade.netPnl / maxProfit : null;
+}
+
+/**
  * Wings are treated independently, so broken-wing flies are handled: each side's
  * risk is its own width minus the credit, and max loss is the larger of the two.
  */
@@ -50,7 +81,7 @@ export function ironFlyMetrics(input: IronFlyMetricsInput): IronFlyMetrics {
     callWingWidth,
     isBrokenWing: putWingWidth !== callWingWidth,
     netCreditPerShare,
-    maxProfit: round2(netCreditPerShare * shares),
+    maxProfit: flyMaxProfit(input.creditPerShare, input.contracts, fees, multiplier),
     putSideRisk,
     callSideRisk,
     maxLoss,
