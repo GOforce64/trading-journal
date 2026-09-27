@@ -92,13 +92,15 @@ describe("GET /api/chains/:symbol", () => {
     expect(market.status().state).toBe("on");
   });
 
-  it.each(["/api/chains/SPX%20INDEX", "/api/chains/M?since=yesterday", "/api/chains/M?since=2026-13-45"])(
-    "refuses %s",
-    async (path) => {
-      const { app } = withSources({});
-      expect((await get(app, path)).status).toBe(400);
-    },
-  );
+  it.each([
+    "/api/chains/SPX%20INDEX",
+    "/api/chains/M?since=yesterday",
+    "/api/chains/M?since=2026-13-45",
+    "/api/chains/M?since=2026-02-30",
+  ])("refuses %s", async (path) => {
+    const { app } = withSources({});
+    expect((await get(app, path)).status).toBe(400);
+  });
 });
 
 describe("GET /api/option-quotes", () => {

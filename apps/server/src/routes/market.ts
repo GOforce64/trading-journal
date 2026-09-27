@@ -6,10 +6,14 @@ import { z } from "zod";
 import type { MarketData } from "../marketData.js";
 import { TICKER } from "./quotes.js";
 
+// Date.parse rolls 2026-02-30 over to March 2, so the date must come back unchanged.
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine((date) => !Number.isNaN(Date.parse(date)), "not a date");
+  .refine((date) => {
+    const parsed = new Date(`${date}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(date);
+  }, "not a date");
 
 interface Unavailable {
   reason: "no_key" | "none_listed" | "unreachable";
