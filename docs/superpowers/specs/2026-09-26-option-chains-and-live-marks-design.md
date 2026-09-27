@@ -281,7 +281,7 @@ interface MarketData {
   - A trade is open while any leg lacks an exit price (parent spec §7.1).
 - **Lists** (Journal and Iron Flies share one component).
   - An open trade's Net P&L cell shows `est −$46.80` in muted italics.
-  - Hovering explains it: "Estimated cost to close, from quotes at Sep 25 3:59 PM ET (indicative feed), after the fees entered so far. Not saved."
+  - Hovering explains it: "Estimated cost to close, from quotes at Sep 25, 03:59 PM ET (indicative feed), after the fees entered so far. Not saved." The time is written like the Opened column and the stock price tooltip.
   - An expired open trade shows an `EXPIRED · add exits` chip.
   - `unavailable` shows "—", with the reason on hover.
   - Return on risk stays "—".
