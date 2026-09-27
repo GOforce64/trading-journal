@@ -1,5 +1,12 @@
-import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
-import { parseDashboardSearch } from "./analytics/search.js";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Outlet,
+  useRouterState,
+} from "@tanstack/react-router";
+import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
@@ -87,6 +94,13 @@ const editTradeRoute = createRoute({
   },
 });
 
+const analyticsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/analytics",
+  validateSearch: parseAnalyticsSearch,
+  component: lazyRouteComponent(() => import("./routes/AnalyticsRoute.js"), "AnalyticsRoute"),
+});
+
 const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import",
@@ -101,12 +115,6 @@ const settingsRoute = createRoute({
 
 /** Nav destinations whose features arrive in later plans; better than a dead link. */
 const PLACEHOLDERS = [
-  {
-    path: "/analytics",
-    title: "Analytics",
-    phase: "a later Phase 1 plan",
-    blurb: "Equity curve, P&L calendar, time-of-day buckets and per-setup breakdowns.",
-  },
   {
     path: "/missed",
     title: "Missed",
@@ -137,6 +145,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     dashboardRoute,
     journalRoute,
+    analyticsRoute,
     ironFliesRoute,
     newIronFlyRoute,
     tradeDetailRoute,
