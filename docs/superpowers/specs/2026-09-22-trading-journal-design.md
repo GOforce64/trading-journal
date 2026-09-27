@@ -117,6 +117,7 @@ This one seam enables the local app, the in-browser demo (§11), and fast server
 
 - binds to loopback only;
 - rejects requests whose `Host` header isn't `localhost`/`127.0.0.1` (DNS-rebinding protection);
+- rejects `/api` calls that a browser marks as coming from another site (`Sec-Fetch-Site: cross-site` or `same-site`), since a plain GET needs no preflight and a market route spends the Alpaca quota;
 - sends no permissive CORS headers.
 
 ---

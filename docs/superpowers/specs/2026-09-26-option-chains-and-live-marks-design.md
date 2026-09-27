@@ -226,6 +226,7 @@ interface MarketData {
 
 - The settings routes accept only `application/json` bodies. A page on another site cannot send one to the local server without a CORS preflight, which the server never approves. Its Host check already blocks DNS rebinding.
 - A test proves that a `text/plain` or form-encoded request to `PUT` is refused.
+- A plain GET needs no preflight, so a page on another site could still make the market routes spend the Alpaca quota. The server refuses any `/api` call a browser marks `Sec-Fetch-Site: cross-site` or `same-site`. Clients outside a browser send no such header and are let through.
 - The secret is never logged. Error messages from Alpaca are passed on only as their JSON `message`, never as raw responses.
 
 ---

@@ -36,6 +36,13 @@ export function createApp(deps: AppDeps) {
       if (!LOCAL_HOSTS.has(host)) return c.json({ error: "forbidden host" }, 403);
       await next();
     })
+    // A page on another site can still send a plain GET, and one to a market route spends the Alpaca quota.
+    // Browsers say where a call comes from; clients outside a browser send nothing and are let through.
+    .use("/api/*", async (c, next) => {
+      const site = c.req.header("sec-fetch-site");
+      if (site === "cross-site" || site === "same-site") return c.json({ error: "forbidden site" }, 403);
+      await next();
+    })
     .get("/api/health", (c) => c.json({ ok: true }))
     .route("/api/trades", tradeRoutes(deps.db, deps.now))
     .route("/api/setups", setups)
