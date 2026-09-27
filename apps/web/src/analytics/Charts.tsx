@@ -1,4 +1,4 @@
-import { type MonthResult, monthLabel, type RollingPoint } from "@tj/core";
+import { type KeptBin, type MonthResult, monthLabel, type RollingPoint } from "@tj/core";
 import {
   Bar,
   BarChart,
@@ -81,5 +81,42 @@ export function RollingLine({ points }: { points: readonly RollingPoint[] }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** How many trades kept each share of max profit; hovering a bar names them. */
+export function KeptHistogram({
+  bins,
+  tickers,
+}: {
+  bins: readonly KeptBin[];
+  tickers: ReadonlyMap<string, string>;
+}) {
+  const data = bins.map((bin) => ({
+    label: bin.label,
+    count: bin.tradeIds.length,
+    kept: bin.from >= 0,
+    names: bin.tradeIds.map((id) => tickers.get(id) ?? id).join(", "),
+  }));
+  return (
+    <ResponsiveContainer width="100%" height={150}>
+      <BarChart data={data} margin={{ top: 14, right: 8, bottom: 0, left: 8 }}>
+        <XAxis dataKey="label" tick={TICK} interval={0} axisLine={false} tickLine={false} />
+        <YAxis hide allowDecimals={false} />
+        <Tooltip
+          {...TOOLTIP}
+          formatter={(value, _name, item) => [`${value} · ${item.payload?.names ?? ""}`, "trades"]}
+        />
+        <Bar
+          dataKey="count"
+          isAnimationActive={false}
+          label={{ position: "top", fill: "#8a91a3", fontSize: 9 }}
+        >
+          {data.map((bin) => (
+            <Cell key={bin.label} fill={bin.kept ? UP : DOWN} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }

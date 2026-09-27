@@ -9,6 +9,7 @@ import {
   toFilter,
 } from "../analytics/search.js";
 import { todayNy } from "../market.js";
+import { FliesTab } from "./FliesTab.js";
 import { OverviewTab } from "./OverviewTab.js";
 
 export interface AnalyticsProps {
@@ -33,11 +34,18 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
     <div className="flex flex-col gap-3">
       <FilterRow search={search} onSearch={onSearch} tickers={tickers} />
       <nav aria-label="Analytics tabs" className="flex gap-4 border-line border-b text-[12px]">
-        <TabButton active onClick={() => onSearch({ tab: undefined })}>
+        <TabButton active={search.tab !== "flies"} onClick={() => onSearch({ tab: undefined })}>
           Overview
         </TabButton>
+        <TabButton active={search.tab === "flies"} onClick={() => onSearch({ tab: "flies" })}>
+          Iron flies
+        </TabButton>
       </nav>
-      <OverviewTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
+      {search.tab === "flies" ? (
+        <FliesTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
+      ) : (
+        <OverviewTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
+      )}
     </div>
   );
 }

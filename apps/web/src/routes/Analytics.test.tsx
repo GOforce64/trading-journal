@@ -18,6 +18,14 @@ vi.mock("../analytics/Charts.js", () => ({
     <div data-testid="month-bars">{months.map((month) => `${month.month} ${month.net}`).join("; ")}</div>
   ),
   RollingLine: ({ points }: { points: unknown[] }) => <div data-testid="rolling-line">{points.length}</div>,
+  KeptHistogram: ({ bins }: { bins: { label: string; tradeIds: string[] }[] }) => (
+    <div data-testid="kept-histogram">
+      {bins
+        .filter((bin) => bin.tradeIds.length > 0)
+        .map((bin) => `${bin.label}: ${bin.tradeIds.length}`)
+        .join("; ")}
+    </div>
+  ),
 }));
 
 /*
@@ -159,5 +167,65 @@ describe("Analytics Overview", () => {
     fireEvent.click(contracts.getByRole("button", { name: "Save" }));
     expect(onSearch).toHaveBeenCalledWith({ contractEdges: "3" });
     expect(localStorage.getItem("tj.edges.contracts")).toBe("3");
+  });
+});
+
+describe("Analytics Iron flies", () => {
+  /*
+   * Flies AA, BB, CC: credits 204, 306, 402 (avg $304); max profits 200, 300, 400 (avg $300).
+   * AA keeps 50%, CC keeps 280 / 400 = 70%: winners keep a mean and median of 60%.
+   * BB loses all of its 300 max profit: 100%. Kept overall: 80 / 900 = 9%. The scalp SS is left out.
+   */
+  const FLIES = [
+    ...TRADES,
+    tradeRow({
+      id: "s",
+      underlying: "SS",
+      opened: "2026-09-09 09:35",
+      closed: "2026-09-09 10:05",
+      netPnl: 50,
+      strategy: "scalp",
+    }),
+  ];
+
+  it("switches tabs through the URL", async () => {
+    stubTrades(FLIES);
+    const onSearch = vi.fn();
+    renderWithClient(<Analytics search={{}} onSearch={onSearch} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Iron flies" }));
+    expect(onSearch).toHaveBeenCalledWith({ tab: "flies" });
+  });
+
+  it("measures the flies against max profit", async () => {
+    stubTrades(FLIES);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("avg-credit")).toContain("$304"));
+    expect(kpi("avg-max-profit")).toContain("$300");
+    expect(kpi("winners-keep")).toContain("60%");
+    expect(kpi("winners-keep")).toContain("median 60%");
+    expect(kpi("losers-lose")).toContain("100%");
+    expect(kpi("kept-overall")).toContain("9%");
+    expect(screen.getByTestId("kept-histogram").textContent).toBe("−100% to −75%: 1; 50% to 75%: 2");
+  });
+
+  it("shows the fly splits, and saves new credit edges", async () => {
+    stubTrades(FLIES);
+    const onSearch = vi.fn();
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={onSearch} />);
+    for (const title of ["Credit", "Wings", "Wider wing width"]) {
+      expect(await screen.findByRole("region", { name: title })).toBeTruthy();
+    }
+    const credit = within(screen.getByRole("region", { name: "Credit" }));
+    fireEvent.click(credit.getByRole("button", { name: "edit" }));
+    fireEvent.change(credit.getByLabelText("Credit edges"), { target: { value: "300" } });
+    fireEvent.click(credit.getByRole("button", { name: "Save" }));
+    expect(onSearch).toHaveBeenCalledWith({ creditEdges: "300" });
+    expect(localStorage.getItem("tj.edges.credit")).toBe("300");
+  });
+
+  it("holds a place for the move charts, counting the flies that have the data", async () => {
+    stubTrades(FLIES);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    expect(await screen.findByText(/0 of 3 closed flies have them/)).toBeTruthy();
   });
 });
