@@ -18,7 +18,14 @@ const trade = {
   notes: "Crush did the work; the short put was the loser. Next time hold into the open.",
   excluded: false,
   legs: [],
-  ironFly: null,
+  ironFly: {
+    bodyPutStrike: 50,
+    bodyCallStrike: 50,
+    putWingStrike: 45,
+    callWingStrike: 58,
+    contracts: 4,
+    creditPerShare: 3,
+  },
   tagIds: [],
   metrics: { maxLoss: 2008, returnOnRisk: 0.255, pctOfMaxProfit: 0.4295, pnlPctOfCost: 0.4295 },
 };
@@ -108,13 +115,32 @@ afterEach(() => {
 });
 
 describe("Journal", () => {
-  it("lists trades with P&L and return on risk", async () => {
+  it("lists trades with P&L and the share of max profit kept", async () => {
     stubApi();
     renderJournal();
     await waitFor(() => expect(screen.getByText("XYZ")).toBeTruthy());
     expect(screen.getByText("+$512.00")).toBeTruthy();
-    expect(screen.getByText("+25.50%")).toBeTruthy();
+    // 512 of a 1,192 max profit (3.00 × 4 × 100 − 8).
+    expect(screen.getByText("+42.95%")).toBeTruthy();
+    expect(screen.getByText("% kept")).toBeTruthy();
+    expect(screen.queryByText("Return on risk")).toBeNull();
     expect(screen.getByText("IRON FLY")).toBeTruthy();
+  });
+
+  it("shows % kept for a 1-wing fly, which has no metrics", async () => {
+    stubApi({
+      trades: [
+        {
+          ...trade,
+          netPnl: 100,
+          fees: 4,
+          metrics: null,
+          ironFly: { ...trade.ironFly, callWingStrike: null, contracts: 1, creditPerShare: 2.04 },
+        },
+      ],
+    });
+    renderJournal();
+    await waitFor(() => expect(screen.getByText("+50.00%")).toBeTruthy());
   });
 
   it("shows an empty state when there are no trades", async () => {

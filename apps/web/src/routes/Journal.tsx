@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote } from "@tj/core";
+import { closeEstimate, type OptionQuote, pctKept } from "@tj/core";
 import { useState } from "react";
 import { api, type TradeView } from "../api.js";
 import { EstimatedPnl } from "../components/Estimate.js";
@@ -110,7 +110,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
               <th className="w-32 text-left font-medium">Book</th>
               <th className="text-left font-medium">Notes</th>
               <th className="w-28 text-right font-medium">Net P&amp;L</th>
-              <th className="w-28 text-right font-medium">Return on risk</th>
+              <th className="w-28 text-right font-medium">% kept</th>
               <th className="w-12 text-right font-medium">Grade</th>
             </tr>
           </thead>
@@ -165,7 +165,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                   )}
                 </td>
                 <td className="text-right">
-                  <Pct value={trade.metrics?.returnOnRisk ?? null} />
+                  <Pct value={pctKept(trade)} />
                 </td>
                 <td className="num text-right text-muted">{trade.grade ?? "—"}</td>
               </tr>

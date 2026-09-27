@@ -270,4 +270,35 @@ describe("TradeDetail", () => {
     expect(screen.queryByText("Mark (to close)")).toBeNull();
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/option-quotes"))).toBe(false);
   });
+
+  it("shows the share of max profit kept, with max loss only for reference", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    await waitFor(() => expect(screen.getByTestId("tile-kept")).toBeTruthy());
+    expect(screen.getByTestId("tile-kept").textContent).toContain("+42.95%");
+    expect(screen.queryByText("Return on risk")).toBeNull();
+    expect(screen.getByTestId("tile-max-loss").textContent).toContain("2,008.00");
+  });
+
+  it("marks the trade lists stale after a change, so Analytics and the lists refetch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse()),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    client.setQueryData(["trades", { all: true }], []);
+    render(
+      <QueryClientProvider client={client}>
+        <TradeDetail tradeId="t1" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "B" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    await waitFor(() => expect(client.getQueryState(["trades", { all: true }])?.isInvalidated).toBe(true));
+  });
 });

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, round2 } from "@tj/core";
+import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
 import type { ReactNode } from "react";
 import { api, type TradeView } from "../api.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
@@ -50,7 +50,12 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
       if (!res.ok) throw new Error(`patch failed: ${res.status}`);
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trade", tradeId] }),
+    // The lists and Analytics read every trade; a new grade or exclusion must reach them too.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["trade", tradeId] }),
+        queryClient.invalidateQueries({ queryKey: ["trades"] }),
+      ]),
   });
 
   const today = todayNy();
@@ -121,7 +126,9 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
               : ""}
           </small>
         </Tile>
-        <Tile label="Return on risk">{metrics ? <Pct value={metrics.returnOnRisk} /> : "—"}</Tile>
+        <Tile label="% kept" testId="tile-kept">
+          <Pct value={pctKept(trade)} />
+        </Tile>
         <Tile label="Breakevens" testId="tile-breakevens">
           {metrics ? `${metrics.breakevenLow} / ${metrics.breakevenHigh}` : "—"}
         </Tile>
