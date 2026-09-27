@@ -4432,15 +4432,15 @@ The Saturday live check with the real paper key passed; it is recorded in spec �
   - URLs over 16 KB, which needs about 800 open contracts.
   - A subscription 403 shown as a rejected key.
 
-**Deferred minors.** Six were settled on 2026-09-27, each with a test that failed first (305 tests):
+**Deferred minors.** All were settled on 2026-09-27 (310 tests). Each fix has a test that failed first, except the CSS one, which was checked in screenshots:
 1. ~~A typed strike with trailing zeros ("22.50") shows as "not listed", and an expiry change can clear it.~~ Strikes are compared as numbers (`9231b1d`).
 2. ~~A 401 from an in-flight call on the old key marks a newly saved key "rejected".~~ Each saved key has its own reporter, and the routes report through the sources they started with (`ee57b88`).
 3. ~~Builder mark hints are all-or-nothing.~~ Each leg's hint needs only its own quote; the Derived estimate still needs the whole trade (`da4f275`).
-4. The pickers flip back to typed inputs while a new chain loads. Consider `placeholderData`.
+4. ~~The pickers flip back to typed inputs while a new chain loads.~~ The symbol's last chain stands in while a new open date's chain loads. Another symbol's never does (`eb2f9e2`).
 5. ~~Expiry sits before Opened in the builder.~~ The user chose to swap them (`2826149`).
 6. ~~A cross-site simple GET can spend the Alpaca quota.~~ `/api/*` refuses `Sec-Fetch-Site: cross-site` and `same-site`; clients outside a browser send neither (`4f72dad`).
-7. Test gaps: Review Focus 1 for an unlisted expiry, and Review Focus 2 with an unlisted typed expiry.
+7. ~~Test gaps: Review Focus 1 and 2 with an unlisted expiry.~~ Both are tested, and both fail when the expiry's `not listed` entry is removed (`5e7ac7d`).
 8. ~~The `EXPIRED · add exits` chip shows even without a key.~~ The user chose to keep it; spec §11 says so (`f9cf89b`).
-9. `isoDate` accepts `2026-02-30`, and the tooltip shows "03:59 PM" where the spec writes "3:59 PM".
+9. ~~`isoDate` accepts `2026-02-30`~~, which is now refused (`2b44a30`). ~~The tooltip shows "03:59 PM" where the spec writes "3:59 PM".~~ The spec now matches the app, whose ET times all use a two-digit hour (`18d0664`).
 
-Also seen on 2026-09-27: "22.5 (ATM)" is cut off in the builder's Strike column at 1280 px wide.
+10. ~~"22.5 (ATM)" is cut off in the builder's Strike column~~ (seen on 2026-09-27). The select is at least as wide as its longest option. Below 1280 px, Derived now sits under the form so the prices still fit (`11f1b78`).
