@@ -1,7 +1,7 @@
 # Analytics and Dashboard — Design Spec
 
 - **Date:** 2026-09-27
-- **Status:** Approved 2026-09-27; plan: [2026-09-27-analytics-and-dashboard.md](../plans/2026-09-27-analytics-and-dashboard.md)
+- **Status:** Approved; implemented on feat/analytics. Plan: [2026-09-27-analytics-and-dashboard.md](../plans/2026-09-27-analytics-and-dashboard.md)
 - **Scope:**
   - The Dashboard: the current period at a glance.
   - The Analytics page, with Overview and Iron flies tabs.
@@ -313,5 +313,5 @@ The Dates control offers All time, This month, Last month, Last 90 days, This ye
 
 ## 13. Open items
 
-1. **Bundle size.** Lightweight Charts and Recharts together add roughly 150 KB gzipped. Confirm in the build that splitting off Analytics keeps the first load close to today's 143 KB gzipped plus Lightweight Charts, which the Dashboard needs.
-2. **New York time on the chart axis.** Resolved while planning. Lightweight Charts has no timezone option. The documented way is `timeScale.tickMarkFormatter` and `localization.timeFormatter`, formatting with `Intl` in `America/New_York`.
+1. **Bundle size.** Resolved 2026-09-27. Analytics and Recharts load in their own chunk (AnalyticsRoute, 110 KB gzipped). The first load grew from 143 to 206 KB gzipped: Lightweight Charts plus the Dashboard and the stats, which the landing page needs. Vite warns that the main chunk is over 500 KB minified (657 KB). Splitting Lightweight Charts into its own chunk, or lazy-loading the Dashboard, would quiet that warning if it ever matters.
+2. **New York time on the chart axis.** Resolved. Lightweight Charts has no timezone option, so `timeScale.tickMarkFormatter` and `localization.timeFormatter` format with `Intl` in `America/New_York`. The axis labels each tick at the detail the chart asks for (year, month, day or time of day), with `timeVisible` on, so two closes on one day don't repeat the date.

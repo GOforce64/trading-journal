@@ -312,6 +312,13 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 
 ## 9. Review and analytics (Phase 1 core, extended in Phase 2)
 
+Detailed for iron flies in [2026-09-27-analytics-and-dashboard-design.md](2026-09-27-analytics-and-dashboard-design.md), which refines this section:
+
+- iron flies are measured against max profit (% kept), not max loss;
+- breakdowns show all splits at once;
+- Analytics filters live on the page for now, not in a global bar;
+- CSV export is deferred.
+
 - **Tagging:** a setup (playbook page with per-setup stat cards), mistake tags, one emotion tag, grade A–F, and Markdown notes. All are editable inline from the trade page and the journal grid.
 - **Global filter bar** (persisted in the URL): book (Live / Paper / Missed, multi-select), strategy, account, date range, ticker, setup, tag, and **include excluded**.
 - **Two separate surfaces:**
@@ -333,6 +340,9 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
   - win: net P&L > 0 (missed: R > 0); loss: < 0; scratch: = 0;
   - profit factor = gross wins ÷ |gross losses|;
   - expectancy = mean net P&L;
+  - win rate = wins ÷ all closed trades (scratches count in the denominator);
+  - max drawdown = the largest drop from a running peak of cumulative net P&L, the peak starting at $0;
+  - % kept (iron flies) = net P&L ÷ max profit, where max profit = credit per share × contracts × 100 − fees.
   - excluded and soft-deleted trades are removed before any aggregation.
 
 ---
@@ -345,6 +355,7 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Inter** for UI text and **JetBrains Mono** for every number (tabular, aligned). Uppercase micro-labels. 2–3 px radii. Dense tables.
 - Semantic chips: strategy (IRON FLY violet, SCALP amber), book (LIVE green, PAPER blue, MISSED grey), and EXCLUDED (dashed outline).
 - Layout: a left nav (Dashboard, Journal, Analytics, Iron Flies, Scalps, Missed, Playbook, Import / Sync, Settings) and a top filter bar.
+- The Dashboard: KPIs, then a full-width equity curve with a drawdown pane, then the P&L calendar beside the open and recent trades.
 - On a trade page, secondary detail (the leg breakdown, the raw imported row) sits behind an expander rather than on screen by default, so the page opens on the numbers that matter.
 - Dark by default. A light theme exists (tokens defined once in CSS variables), but it is not the design focus.
 - Command palette (Ctrl+K) to jump to trades, pages and actions. Keyboard review flow: J/K for next/previous trade, and 1–5 to set the grade.
@@ -397,7 +408,7 @@ Each phase ends usable, and each gets its own implementation plan.
 4. Journal grid and trade detail page; manual iron fly entry; exclude flag; soft delete.
 5. ~~CSV/paste importer with column mapping~~ (deferred, §7.2).
 6. oQuants importer: extractor snippet, parser, preview, backup, duplicate guard (§7.2b and its own spec).
-7. Iron fly metrics and P&L attribution in `core`; dashboard, calendar, equity curve, breakdowns, iron fly page.
+7. Iron fly metrics and P&L attribution in `core`; dashboard, calendar, equity curve, breakdowns, iron fly page (dashboard, calendar, equity curve, breakdowns and the credit-kept view done; the move charts wait for move data).
 8. Setups, mistake/emotion tags, grades, notes.
 9. Export bundle and merge import.
 
@@ -460,5 +471,5 @@ These are facts to confirm at the start of the relevant phase. None of them bloc
    - the exact field names for execution ID, order ID and conid.
 3. **Alpaca:** resolved 2026-09-26 by the option chains spec, §3. Still open: how fresh indicative quotes are during a session (that spec, §14).
 4. **Massive free tier (Phase 2):** when a session's minute bars become available, whether extended hours are included, and the current rate limits.
-5. **Lightweight Charts (Phase 2):** confirm the current attribution requirement.
+5. **Lightweight Charts:** resolved 2026-09-27. The TradingView attribution logo stays on (the library's default).
 6. **In-browser demo (Phase 3):** the spike in Phase 3, step 1 (§13) confirms that Hono and Drizzle/sql.js work in-page within a reasonable bundle size.
