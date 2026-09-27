@@ -4963,3 +4963,42 @@ git commit -m "docs: point the main spec and README at the Dashboard and Analyti
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+---
+
+## Execution record (2026-09-27)
+
+**Status:** all 14 tasks done inline on `feat/analytics` (stacked on `feat/option-chains`, PR #4), then a whole-branch review (Opus, verdict "With fixes"). Both of its Important findings are fixed, each with a test that failed first. 50 test files and 448 tests pass; lint, typecheck and the build are clean. A visual check against a copy of the real journal matched spec §3 at 1280 and 1024 px.
+
+**Review fixes:**
+- **The equity chart rebuilt on every re-render (`71a66dd`).** A calendar click, a month step, and the 60 s quote refresh while a fly is open all threw away the user's zoom and pan. The chart is now built once and handed new data only when the numbers change.
+- **A stale ticker in the URL emptied the page under "All" (`06e6dc5`).** A ticker the journal doesn't have now counts as All. Tickers with a dash or a slash (BF-B, BRK/B) survive the URL.
+
+**Rulings made during execution** (each with its cost if wrong):
+- **`renderWithClient` and `rerender`:** the helper wrapped the page in the query provider by hand, so `rerender` dropped the provider. It now uses Testing Library's `wrapper` option, and has an explicit `RenderResult` return type (TS2742). Cost: none; test helper only.
+- **Finding the Ticker filter:** a test found the Ticker filter by label, but the Ticker split panel has the same label. The test uses the combobox role. Cost: none.
+- **Bundle size:** the main bundle is 206 KB gzipped (it was 143), and Vite warns about a chunk over 500 KB minified. Analytics and Recharts load separately (110 KB). The growth is Lightweight Charts plus the Dashboard, which the landing page needs. Cost: a slower first load; the fix would be splitting Lightweight Charts out.
+- **Axis labels (visual check):** the equity axis repeated day labels. Ticks are now labelled at the detail the chart asks for (`nyTickLabel`), with `timeVisible` on. Cost: none.
+- **Avg win / loss tile (visual check):** the value wrapped. It shows whole dollars and breaks only after the slash. Cost: no cents in that tile.
+- **Left as they are, after the reviewer set them aside:**
+  - The Journal lists stay capped at 500 trades.
+  - `NewIronFly` doesn't invalidate the trade lists (10 s staleness).
+  - Ticks are classified by UTC day.
+  - A Friday → Saturday close counts as "same day".
+  - % kept above 100% goes in the top bin.
+  - A weekend-dated close can't be clicked in the calendar.
+  - Date presets are stored as literal dates.
+  - Stats are recomputed on every render.
+  - Missed-book tickers can appear in the Ticker list.
+  - `dollars()` uses "−" while `Money` uses "-".
+  - Sub-cent values would show as "$0".
+
+**Deferred minors** (not fixed; candidates for a follow-up):
+1. **`excluded` spelling:** spec §7.1 says `excluded=1`, but the plan and code use `excluded=true`, so a hand-typed `?excluded=1` is ignored.
+2. **`2,500` as edges:** `parseEdges("2,500")` becomes edges `[2, 500]`. The labels show it; a label preview in the editor would catch it.
+3. **Untested calendar arrows:** the Dashboard calendar's own ‹ › month stepping has no test (spec §12).
+4. **Selected day:** it stays selected when stepping months or periods.
+5. **1-wing trade page:** the header's P&L % shows "—" while the "% kept" tile shows a value.
+6. **`group()` in `splits.ts`:** it copies the array on every insert, O(n²) per bucket. That's fine at hundreds of trades.
+
+**Next:** open the PR for `feat/analytics` (base `feat/option-chains`); step 2 of the roadmap is move data from Alpaca stock prices plus settle-at-expiry.
