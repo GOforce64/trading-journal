@@ -45,11 +45,20 @@ interface Stub {
   optionQuotes?: Record<string, { bid: number | null; ask: number | null; at: number }>;
   /** Company names by symbol. */
   companies?: Record<string, string>;
+  /** Requests this picks out never answer, as if still loading. */
+  hold?: (url: string) => boolean;
 }
 
 /** Answers the market-data calls the builder makes. Without a chain it behaves as if no key were set up. */
-function stubApi({ chain = NO_KEY, quotes = {}, optionQuotes = {}, companies = {} }: Stub = {}) {
+function stubApi({
+  chain = NO_KEY,
+  quotes = {},
+  optionQuotes = {},
+  companies = {},
+  hold = () => false,
+}: Stub = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    if (hold(String(input))) return new Promise<Response>(() => {});
     const path = new URL(String(input), "http://localhost").pathname;
     let body: unknown = {};
     if (path.startsWith("/api/chains/")) body = chain;
@@ -294,6 +303,33 @@ describe("IronFlyForm with an option chain", () => {
     fill("Expiry", "2099-10-16");
     expect(selected()).toBe("22.5");
     expect(screen.queryByText(/Cleared strikes/)).toBeNull();
+  });
+
+  it("keeps the pickers while the chain for a new open date loads", async () => {
+    const { fetchMock } = setup(undefined, { chain: M_CHAIN, hold: (url) => url.includes("since=") });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    fill("Expiry", "2099-10-02");
+    fill("Opened", "2026-09-01T10:00");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("since=2026-09-01"))).toBe(true),
+    );
+    expect(isSelect("Expiry")).toBe(true);
+    expect(value("Expiry")).toBe("2099-10-02");
+  });
+
+  it("never offers one symbol's expiries for another while its chain loads", async () => {
+    const { fetchMock } = setup(undefined, {
+      chain: M_CHAIN,
+      hold: (url) => url.includes("/api/chains/NVDA"),
+    });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    fill("Underlying", "NVDA");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/chains/NVDA"))).toBe(true),
+    );
+    expect(screen.queryByRole("option", { name: /^Oct 2/ })).toBeNull();
   });
 
   it("asks for Opened before Expiry, since the listed expiries start from the open date", async () => {

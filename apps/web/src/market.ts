@@ -75,6 +75,10 @@ export function useChain(symbol: string, since: string | undefined) {
     },
     enabled: TICKER.test(symbol),
     staleTime: 15 * 60_000,
+    // While a new open date's chain loads, the symbol's last one stays, so the pickers don't flip to typed
+    // inputs. Another symbol's chain never stands in.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === symbol ? previous : undefined,
   });
 }
 
