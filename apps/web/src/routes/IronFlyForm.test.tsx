@@ -340,6 +340,45 @@ describe("IronFlyForm with an option chain", () => {
     expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("keeps a saved expiry the chain does not list, marked not listed, and saves it unchanged", async () => {
+    const { onSubmit } = setup(
+      {
+        underlying: "M",
+        expiry: "2099-10-23",
+        legs: {
+          shortCall: { strike: "22.5", size: "3", entry: "0.52", exit: "" },
+          shortPut: { strike: "22.5", size: "3", entry: "0.41", exit: "" },
+          longCall: { strike: "26", size: "3", entry: "0.05", exit: "" },
+          longPut: { strike: "20", size: "3", entry: "0.03", exit: "" },
+        },
+      },
+      { chain: M_CHAIN },
+    );
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    const select = screen.getByLabelText("Expiry") as HTMLSelectElement;
+    expect(select.value).toBe("2099-10-23");
+    expect(select.selectedOptions[0]?.textContent).toBe("2099-10-23 · not listed");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload.legs.map((leg: { expiry: string }) => leg.expiry)).toEqual([
+      "2099-10-23",
+      "2099-10-23",
+      "2099-10-23",
+      "2099-10-23",
+    ]);
+    expect(payload.legs[0].strike).toBe(22.5);
+  });
+
+  it("keeps an unlisted expiry typed before the chain arrived, marked not listed", async () => {
+    setup(undefined, { chain: M_CHAIN });
+    fill("Underlying", "M");
+    fill("Expiry", "2099-10-23");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    const select = screen.getByLabelText("Expiry") as HTMLSelectElement;
+    expect(select.value).toBe("2099-10-23");
+    expect(select.selectedOptions[0]?.textContent).toBe("2099-10-23 · not listed");
+  });
+
   it("keeps an expiry typed before the chain arrived", async () => {
     setup(undefined, { chain: M_CHAIN });
     fill("Underlying", "M");
