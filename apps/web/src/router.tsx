@@ -1,7 +1,9 @@
 import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
+import { parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
+import { Dashboard } from "./routes/Dashboard.js";
 import { EditTrade } from "./routes/EditTrade.js";
 import { Import } from "./routes/Import.js";
 import { IronFlies } from "./routes/IronFlies.js";
@@ -34,11 +36,17 @@ const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", para
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: () => (
-    <Panel title="Dashboard">
-      <p className="text-muted">Your numbers appear here once trades are logged.</p>
-    </Panel>
-  ),
+  validateSearch: parseDashboardSearch,
+  component: function DashboardRoute() {
+    const search = dashboardRoute.useSearch();
+    return (
+      <Dashboard
+        search={search}
+        onSearch={(next) => router.navigate({ to: "/", search: next })}
+        onOpenTrade={openTrade}
+      />
+    );
+  },
 });
 
 const journalRoute = createRoute({
