@@ -18,7 +18,8 @@ export interface TradeFilter {
   book?: string;
   underlying?: string;
   includeExcluded?: boolean;
-  limit?: number;
+  /** At most this many trades, newest first; 500 when left out, every trade when null. */
+  limit?: number | null;
 }
 
 /** The transaction handle drizzle hands to a callback, which supports the same query builders. */
@@ -173,14 +174,17 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       if (filter.book) conditions.push(eq(trades.book, filter.book));
       if (filter.underlying) conditions.push(eq(trades.underlying, filter.underlying.toUpperCase()));
       if (!filter.includeExcluded) conditions.push(eq(trades.excluded, false));
-      return db
-        .select()
-        .from(trades)
-        .where(and(...conditions))
-        .orderBy(desc(trades.openedAt))
-        .limit(filter.limit ?? 500)
-        .all()
-        .map((row) => hydrate(db, row));
+      return (
+        db
+          .select()
+          .from(trades)
+          .where(and(...conditions))
+          .orderBy(desc(trades.openedAt))
+          // SQLite reads a negative LIMIT as no limit.
+          .limit(filter.limit === null ? -1 : (filter.limit ?? 500))
+          .all()
+          .map((row) => hydrate(db, row))
+      );
     },
 
     update(id: string, patch: TradePatch): TradeRecord | null {
