@@ -1,7 +1,7 @@
 # Analytics and Dashboard — Design Spec
 
 - **Date:** 2026-09-27
-- **Status:** Draft, awaiting review
+- **Status:** Approved 2026-09-27; plan: [2026-09-27-analytics-and-dashboard.md](../plans/2026-09-27-analytics-and-dashboard.md)
 - **Scope:**
   - The Dashboard: the current period at a glance.
   - The Analytics page, with Overview and Iron flies tabs.
@@ -75,7 +75,7 @@ These numbers double as a sanity check for the finished pages.
 ## 4. Architecture
 
 ```
-GET /api/trades?includeExcluded=true   (existing route, unchanged)
+GET /api/trades?all=true&includeExcluded=true   (existing route; `all` is new)
         │  every trade, with legs and fly details
         ▼
 useAllTrades()  ── one TanStack Query, shared by Dashboard and Analytics
@@ -88,8 +88,8 @@ useAllTrades()  ── one TanStack Query, shared by Dashboard and Analytics
 Dashboard / Analytics components  ── KPI strip, equity curve, calendar, split grid, charts
 ```
 
-- **No server changes.** The existing list route already returns legs and `ironFly` details. Filtering in the browser makes filter changes instant, and both pages share one cached copy.
-- **Freshness:** queries refetch on mount (the default `staleTime` of 0). Edits and imports already invalidate `["trades"]`.
+- **One server change.** The list route already returns legs and `ironFly` details, but it caps lists at the newest 500 trades. It gains `all=true` so Analytics never quietly leaves trades out. Filtering in the browser makes filter changes instant, and both pages share one cached copy.
+- **Freshness:** queries are fresh for 10 s app-wide (`staleTime` in `main.tsx`). Edits and imports already invalidate `["trades"]`; the trade page's grade and exclude changes now do too.
 - **Open trades** on the Dashboard reuse the list code: 60-second option quotes → `closeEstimate`, or `EXPIRED · add exits`.
 
 ---
@@ -117,7 +117,7 @@ Everything works on a minimal trade shape, `StatTrade`: `openedAt`, `closedAt`, 
 
 ### 5.2 Splits
 
-A split groups trades by a dimension and reports, per group, the trade count, wins, win rate, net and profit factor. **The groups of one split always add up to the total net.**
+A split groups trades by a dimension and reports, per group, the trade count, wins, win rate, net and profit factor. **The groups of one split always add up to the total net.** A split leaves out buckets that have no trades.
 
 | Split | Key | Buckets |
 |---|---|---|
@@ -126,7 +126,7 @@ A split groups trades by a dimension and reports, per group, the trade count, wi
 | Contracts | fly contracts (for other trades, the largest leg quantity) | user edges, default `2, 4, 6` → 1 · 2–3 · 4–5 · 6+ |
 | Hold time | §5.4 | same day · overnight · 1 full day · weekend · longer · unknown |
 | Month | New York close month | one row per month |
-| Ticker | underlying | top 5 and bottom 5 by net (every ticker when there are 10 or fewer) |
+| Ticker | underlying | every ticker by net when there are 10 or fewer; otherwise the top 5, one "N others" row, and the bottom 5 |
 | Credit (flies) | gross credit: credit per share × contracts × 100 | user edges, default `250, 500, 1000` → < $250 · $250–500 · $500–1,000 · $1,000+ |
 | Wings (flies) | from the fly details | balanced · broken · 1-wing |
 | Wider wing width (flies) | the wider of the put and call wing, in points | ≤ 2.5 · 2.5–5 · 5–10 · 10+ · 1-wing |
@@ -238,7 +238,7 @@ The Dates control offers All time, This month, Last month, Last 90 days, This ye
 ## 9. Charts
 
 - **Equity curve** (Lightweight Charts 5.2, in one wrapper component):
-  - The equity line is in pane 0 and the drawdown area in pane 1.
+  - The equity line is in pane 0. The drawdown is in pane 1, as a baseline series at $0, which fills between $0 and the line.
   - Times are close times in seconds. Trades closing in the same second merge into one point, since the library requires strictly increasing times.
   - A $0 point one second before the first close starts the line.
   - Axis labels and the crosshair show New York dates. Colours come from the Terminal palette.
@@ -314,4 +314,4 @@ The Dates control offers All time, This month, Last month, Last 90 days, This ye
 ## 13. Open items
 
 1. **Bundle size.** Lightweight Charts and Recharts together add roughly 150 KB gzipped. Confirm in the build that splitting off Analytics keeps the first load close to today's 143 KB gzipped plus Lightweight Charts, which the Dashboard needs.
-2. **New York time on the chart axis.** Lightweight Charts formats times in UTC by default. The plan confirms the formatter hooks for New York dates.
+2. **New York time on the chart axis.** Resolved while planning. Lightweight Charts has no timezone option. The documented way is `timeScale.tickMarkFormatter` and `localization.timeFormatter`, formatting with `Intl` in `America/New_York`.
