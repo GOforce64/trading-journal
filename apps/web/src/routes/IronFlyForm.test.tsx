@@ -395,4 +395,36 @@ describe("IronFlyForm with an option chain", () => {
     ]);
     expect(payload.netPnl).toBeNull();
   });
+
+  it("hints a leg's mark once its strike is picked, before the other legs are filled", async () => {
+    const at = Date.UTC(2026, 8, 25, 19, 59, 51);
+    setup(undefined, { chain: M_CHAIN, optionQuotes: { M991002C00022500: { bid: 0.44, ask: 0.58, at } } });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    fill("Expiry", "2099-10-02");
+    fill("Short call strike", "22.5");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Short call exit").getAttribute("placeholder")).toBe("0.58"),
+    );
+    expect(screen.queryByTestId("derived-estimate")).toBeNull();
+  });
+
+  it("hints the legs it has quotes for when another leg has none", async () => {
+    const at = Date.UTC(2026, 8, 25, 19, 59, 51);
+    setup(undefined, {
+      chain: M_CHAIN,
+      optionQuotes: {
+        M991002C00022500: { bid: 0.44, ask: 0.58, at },
+        M991002P00022500: { bid: 0.31, ask: 0.42, at },
+        M991002C00026000: { bid: 0.01, ask: 0.06, at },
+      },
+    });
+    await priceFromTheChain();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Long call exit").getAttribute("placeholder")).toBe("0.01"),
+    );
+    expect(screen.getByLabelText("Short put exit").getAttribute("placeholder")).toBe("0.42");
+    expect(screen.getByLabelText("Long put exit").getAttribute("placeholder")).toBeNull();
+    expect(screen.queryByTestId("derived-estimate")).toBeNull();
+  });
 });

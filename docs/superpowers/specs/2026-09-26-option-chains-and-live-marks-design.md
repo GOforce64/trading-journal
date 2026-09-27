@@ -267,7 +267,8 @@ interface MarketData {
 
 - Once the expiry and a leg's strike are set and that leg's Exit is empty, the Exit field's placeholder shows the leg's mark (ask for shorts, bid for longs).
 - The Derived panel adds "Est. P&L if closed now", in muted italics.
-- Both come from `closeEstimate` over the form's current legs. A placeholder is never a value, so the submitted payload is unchanged: a test asserts that `closePrice` stays null.
+- Each hint needs only its own leg's quote, so it shows before the other legs are filled, and a leg with no quote leaves only its own Exit blank. The estimate comes from `closeEstimate` and needs every leg priced and every open leg quoted.
+- A placeholder is never a value, so the submitted payload is unchanged: a test asserts that `closePrice` stays null.
 
 ---
 

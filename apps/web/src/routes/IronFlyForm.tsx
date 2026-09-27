@@ -4,6 +4,7 @@ import {
   ironFlyStructureFromLegs,
   type MarkableLeg,
   type OptionQuote,
+  occSymbol,
   type PricedLeg,
   positionCash,
 } from "@tj/core";
@@ -231,13 +232,33 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     feesOpen: zeroIfBlank(values.feesOpen),
     feesClose: zeroIfBlank(values.feesClose),
   };
-  const { data: optionQuotes } = useOptionQuotes(openContracts(markTrade, today));
+  // A leg's hint needs only its own contract, so it shows before the other legs are filled in.
+  const hinted =
+    TICKER.test(symbol) && values.expiry >= today
+      ? LEG_ROLES.flatMap((role) => {
+          const fields = values.legs[role.key];
+          const strike = num(fields.strike);
+          if (fields.exit.trim() !== "" || Number.isNaN(strike)) return [];
+          const contract = occSymbol({
+            underlying: symbol,
+            expiry: values.expiry,
+            right: role.right,
+            strike,
+          });
+          return [{ key: role.key, contract }];
+        })
+      : [];
+  const { data: optionQuotes } = useOptionQuotes([
+    ...openContracts(markTrade, today),
+    ...hinted.map((leg) => leg.contract),
+  ]);
   const estimate =
     markLegs.length > 0 ? closeEstimate(markTrade, optionQuotes?.quotes ?? NO_QUOTES, today) : null;
+  /** The cost to close one leg: a short is bought back at the ask, a long sold at the bid. */
   const markFor = (role: (typeof LEG_ROLES)[number]) => {
-    if (estimate?.kind !== "estimate") return undefined;
-    const index = markLegs.findIndex((leg) => leg.right === role.right && leg.quantity < 0 === role.short);
-    return estimate.legs.find((marked) => marked.index === index)?.mark.toFixed(2);
+    const contract = hinted.find((leg) => leg.key === role.key)?.contract;
+    const quote = contract ? optionQuotes?.quotes.get(contract) : undefined;
+    return (role.short ? quote?.ask : quote?.bid)?.toFixed(2);
   };
 
   function submit() {
