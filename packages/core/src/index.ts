@@ -4,4 +4,5 @@ export * from "./marks.js";
 export * from "./model.js";
 export * from "./money.js";
 export * from "./position.js";
+export * from "./splits.js";
 export * from "./stats.js";
