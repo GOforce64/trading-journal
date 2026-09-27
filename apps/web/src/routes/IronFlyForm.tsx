@@ -20,7 +20,7 @@ import {
   useQuotes,
   useSettled,
 } from "../market.js";
-import { ExpirySelect, nearestStrike, StrikeSelect } from "./ChainPickers.js";
+import { ExpirySelect, listedStrike, nearestStrike, StrikeSelect } from "./ChainPickers.js";
 
 /** The four legs of a short iron butterfly, in the order oQuants shows them. */
 const LEG_ROLES = [
@@ -166,13 +166,11 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
 
   /** Switching expiry keeps the strikes it lists and clears the others, naming them. */
   function pickExpiry(expiry: string) {
-    const listed = new Set(
-      (expirations.find((expiration) => expiration.date === expiry)?.strikes ?? []).map(String),
-    );
+    const listed = expirations.find((expiration) => expiration.date === expiry)?.strikes ?? [];
     const dropped = expiry
       ? LEG_ROLES.filter((role) => {
           const strike = values.legs[role.key].strike;
-          return strike !== "" && !listed.has(strike);
+          return strike !== "" && listedStrike(listed, strike) === undefined;
         })
       : [];
     setValues((current) => {

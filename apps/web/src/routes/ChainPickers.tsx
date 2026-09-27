@@ -24,6 +24,11 @@ export function nearestStrike(strikes: number[], price: number | undefined): num
   );
 }
 
+/** The listed strike a field's text names, compared as numbers so a typed "22.50" is the listed 22.5. */
+export function listedStrike(strikes: number[], value: string): number | undefined {
+  return value.trim() === "" ? undefined : strikes.find((strike) => strike === Number(value));
+}
+
 const SELECT =
   "num rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[13px] text-fg outline-none focus:border-accent disabled:opacity-50";
 
@@ -77,17 +82,18 @@ export function StrikeSelect({
   atm: number | null;
   onChange: (value: string) => void;
 }) {
+  const listed = listedStrike(strikes, value);
   return (
     <select
       aria-label={label}
-      value={value}
+      value={listed === undefined ? value : String(listed)}
       onChange={(event) => onChange(event.target.value)}
       disabled={strikes.length === 0 && !value}
       className={`${SELECT} w-full text-right`}
     >
       {/* Blank: no strike yet, or, on a long leg, no wing at all (a 1-wing trade). */}
       <option value="">—</option>
-      <NotListed value={value} listed={strikes.some((strike) => String(strike) === value)} />
+      <NotListed value={value} listed={listed !== undefined} />
       {strikes.map((strike) => (
         <option key={strike} value={String(strike)}>
           {strike === atm ? `${strike} (ATM)` : String(strike)}

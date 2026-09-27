@@ -276,6 +276,26 @@ describe("IronFlyForm with an option chain", () => {
     expect(onSubmit.mock.calls[0]?.[0].legs[0].strike).toBe(22.25);
   });
 
+  it("takes a strike typed as 22.50 for the listed 22.5, and keeps it when the expiry changes", async () => {
+    const chain = {
+      ...M_CHAIN,
+      expirations: [...M_CHAIN.expirations, { date: "2099-10-16", expired: false, strikes: [20, 22.5, 26] }],
+    };
+    setup(undefined, { chain });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    fill("Expiry", "2099-10-02");
+    fireEvent.click(screen.getByRole("button", { name: "type instead" }));
+    fill("Short call strike", "22.50");
+    fireEvent.click(screen.getByRole("button", { name: "pick from the chain" }));
+    const selected = () =>
+      (screen.getByLabelText("Short call strike") as HTMLSelectElement).selectedOptions[0]?.textContent;
+    expect(selected()).toBe("22.5");
+    fill("Expiry", "2099-10-16");
+    expect(selected()).toBe("22.5");
+    expect(screen.queryByText(/Cleared strikes/)).toBeNull();
+  });
+
   it("keeps an expiry typed before the chain arrived", async () => {
     setup(undefined, { chain: M_CHAIN });
     fill("Underlying", "M");

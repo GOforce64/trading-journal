@@ -251,6 +251,7 @@ interface MarketData {
 - For a trade opened today, the strike nearest the stock's live price (from `/api/quotes`) is labelled `(ATM)`.
 - Short legs require a strike. Long legs start with a blank entry, which means no wing (1-wing), exactly as today.
 - Changing the expiry keeps the strikes that the new expiry lists and clears the rest, with a note naming the cleared legs.
+- Strikes are compared as numbers, so a strike typed as `22.50` is the listed 22.5.
 
 **Editing a saved trade**
 
