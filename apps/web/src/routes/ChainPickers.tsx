@@ -89,7 +89,8 @@ export function StrikeSelect({
       value={listed === undefined ? value : String(listed)}
       onChange={(event) => onChange(event.target.value)}
       disabled={strikes.length === 0 && !value}
-      className={`${SELECT} w-full text-right`}
+      // min-w-max: a full-width select alone gives its table column no minimum, cutting off "22.5 (ATM)".
+      className={`${SELECT} w-full min-w-max text-right`}
     >
       {/* Blank: no strike yet, or, on a long leg, no wing at all (a 1-wing trade). */}
       <option value="">—</option>

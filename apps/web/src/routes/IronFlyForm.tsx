@@ -339,7 +339,8 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
   );
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
+    // Side by side from 1280 px: narrower, the legs table can't fit a strike like "1027.5 (ATM)" and its prices.
+    <div className="grid gap-3 xl:grid-cols-[1fr_280px]">
       <div className="flex flex-col gap-3">
         <Panel title="Trade">
           <div className="grid grid-cols-3 gap-2">
