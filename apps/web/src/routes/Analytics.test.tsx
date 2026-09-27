@@ -135,6 +135,15 @@ describe("Analytics filters", () => {
   });
 });
 
+describe("Analytics with an old link", () => {
+  it("ignores a ticker the journal doesn't have, instead of showing an empty page under All", async () => {
+    stubTrades(TRADES);
+    renderWithClient(<Analytics search={{ ticker: "ZZZ" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$80.00"));
+    expect((screen.getByRole("combobox", { name: "Ticker" }) as HTMLSelectElement).value).toBe("");
+  });
+});
+
 describe("Analytics Overview", () => {
   it("shows where the money goes, with the largest losses", async () => {
     stubTrades(TRADES);

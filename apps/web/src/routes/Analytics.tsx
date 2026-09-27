@@ -24,15 +24,20 @@ const INPUT =
 /** Aggregated statistics over the filtered trades (spec §7). */
 export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
   const { data, isLoading, error } = useAllTrades();
-  const trades = useMemo(() => filterTrades(data ?? [], toFilter(search)), [data, search]);
   const tickers = useMemo(() => [...new Set((data ?? []).map((trade) => trade.underlying))].sort(), [data]);
+  // A ticker the journal doesn't have (an old or hand-edited link) counts as All, which is what the dropdown shows.
+  const view = useMemo(
+    () => (search.ticker && !tickers.includes(search.ticker) ? { ...search, ticker: undefined } : search),
+    [search, tickers],
+  );
+  const trades = useMemo(() => filterTrades(data ?? [], toFilter(view)), [data, view]);
 
   if (isLoading) return <p className="text-muted">Loading…</p>;
   if (error) return <p className="text-down">Could not load trades: {String(error)}</p>;
 
   return (
     <div className="flex flex-col gap-3">
-      <FilterRow search={search} onSearch={onSearch} tickers={tickers} />
+      <FilterRow search={view} onSearch={onSearch} tickers={tickers} />
       <nav aria-label="Analytics tabs" className="flex gap-4 border-line border-b text-[12px]">
         <TabButton active={search.tab !== "flies"} onClick={() => onSearch({ tab: undefined })}>
           Overview

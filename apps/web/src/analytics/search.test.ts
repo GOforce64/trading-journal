@@ -53,6 +53,11 @@ describe("parseAnalyticsSearch", () => {
     ).toEqual({});
   });
 
+  it("keeps tickers written with a dash or a slash", () => {
+    expect(parseAnalyticsSearch({ ticker: "bf-b" })).toEqual({ ticker: "BF-B" });
+    expect(parseAnalyticsSearch({ ticker: "BRK/B" })).toEqual({ ticker: "BRK/B" });
+  });
+
   it("accepts the numbers the router's parser makes of plain values", () => {
     expect(parseAnalyticsSearch({ creditEdges: 250, excluded: "true" })).toEqual({
       creditEdges: "250",

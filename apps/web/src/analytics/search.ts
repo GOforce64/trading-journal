@@ -16,7 +16,8 @@ export interface AnalyticsSearch {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const TICKER = /^[A-Z][A-Z0-9.]{0,9}$/;
+/** A ticker such as M, BRK.B, BF-B or BRK/B. */
+const TICKER = /^[A-Z][A-Z0-9./-]{0,9}$/;
 
 /** The router parses plain values as JSON, so "250" may arrive as a number. */
 const text = (value: unknown) =>
