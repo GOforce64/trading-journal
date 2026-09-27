@@ -4,17 +4,13 @@ import {
   ColorType,
   createChart,
   LineSeries,
+  type TickMarkType,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useMemo, useRef } from "react";
-import { type ChartPoint, equityChartData } from "./equityData.js";
+import { type ChartPoint, equityChartData, nyTickLabel } from "./equityData.js";
 
-const NY_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
 const NY_TIME = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short",
@@ -52,7 +48,13 @@ export function EquityCurve({ points, height = 220 }: { points: readonly EquityP
       },
       grid: { vertLines: { color: "#1a1e29" }, horzLines: { color: "#1a1e29" } },
       rightPriceScale: { borderColor: "#1f2430" },
-      timeScale: { borderColor: "#1f2430", tickMarkFormatter: nyText(NY_DAY) },
+      timeScale: {
+        borderColor: "#1f2430",
+        // Several trades can close on one day; their ticks show the time rather than repeating the date.
+        timeVisible: true,
+        tickMarkFormatter: (time: Time, type: TickMarkType) =>
+          typeof time === "number" ? nyTickLabel(time, type) : String(time),
+      },
       localization: { timeFormatter: nyText(NY_TIME), priceFormatter: usd },
     });
     chart

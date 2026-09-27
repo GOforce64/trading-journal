@@ -1,4 +1,5 @@
 import type { EquityPoint } from "@tj/core";
+import { TickMarkType } from "lightweight-charts";
 
 export interface ChartPoint {
   /** UTC seconds. */
@@ -32,4 +33,28 @@ export function equityChartData(points: readonly EquityPoint[]): {
     drawdown.push({ time, value: point.drawdown });
   }
   return { equity, drawdown };
+}
+
+const ny = (options: Intl.DateTimeFormatOptions) =>
+  new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", ...options });
+
+const TICK_FORMATS: Record<TickMarkType, Intl.DateTimeFormat> = {
+  [TickMarkType.Year]: ny({ year: "numeric" }),
+  [TickMarkType.Month]: ny({ month: "short" }),
+  [TickMarkType.DayOfMonth]: ny({ month: "short", day: "numeric" }),
+  [TickMarkType.Time]: ny({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+  [TickMarkType.TimeWithSeconds]: ny({
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }),
+};
+
+/**
+ * A time-axis label in New York time, at the detail Lightweight Charts asks for: a year, a month, a day or a
+ * time of day. One day label for every tick repeated "Sep 1" for two closes on the same day.
+ */
+export function nyTickLabel(seconds: number, type: TickMarkType): string {
+  return TICK_FORMATS[type].format(new Date(seconds * 1000));
 }

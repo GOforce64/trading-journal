@@ -19,7 +19,7 @@ import {
 import { MonthBars, RollingLine } from "../analytics/Charts.js";
 import { EquityCurve } from "../analytics/EquityCurve.js";
 import { rememberEdges, resolveEdges } from "../analytics/edges.js";
-import { profitFactorText, shareText, winRateText } from "../analytics/format.js";
+import { dollars, profitFactorText, shareText, winRateText } from "../analytics/format.js";
 import { KpiStrip } from "../analytics/KpiStrip.js";
 import { Section } from "../analytics/Section.js";
 import { SplitGrid } from "../analytics/SplitGrid.js";
@@ -63,10 +63,16 @@ export function OverviewTab({ trades, search, onSearch, onOpenTrade }: TabProps)
           {
             id: "avg-win-loss",
             label: "Avg win / loss",
+            // Whole dollars keep both on one line; a narrow tile breaks after the slash, never inside an amount.
             value: (
               <>
-                <Money value={summary.avgWin} /> <span className="text-muted">/</span>{" "}
-                <Money value={summary.avgLoss} />
+                <span className="whitespace-nowrap text-up">
+                  {summary.avgWin == null ? "—" : dollars(summary.avgWin)}
+                </span>
+                <span className="text-muted"> / </span>
+                <span className="whitespace-nowrap text-down">
+                  {summary.avgLoss == null ? "—" : dollars(summary.avgLoss)}
+                </span>
               </>
             ),
           },

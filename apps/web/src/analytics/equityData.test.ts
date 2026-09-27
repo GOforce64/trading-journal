@@ -1,5 +1,6 @@
+import { TickMarkType } from "lightweight-charts";
 import { describe, expect, it } from "vitest";
-import { equityChartData } from "./equityData.js";
+import { equityChartData, nyTickLabel } from "./equityData.js";
 
 describe("equityChartData", () => {
   it("starts at $0 one second before the first close", () => {
@@ -30,5 +31,21 @@ describe("equityChartData", () => {
 
   it("is empty without points", () => {
     expect(equityChartData([])).toEqual({ equity: [], drawdown: [] });
+  });
+});
+
+describe("nyTickLabel", () => {
+  const seconds = (stamp: string) => Date.parse(stamp) / 1000;
+
+  it("labels the axis in New York time, at the detail the chart asks for", () => {
+    const close = seconds("2026-09-03T09:50:00-04:00");
+    expect(nyTickLabel(close, TickMarkType.Year)).toBe("2026");
+    expect(nyTickLabel(close, TickMarkType.Month)).toBe("Sep");
+    expect(nyTickLabel(close, TickMarkType.DayOfMonth)).toBe("Sep 3");
+    expect(nyTickLabel(close, TickMarkType.Time)).toBe("09:50");
+  });
+
+  it("uses New York's date for a late-evening close", () => {
+    expect(nyTickLabel(seconds("2026-09-30T23:30:00-04:00"), TickMarkType.DayOfMonth)).toBe("Sep 30");
   });
 });

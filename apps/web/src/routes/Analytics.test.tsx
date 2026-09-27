@@ -87,6 +87,8 @@ describe("Analytics filters", () => {
     expect(kpi("win-rate")).toContain("66.7%");
     expect(kpi("profit-factor")).toContain("1.27");
     expect(kpi("trades")).toContain("3");
+    // Whole dollars, so both averages fit on one line of the tile.
+    expect(kpi("avg-win-loss")).toBe("Avg win / loss+$190 / −$300");
   });
 
   it("narrows to one book when the other is switched off", async () => {
