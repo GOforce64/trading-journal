@@ -236,6 +236,7 @@ interface MarketData {
 **Loading the chain**
 
 - 400 ms after the last keystroke in Underlying, the builder asks for the chain with `since` set to the Opened date if that is in the past, otherwise today.
+- Opened comes before Expiry in the form, so an older trade's past expiries are listed by the time Expiry is reached.
 - Changing Opened to an earlier date asks again.
 - If Company is blank, it asks for the company name and fills it in.
 

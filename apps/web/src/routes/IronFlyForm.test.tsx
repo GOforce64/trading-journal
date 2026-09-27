@@ -296,6 +296,14 @@ describe("IronFlyForm with an option chain", () => {
     expect(screen.queryByText(/Cleared strikes/)).toBeNull();
   });
 
+  it("asks for Opened before Expiry, since the listed expiries start from the open date", async () => {
+    setup(undefined, { chain: M_CHAIN });
+    fill("Underlying", "M");
+    await waitFor(() => expect(isSelect("Expiry")).toBe(true));
+    const order = screen.getByLabelText("Opened").compareDocumentPosition(screen.getByLabelText("Expiry"));
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("keeps an expiry typed before the chain arrived", async () => {
     setup(undefined, { chain: M_CHAIN });
     fill("Underlying", "M");

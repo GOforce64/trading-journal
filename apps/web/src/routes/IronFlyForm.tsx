@@ -345,6 +345,8 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
           <div className="grid grid-cols-3 gap-2">
             {input("Underlying", values.underlying, set("underlying"))}
             {input("Company", values.underlyingName, set("underlyingName"))}
+            {/* Before Expiry: the listed expiries start from the open date. */}
+            {input("Opened", values.openedAt, set("openedAt"), "datetime-local")}
             {pickers ? (
               <div className="flex flex-col gap-1">
                 <label htmlFor="expiry-select" className={FIELD_LABEL}>
@@ -368,7 +370,6 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
             ) : (
               input("Expiry", values.expiry, set("expiry"), "date")
             )}
-            {input("Opened", values.openedAt, set("openedAt"), "datetime-local")}
             {input("Closed", values.closedAt, set("closedAt"), "datetime-local")}
             <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider">
               Book
