@@ -318,6 +318,7 @@ After Save, the status line updates, and the lists and builder pick up the new k
 | Alpaca times out (10 s), 5xx or 429 | Chains: typed fallback, with the reason. Marks: blank, and "Marks unavailable" on the trade page. Nothing stale is shown as current. One warning line in the server log per failure, as for quotes. |
 | Nothing listed (unknown symbol, before February 2024) | Typed fallback: "No listed options for X in that period". |
 | Key rejected on a live call (revoked) | Settings shows the error state; everything else carries on without market data. |
+| A call on the old key refused after a new key was saved | Logged only. The new key keeps its status. |
 | Key rejected when saving | 400 with the reason; nothing written; the previous key stays in use. |
 | `secrets.json` unreadable at startup | As today: a warning that never quotes the file, and market data off. Saving from Settings refuses to overwrite it (409). |
 | Short leg with no ask, or a leg with no quote | No estimate; the reason on hover. |

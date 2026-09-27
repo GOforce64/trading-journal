@@ -1,5 +1,5 @@
 import { AlpacaError, type ListedExpiration } from "@tj/market-data";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { createApp } from "./app.js";
 import { createMarketData, type MarketSources } from "./marketData.js";
 import { fakeSources, LOCAL, testApp } from "./testing.js";
@@ -68,6 +68,28 @@ describe("GET /api/chains/:symbol", () => {
       message: "Alpaca didn't answer, so type the expiry and strikes.",
     });
     expect(market.status().state).toBe("error");
+  });
+
+  it("does not blame a newly saved key when a call on the old one is refused", async () => {
+    let refuse: (error: unknown) => void = () => {};
+    const answer = new Promise<ListedExpiration[]>((_resolve, reject) => {
+      refuse = reject;
+    });
+    let asked = false;
+    const { app, market } = withSources({
+      chains: {
+        listed: () => {
+          asked = true;
+          return answer;
+        },
+      },
+    });
+    const pending = get(app, "/api/chains/M");
+    await vi.waitFor(() => expect(asked).toBe(true));
+    market.configure({ keyId: "PKNEWKEYABCD", secretKey: "another-secret" });
+    refuse(new AlpacaError(401, "request is not authorized"));
+    expect((await pending).body.unavailable).toMatchObject({ reason: "unreachable" });
+    expect(market.status().state).toBe("on");
   });
 
   it.each(["/api/chains/SPX%20INDEX", "/api/chains/M?since=yesterday", "/api/chains/M?since=2026-13-45"])(

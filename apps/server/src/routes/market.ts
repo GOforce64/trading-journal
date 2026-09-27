@@ -43,7 +43,7 @@ export function marketRoutes(market?: MarketData) {
           message: `No listed options for ${symbol} in that period.`,
         });
       } catch (error) {
-        market?.report(error);
+        sources.report(error);
         return answer([], UNREACHABLE);
       }
     })
@@ -70,7 +70,7 @@ export function marketRoutes(market?: MarketData) {
         try {
           name = await sources.companies.name(symbol);
         } catch (error) {
-          market?.report(error);
+          sources.report(error);
         }
       }
       return c.json({ name }, 200);

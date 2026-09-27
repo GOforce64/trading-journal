@@ -47,7 +47,7 @@ describe("createMarketData", () => {
   it("turns to error when Alpaca refuses the key, until a key is saved again", () => {
     const logs: string[] = [];
     const market = createMarketData(KEYS, { build: recordingBuild().build, log: (line) => logs.push(line) });
-    market.report(new AlpacaError(401, "request is not authorized"));
+    market.sources()?.report(new AlpacaError(401, "request is not authorized"));
     expect(market.status()).toEqual({
       state: "error",
       message: "Alpaca rejected the saved key. Save a new one below.",
@@ -60,8 +60,8 @@ describe("createMarketData", () => {
   it("logs other failures and stays on", () => {
     const logs: string[] = [];
     const market = createMarketData(KEYS, { build: recordingBuild().build, log: (line) => logs.push(line) });
-    market.report(new AlpacaError(500, "internal error"));
-    market.report(new Error("The operation was aborted due to timeout"));
+    market.sources()?.report(new AlpacaError(500, "internal error"));
+    market.sources()?.report(new Error("The operation was aborted due to timeout"));
     expect(market.status().state).toBe("on");
     expect(logs).toHaveLength(2);
   });
@@ -77,5 +77,21 @@ describe("createMarketData", () => {
     });
     fromSource?.(new AlpacaError(403, "forbidden"));
     expect(market.status().state).toBe("error");
+  });
+
+  it("does not blame a newly saved key for a refusal of the key it replaced", () => {
+    const reporters: ((error: unknown) => void)[] = [];
+    const logs: string[] = [];
+    const market = createMarketData(KEYS, {
+      build: (_keys, report) => {
+        reporters.push(report);
+        return fakeSources();
+      },
+      log: (line) => logs.push(line),
+    });
+    market.configure({ keyId: "PKNEWKEYABCD", secretKey: "another-secret" });
+    reporters[0]?.(new AlpacaError(401, "request is not authorized"));
+    expect(market.status().state).toBe("on");
+    expect(logs).toEqual(["Market data unavailable: Alpaca answered 401: request is not authorized"]);
   });
 });
