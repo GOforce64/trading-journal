@@ -317,7 +317,7 @@ After Save, the status line updates, and the lists and builder pick up the new k
 
 | Situation | Behaviour |
 |---|---|
-| No key | Typed expiry and strikes, with the hint "Add an Alpaca key in Settings to pick from the chain". No marks; lists look as they do today. |
+| No key | Typed expiry and strikes, with the hint "Add an Alpaca key in Settings to pick from the chain". No marks; lists look as they do today, except that `EXPIRED · add exits` still shows, since it needs only the date. |
 | Alpaca times out (10 s), 5xx or 429 | Chains: typed fallback, with the reason. Marks: blank, and "Marks unavailable" on the trade page. Nothing stale is shown as current. One warning line in the server log per failure, as for quotes. |
 | Nothing listed (unknown symbol, before February 2024) | Typed fallback: "No listed options for X in that period". |
 | Key rejected on a live call (revoked) | Settings shows the error state; everything else carries on without market data. |
