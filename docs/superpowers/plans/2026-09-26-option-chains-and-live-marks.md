@@ -4432,13 +4432,15 @@ The Saturday live check with the real paper key passed; it is recorded in spec �
   - URLs over 16 KB, which needs about 800 open contracts.
   - A subscription 403 shown as a rejected key.
 
-**Deferred minors** (not fixed; candidates for a follow-up):
-1. A typed strike with trailing zeros ("22.50") shows as "not listed", and an expiry change can clear it. Compare strikes numerically.
-2. A 401 from an in-flight call on the old key, after a new key is saved, marks the new key "rejected" until it is saved again. Give each build its own reporter (`marketData.ts`).
-3. Builder mark hints are all-or-nothing: every leg must be priced and every open leg quoted. Spec §8 describes them per leg.
+**Deferred minors.** Six were settled on 2026-09-27, each with a test that failed first (305 tests):
+1. ~~A typed strike with trailing zeros ("22.50") shows as "not listed", and an expiry change can clear it.~~ Strikes are compared as numbers (`9231b1d`).
+2. ~~A 401 from an in-flight call on the old key marks a newly saved key "rejected".~~ Each saved key has its own reporter, and the routes report through the sources they started with (`ee57b88`).
+3. ~~Builder mark hints are all-or-nothing.~~ Each leg's hint needs only its own quote; the Derived estimate still needs the whole trade (`da4f275`).
 4. The pickers flip back to typed inputs while a new chain loads. Consider `placeholderData`.
-5. Expiry sits before Opened in the builder, so a past expiry appears only after Opened is filled. Add a hint, or reorder.
-6. A cross-site simple GET can spend the Alpaca quota. Refuse `Sec-Fetch-Site: cross-site` on `/api/*`; `/api/quotes` already had this exposure.
+5. ~~Expiry sits before Opened in the builder.~~ The user chose to swap them (`2826149`).
+6. ~~A cross-site simple GET can spend the Alpaca quota.~~ `/api/*` refuses `Sec-Fetch-Site: cross-site` and `same-site`; clients outside a browser send neither (`4f72dad`).
 7. Test gaps: Review Focus 1 for an unlisted expiry, and Review Focus 2 with an unlisted typed expiry.
-8. The `EXPIRED · add exits` chip shows even without a key (spec §11 says lists look as before). It is probably desirable; confirm with the user.
+8. ~~The `EXPIRED · add exits` chip shows even without a key.~~ The user chose to keep it; spec §11 says so (`f9cf89b`).
 9. `isoDate` accepts `2026-02-30`, and the tooltip shows "03:59 PM" where the spec writes "3:59 PM".
+
+Also seen on 2026-09-27: "22.5 (ATM)" is cut off in the builder's Strike column at 1280 px wide.
