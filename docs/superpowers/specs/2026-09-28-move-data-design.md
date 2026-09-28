@@ -1,7 +1,7 @@
 # Move Data and Settle at Expiry — Design Spec
 
 - **Date:** 2026-09-28
-- **Status:** Approved 2026-09-28. Plan: [2026-09-28-move-data.md](../plans/2026-09-28-move-data.md)
+- **Status:** Approved; implemented on feat/move-data. Plan: [2026-09-28-move-data.md](../plans/2026-09-28-move-data.md)
 - **Scope:**
   - Every iron fly gets its implied move, actual move, move ratio and IV before → after, worked out from its own fills and the stock price at entry and exit.
   - Stock prices come from Alpaca's historical minute bars. They're fetched automatically after a save or an import, and a "Fill in missing" button covers the backlog and retries.
@@ -486,5 +486,10 @@ No failure blocks a save, and each is explained where it shows.
 ## 13. Open items
 
 1. **Stored times outside market hours.** Some imported trades carry open or close times outside the session (CRM "18:11 ET", PATH "07:45"), probably a timezone quirk in the oQuants import. Clamping gives a usable price, but the cause is worth checking in the importer separately.
-2. **Rate limit on the backlog.** About 82 sequential calls should stay under 200 a minute. If Alpaca answers 429, the run stops and the button retries. A pause between calls is the fix if that happens in practice.
+2. **Rate limit on the backlog.** Resolved. The live fill on 2026-09-28 made 83 sequential calls in 10.4 s, with no 429.
 3. **Half days.** The expiry moment is 16:00 even when the market closes at 13:00. The difference in T is negligible for IV, and the 16:00 clamp already reads the last bar of a half day.
+4. **Live check, 2026-09-28** (a copy of the real journal, the real paper key):
+   - The fill wrote all 83 prices (41 closed flies × 2, plus BB's entry), with none missing. BB's close on 2026-09-25 is $8.21, and the settle panel shows +$433.00.
+   - M matches §3 exactly: $21.66 → $20.505, 7.3%, −5.3%, 0.73×, IV 123% → 77%. Every trade's prices match the spike.
+   - The ratio buckets are `< 0.5×` 19 trades, 16 won, +$2,720; `0.5–1×` 10, 6, +$702; `1–1.5×` 7, 0, −$1,478; `1.5×+` 5, 0, −$4,218. They differ from §3 by one trade, NIO (+$410). Its stock moved exactly $0.21 on a $0.42 straddle, so its ratio is exactly 0.5 and belongs in `0.5–1×`. JavaScript computes 0.49999999999999994, which the spike counted below 0.5. The 1e-9 float-noise guard (§7.4) puts it on the right side of the edge.
+5. **IV after is blank for most flies.** 23 of the 41 closed flies were closed within 24 h of expiry, so their IV after is left blank (§7.3). The IV crush chart therefore shows 18 trades (median crush 31 pts), where the spike counted 34. PATH's IV before doesn't solve either: its stored open time is the 07:45 import quirk. A shorter cutoff would bring most trades back, but KLAR, closed 5.9 h before expiry, solved to 665%. That's the user's call.

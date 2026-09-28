@@ -167,16 +167,18 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
   - move and IV: `underlying_price_entry`, `underlying_price_exit`, `implied_move_pct`, `actual_move_pct`, `iv_before`, `iv_after`
   - `move_source` (`import` | `derived` | `manual`)
 
+  Move data is detailed in [2026-09-28-move-data-design.md](2026-09-28-move-data-design.md). Only `underlying_price_entry` and `underlying_price_exit` are stored, fetched from Alpaca. The move values are computed on read, and the four move columns are typed overrides. `move_source` isn't used.
+
   The four contracts themselves live in the shared **legs** table (right, strike, expiry, side, quantity), so the trade page can show an oQuants-style leg breakdown, and non-butterfly structures fit the same model later.
 - **setups**: `name`, `description`, `strategy` (nullable = both), `color`, `archived`.
 - **tags**: `name`, `kind` (`mistake` | `emotion`), `color`, `archived`. **trade_tags**: `trade_id`, `tag_id`.
 - **attachments**: `trade_id`, `sha256`, `ext`, `mime`, `bytes`, `caption`.
 - Imports tag their trades with `import_batch_id` (one id per run); there is no batches table. A backup taken before every import is the undo.
-- **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `ts`, `o`, `h`, `l`, `c`, `v`, `source`. Primary key `(symbol, timeframe, ts)`.
+- **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `ts`, `o`, `h`, `l`, `c`, `v`, `source`. Primary key `(symbol, timeframe, ts)`. Not built yet: move data stores its two prices per trade instead.
 - **sync_state**: `account_id`, `last_run_at`, `last_status`, `last_error`.
 - **settings**: key/value, per machine.
 
-Derived values that are expensive or need market data (`r_multiple`, IV and greeks, MAE/MFE, `actual_move_pct`) are **stored** and recomputed when their inputs change. Cheap derivations (wing width, max loss, return on risk) are computed on read in `core`.
+Derived values that are expensive or need market data (`r_multiple`, IV and greeks for scalps, MAE/MFE) are **stored** and recomputed when their inputs change. Cheap derivations (wing width, max loss, return on risk) are computed on read in `core`.
 
 ---
 
@@ -213,12 +215,9 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Return on risk** = net P&L ÷ max loss. **% of max profit captured** = net P&L ÷ max profit.
 - **P&L % of cost** = net P&L ÷ |net cost|, the same number oQuants shows, so imported rows reconcile against the source. Return on risk is the one used for ranking, since P&L % of cost is measured against the credit and flatters wide-wing trades.
 - **Breakevens** = body ± credit per share, with the wings marking where the loss stops growing.
-- **Actual move %** = |S_post − S_pre| ÷ S_pre, where:
-  - S_pre is the regular-session close before the announcement (AMC: same day; BMO: previous trading day);
-  - S_post is the first regular-session open after it.
-  - Imported values take precedence. Otherwise it is derived from daily bars (Phase 2 backfill).
-- **Move ratio** = actual ÷ implied, with buckets `<0.5×`, `0.5–1×`, `1–1.5×`, `>1.5×`.
-- **IV crush %** = (IV before − IV after) ÷ IV before.
+- **Actual move %** = (S_exit − S_entry) ÷ S_entry, signed: the stock price at the close time against the fill time. A typed override wins.
+- **Move ratio** = |actual| ÷ implied, with buckets `<0.5×`, `0.5–1×`, `1–1.5×`, `1.5×+`.
+- **IV crush** = IV before − IV after, in points.
 - The trade page also shows, so an imported trade can be reconciled against its oQuants row at a glance: the **leg breakdown** (type, expiry, strike, size), the **structure label**, the **source notes**, **open and close date/time with holding days**, **net cost**, **P&L** and **P&L % of cost**.
 - **P&L attribution (estimate)**: shown only when all strikes, both IVs and both underlying prices are present.
   - Reprice the position with Black-Scholes at the exit IV and the *entry* underlying price. The difference is the **IV-crush P&L**.
@@ -269,12 +268,13 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **EMA warm-up:** an EMA is only meaningful with roughly 3× its period of prior bars, and the 167 EMA on a 1-minute chart needs about 500 bars, which is more than one session. Bars are therefore loaded from **up to 3 previous sessions** for warm-up, and drawn only once enough history exists. Where it doesn't (a stock's first days, or a gap in free-tier history), that EMA is hidden with a tooltip saying why.
 - On the **daily** timeframe, VWAP and the premarket/previous-day levels don't apply and are disabled; the EMAs use daily bars.
 - **No data** covers: index underlyings not in the free stocks tier (SPX, NDX), sessions older than about 2 years, today's session before data is published, and a missing API key. In these cases the chart area shows an empty state with a reason and an **Attach screenshot** call to action.
+- Move data (iron flies) reads historical SIP minute and daily bars from Alpaca's free plan instead. The Phase 2 chart can decide separately.
 
 ### 8.6 Option chains and live marks (used by the builder, §7.1)
 
 - **Chains.** For a given underlying, Alpaca supplies the listed expirations and, for a chosen expiration, the listed strikes. The builder turns both into pickers, so a position can only be built from contracts that exist. Chains are cached per underlying and expiry for the session; when the API is unreachable the fields fall back to plain typed entry with a notice, rather than blocking the entry of an old trade.
 - **Live marks.** While a position is open, the builder and the trade page show the **current premium per leg** and the unrealised P&L it implies, clearly labelled as an estimate and shown in muted type.
-- **Estimates never become records.** A live mark is never written into an exit price, and never stored as the trade's P&L. Exit fields stay empty until the real fills are typed in. A trade only counts as closed once its exit prices are entered.
+- **Estimates never become records.** A live mark is never written into an exit price, and never stored as the trade's P&L. Exit fields stay empty until the real fills are typed in. A trade only counts as closed once its exit prices are entered. Settling at expiry is the one write from market data: it records the official close's intrinsic values, and only when the user confirms.
 - **Credentials** live in `secrets.json` in the data directory (§5), never in the repository or an export bundle. Without a key the app still works; only the pickers and marks go quiet.
 - **Detailed design:** [2026-09-26-option-chains-and-live-marks-design.md](2026-09-26-option-chains-and-live-marks-design.md). Marks use the cost to close (shorts at the ask, longs at the bid), and chains need a paper-account key.
 
@@ -293,6 +293,7 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **R-multiple** = net P&L ÷ planned risk.
 - **MAE/MFE:** from the 1m bars between first entry and last exit, the worst and best underlying excursion against the trade direction. Stored in dollars of underlying and in R units (÷ |entry − stop|).
 - Also stored per trade: **minutes after open** (first entry − 09:30 ET), **hold time**, and **option cost** (avg entry × contracts × multiplier).
+- `core/pricing` exists since move data: bisection on [1%, 1000%] with a fixed 4% rate. Phase 2 adds Newton-Raphson and the rate setting.
 
 ### 8.4 Missed trades
 
@@ -331,7 +332,7 @@ Detailed for iron flies in [2026-09-27-analytics-and-dashboard-design.md](2026-0
 - **Time of day** (scalps): net P&L, avg R and win rate by minutes-after-open bucket (0–5, 5–15, 15–30, 30–60, 60+) and by hold-time bucket.
 - **Breakdowns:** choose any dimension (setup, ticker, DTE, call/put, book, grade, emotion, mistake, weekday, earnings timing, move-ratio bucket). The result is a table (count, win %, net, avg R, PF) plus a bar chart.
 - **Mistake cost:** for each mistake tag, the net P&L and avg R of trades that carry it, next to the same numbers for trades that don't.
-- **Iron fly page:**
+- **Iron fly page** (all four done; the move charts are detailed in the move-data spec):
   - implied vs actual move scatter (win/loss colored, with a y = x line);
   - IV crush distribution;
   - P&L by move-ratio bucket;
@@ -408,7 +409,7 @@ Each phase ends usable, and each gets its own implementation plan.
 4. Journal grid and trade detail page; manual iron fly entry; exclude flag; soft delete.
 5. ~~CSV/paste importer with column mapping~~ (deferred, §7.2).
 6. oQuants importer: extractor snippet, parser, preview, backup, duplicate guard (§7.2b and its own spec).
-7. Iron fly metrics and P&L attribution in `core`; dashboard, calendar, equity curve, breakdowns, iron fly page (dashboard, calendar, equity curve, breakdowns and the credit-kept view done; the move charts wait for move data).
+7. Iron fly metrics and P&L attribution in `core`; dashboard, calendar, equity curve, breakdowns, iron fly page (dashboard, calendar, equity curve, breakdowns, the credit-kept view and the move charts done; P&L attribution remains).
 8. Setups, mistake/emotion tags, grades, notes.
 9. Export bundle and merge import.
 

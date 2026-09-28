@@ -49,7 +49,9 @@ requests that don't come from `localhost`.
 
 - **Iron flies** — structure (including broken wings, where each side's risk is
   measured separately), credit and how much of it you keep, max loss, breakevens, and the
-  earnings context around the trade.
+  earnings context around the trade: implied vs actual move and IV crush, worked out from
+  your fills and Alpaca's historical stock prices, and settling an expired fly at intrinsic
+  value.
 - **Scalps** — planned stop on the underlying, a Black-Scholes estimate of the
   dollar risk that stop implies, R-multiples, and a generated chart of the session.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
