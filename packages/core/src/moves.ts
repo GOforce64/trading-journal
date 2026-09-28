@@ -260,7 +260,10 @@ const CRUSH_EDGES = [
 export function ivCrushHistogram(flies: readonly MoveRow[]): CrushSummary {
   const crushed = flies.flatMap((trade) => {
     const { ivBefore, ivAfter } = tradeMoves(trade);
-    return ivBefore && ivAfter ? [{ id: trade.id, points: (ivBefore.value - ivAfter.value) * 100 }] : [];
+    // Denoised like the ratios: typed 57% → 32% would otherwise be 24.999999999999993, below the 25 edge.
+    return ivBefore && ivAfter
+      ? [{ id: trade.id, points: denoise((ivBefore.value - ivAfter.value) * 100) }]
+      : [];
   });
   const sorted = crushed.map((item) => item.points).sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);

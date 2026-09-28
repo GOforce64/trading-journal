@@ -34,7 +34,8 @@ function ivWorking(moves: TradeMoves): string {
   const { ivBefore, ivAfter } = moves;
   const notes: string[] = [];
   if (ivBefore && ivAfter) {
-    const points = Math.round((ivBefore.value - ivAfter.value) * 100);
+    // From the whole percentages the tile shows, so "123% → 77%" reads "crush 46 pts".
+    const points = Math.round(ivBefore.value * 100) - Math.round(ivAfter.value * 100);
     notes.push(points >= 0 ? `crush ${points} pts` : `IV rose ${-points} pts`);
   }
   if (!ivBefore && moves.ivBeforeBlank) notes.push(`before ${IV_BLANK[moves.ivBeforeBlank]}`);

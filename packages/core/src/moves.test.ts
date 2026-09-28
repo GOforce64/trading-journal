@@ -272,6 +272,11 @@ describe("ivCrushHistogram", () => {
     expect(ivCrushHistogram([typedRow("e", 1, { ivBefore: 90 })])).toMatchObject({ median: null, count: 0 });
   });
 
+  it("isn't fooled by float noise: typed 57% → 32% is a crush of exactly 25, in 25…50", () => {
+    const { bins } = ivCrushHistogram([typedRow("f", 1, { ivBefore: 57, ivAfter: 32 })]);
+    expect(bins.find((bin) => bin.tradeIds.includes("f"))?.label).toBe("25…50");
+  });
+
   it("takes M's crush from its own fills", () => {
     const { bins } = ivCrushHistogram([mRow]);
     expect(bins.find((bin) => bin.tradeIds.includes("m"))?.label).toBe("25…50"); // 123% → 77%

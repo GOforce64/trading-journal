@@ -409,7 +409,8 @@ describe("TradeDetail move tiles", () => {
     expect(actual).toContain("$21.66 → $20.51 · 0.73× implied");
     const iv = screen.getByTestId("tile-iv").textContent;
     expect(iv).toContain("123% → 77%");
-    expect(iv).toContain("crush 47 pts · from your fills");
+    // The crush is the difference of the percentages shown (123 − 77), as spec §9.2 has it.
+    expect(iv).toContain("crush 46 pts · from your fills");
     const stock = screen.getByTestId("tile-stock").textContent;
     expect(stock).toContain("$21.66 / $20.51");
     expect(stock).toContain("Alpaca, Sep 9 15:54 → Sep 10 15:44 ET");
