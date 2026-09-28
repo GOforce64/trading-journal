@@ -9,7 +9,7 @@ const latestTradesSchema = z.object({
 });
 
 /** How Alpaca names the one symbol that sank a batch: `code=400, message=invalid symbol: GME1`. */
-const INVALID_SYMBOL = /invalid symbol: ([^\s",]+)/;
+export const INVALID_SYMBOL = /invalid symbol: ([^\s",]+)/;
 
 /**
  * Last-trade prices from Alpaca's free Basic plan, where only the IEX feed is real time.
