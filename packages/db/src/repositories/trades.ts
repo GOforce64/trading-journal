@@ -1,5 +1,5 @@
-import type { NewTrade, TradePatch } from "@tj/core";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { type NewTrade, sessionMoment, type TradePatch } from "@tj/core";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { Db } from "../client.js";
 import { ironFlyDetails, legs, trades, tradeTags } from "../schema.js";
 
@@ -20,6 +20,36 @@ export interface TradeFilter {
   includeExcluded?: boolean;
   /** At most this many trades, newest first; 500 when left out, every trade when null. */
   limit?: number | null;
+}
+
+export type PriceSide = "entry" | "exit";
+
+/** A fly the move filler should look at, and which of its stock prices are missing. */
+export interface PriceGap {
+  tradeId: string;
+  underlying: string;
+  openedAt: number;
+  closedAt: number | null;
+  missingEntry: boolean;
+  /** Only a closed trade has an exit price to fetch. */
+  missingExit: boolean;
+}
+
+/** The same minute reads the same bar, so only a change of minute makes a stored price stale (spec §5.4). */
+const sameMoment = (a: number | null, b: number | null) =>
+  a === b || (a != null && b != null && sessionMoment(a) === sessionMoment(b));
+
+/** The stored stock prices an edit makes stale: a new ticker, or a time moved to another minute. */
+function stalePrices(existing: TradeRow, patch: TradePatch) {
+  const cleared: { underlyingPriceEntry?: null; underlyingPriceExit?: null } = {};
+  const newTicker = patch.underlying !== undefined && patch.underlying !== existing.underlying;
+  if (newTicker || (patch.openedAt !== undefined && !sameMoment(patch.openedAt, existing.openedAt))) {
+    cleared.underlyingPriceEntry = null;
+  }
+  if (newTicker || (patch.closedAt !== undefined && !sameMoment(patch.closedAt, existing.closedAt))) {
+    cleared.underlyingPriceExit = null;
+  }
+  return cleared;
 }
 
 /** The transaction handle drizzle hands to a callback, which supports the same query builders. */
@@ -76,14 +106,15 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       }
     }
 
-    if (input.ironFly !== undefined) {
+    if (input.ironFly === null) {
       conn.delete(ironFlyDetails).where(eq(ironFlyDetails.tradeId, tradeId)).run();
-      if (input.ironFly) {
-        conn
-          .insert(ironFlyDetails)
-          .values({ tradeId, ...input.ironFly })
-          .run();
-      }
+    } else if (input.ironFly) {
+      // In place, so the columns no input carries (the stock prices) survive an edit.
+      conn
+        .insert(ironFlyDetails)
+        .values({ tradeId, ...input.ironFly })
+        .onConflictDoUpdate({ target: ironFlyDetails.tradeId, set: { ...input.ironFly } })
+        .run();
     }
 
     if (input.tagIds) {
@@ -206,6 +237,10 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           .where(eq(trades.id, id))
           .run();
         writeChildren(tx, id, patch, timestamp);
+        const cleared = stalePrices(existing, patch);
+        if (Object.keys(cleared).length > 0) {
+          tx.update(ironFlyDetails).set(cleared).where(eq(ironFlyDetails.tradeId, id)).run();
+        }
         return requireRow(tx, id);
       });
     },
@@ -217,6 +252,59 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         .set({ deletedAt: timestamp, updatedAt: timestamp })
         .where(and(eq(trades.id, id), isNull(trades.deletedAt)))
         .run();
+      return result.changes > 0;
+    },
+
+    /** Iron flies missing a stock price the filler can fetch, oldest first (spec §8.1). Excluded ones count. */
+    missingPrices(tradeIds?: readonly string[]): PriceGap[] {
+      if (tradeIds?.length === 0) return [];
+      const conditions = [
+        eq(trades.strategy, "iron_fly"),
+        isNull(trades.deletedAt),
+        or(
+          isNull(ironFlyDetails.underlyingPriceEntry),
+          and(isNotNull(trades.closedAt), isNull(ironFlyDetails.underlyingPriceExit)),
+        ),
+      ];
+      if (tradeIds) conditions.push(inArray(trades.id, [...tradeIds]));
+      return db
+        .select({
+          tradeId: trades.id,
+          underlying: trades.underlying,
+          openedAt: trades.openedAt,
+          closedAt: trades.closedAt,
+          entry: ironFlyDetails.underlyingPriceEntry,
+          exit: ironFlyDetails.underlyingPriceExit,
+        })
+        .from(trades)
+        .innerJoin(ironFlyDetails, eq(ironFlyDetails.tradeId, trades.id))
+        .where(and(...conditions))
+        .orderBy(asc(trades.openedAt))
+        .all()
+        .map((row) => ({
+          tradeId: row.tradeId,
+          underlying: row.underlying,
+          openedAt: row.openedAt,
+          closedAt: row.closedAt,
+          missingEntry: row.entry == null,
+          missingExit: row.closedAt != null && row.exit == null,
+        }));
+    },
+
+    /** Stores a price only where none is, so filling never overwrites. Not a user edit: no timestamp moves. */
+    setUnderlyingPrice(tradeId: string, side: PriceSide, price: number): boolean {
+      const result =
+        side === "entry"
+          ? db
+              .update(ironFlyDetails)
+              .set({ underlyingPriceEntry: price })
+              .where(and(eq(ironFlyDetails.tradeId, tradeId), isNull(ironFlyDetails.underlyingPriceEntry)))
+              .run()
+          : db
+              .update(ironFlyDetails)
+              .set({ underlyingPriceExit: price })
+              .where(and(eq(ironFlyDetails.tradeId, tradeId), isNull(ironFlyDetails.underlyingPriceExit)))
+              .run();
       return result.changes > 0;
     },
   };

@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { openDatabase, runMigrations } from "./index.js";
 import { trades } from "./schema.js";
@@ -41,6 +42,15 @@ describe("runMigrations", () => {
     const backupDir = join(dir, "backups");
     runMigrations(join(dir, "journal.db"), { migrationsFolder: MIGRATIONS, backupDir });
     expect(readdirSync(dir).includes("backups")).toBe(false);
+  });
+
+  it("adds the stock price columns to the fly details", () => {
+    const file = join(tempDir(), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const columns = openDatabase(file).all<{ name: string }>(sql`pragma table_info(iron_fly_details)`);
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["underlying_price_entry", "underlying_price_exit"]),
+    );
   });
 
   it("keeps only the most recent backups", () => {
