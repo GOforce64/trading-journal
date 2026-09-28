@@ -7,5 +7,6 @@ export * from "./money.js";
 export * from "./moves.js";
 export * from "./position.js";
 export * from "./pricing.js";
+export * from "./settle.js";
 export * from "./splits.js";
 export * from "./stats.js";
