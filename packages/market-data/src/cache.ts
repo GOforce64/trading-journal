@@ -1,39 +1,38 @@
-import type { Quote, QuoteSource } from "./quotes.js";
+import type { LatestSource } from "./quotes.js";
 
-export interface QuoteCacheOptions {
+export interface LatestCacheOptions {
   ttlMs: number;
   now?: () => number;
-  /** A failed refresh never throws; it is reported here and those symbols go without a price. */
+  /** A failed refresh never throws; it is reported here and those keys go without a value. */
   onError: (error: unknown) => void;
 }
 
-/** Remembers each symbol's price (or its lack of one) for `ttlMs`, asking the source only for the rest. */
-export function cachedQuotes(source: QuoteSource, options: QuoteCacheOptions): QuoteSource {
+/** Remembers each key's value (or its lack of one) for `ttlMs`, asking the source only for the rest. */
+export function cachedLatest<T>(source: LatestSource<T>, options: LatestCacheOptions): LatestSource<T> {
   const { ttlMs, now = Date.now, onError } = options;
-  const cache = new Map<string, { quote: Quote | null; fetchedAt: number }>();
+  const cache = new Map<string, { value: T | null; fetchedAt: number }>();
 
   return {
-    async latest(symbols) {
+    async latest(keys) {
       const time = now();
-      const stale = symbols.filter((symbol) => {
-        const hit = cache.get(symbol);
+      const stale = keys.filter((key) => {
+        const hit = cache.get(key);
         return !hit || time - hit.fetchedAt >= ttlMs;
       });
       if (stale.length > 0) {
         try {
           const fetched = await source.latest(stale);
-          for (const symbol of stale)
-            cache.set(symbol, { quote: fetched.get(symbol) ?? null, fetchedAt: time });
+          for (const key of stale) cache.set(key, { value: fetched.get(key) ?? null, fetchedAt: time });
         } catch (error) {
-          // A stale price shown as current would mislead, so it goes rather than stays.
-          for (const symbol of stale) cache.delete(symbol);
+          // A stale value shown as current would mislead, so it goes rather than stays.
+          for (const key of stale) cache.delete(key);
           onError(error);
         }
       }
-      const found = new Map<string, Quote>();
-      for (const symbol of symbols) {
-        const quote = cache.get(symbol)?.quote;
-        if (quote) found.set(symbol, quote);
+      const found = new Map<string, T>();
+      for (const key of keys) {
+        const value = cache.get(key)?.value;
+        if (value != null) found.set(key, value);
       }
       return found;
     },

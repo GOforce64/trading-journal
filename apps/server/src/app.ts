@@ -2,10 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Db } from "@tj/db";
-import type { QuoteSource } from "@tj/market-data";
 import { Hono } from "hono";
+import type { MarketData } from "./marketData.js";
 import { importRoutes } from "./routes/import.js";
+import { marketRoutes } from "./routes/market.js";
 import { quoteRoutes } from "./routes/quotes.js";
+import { type SettingsDeps, settingsRoutes } from "./routes/settings.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { tradeRoutes } from "./routes/trades.js";
 
@@ -16,8 +18,10 @@ export interface AppDeps {
   webDir?: string;
   /** Snapshots the database before an import writes; returns the backup's path. */
   backup?: () => string;
-  /** Live reference prices. Omitted when no data key is set up, and the app carries on without them. */
-  quotes?: QuoteSource;
+  /** Live market data. Omitted in tests that don't need it; the app then answers as if no key were set up. */
+  market?: MarketData;
+  /** Where Settings saves the key, and how it tests one first. Omitted in tests that don't need it. */
+  settings?: SettingsDeps;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -32,12 +36,21 @@ export function createApp(deps: AppDeps) {
       if (!LOCAL_HOSTS.has(host)) return c.json({ error: "forbidden host" }, 403);
       await next();
     })
+    // A page on another site can still send a plain GET, and one to a market route spends the Alpaca quota.
+    // Browsers say where a call comes from; clients outside a browser send nothing and are let through.
+    .use("/api/*", async (c, next) => {
+      const site = c.req.header("sec-fetch-site");
+      if (site === "cross-site" || site === "same-site") return c.json({ error: "forbidden site" }, 403);
+      await next();
+    })
     .get("/api/health", (c) => c.json({ ok: true }))
     .route("/api/trades", tradeRoutes(deps.db, deps.now))
     .route("/api/setups", setups)
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
-    .route("/api/quotes", quoteRoutes(deps.quotes));
+    .route("/api/quotes", quoteRoutes(deps.market))
+    .route("/api/settings", settingsRoutes(deps.market, deps.settings))
+    .route("/api", marketRoutes(deps.market));
 
   if (deps.webDir) {
     const webDir = deps.webDir;

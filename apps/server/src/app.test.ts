@@ -127,6 +127,21 @@ describe("createApp", () => {
     expect(res.status).toBe(403);
   });
 
+  // A page on another site can still send a plain GET, and one to a market route would spend the Alpaca quota.
+  it.each(["cross-site", "same-site"])("refuses API calls a browser marks %s", async (site) => {
+    const res = await app.request("/api/health", { headers: { ...LOCAL, "sec-fetch-site": site } });
+    expect(res.status).toBe(403);
+  });
+
+  it.each([
+    ["the app's own page", { "sec-fetch-site": "same-origin" }],
+    ["a URL typed into the address bar", { "sec-fetch-site": "none" }],
+    ["a client outside a browser", {}],
+  ])("answers API calls from %s", async (_from, headers) => {
+    const res = await app.request("/api/health", { headers: { ...LOCAL, ...headers } });
+    expect(res.status).toBe(200);
+  });
+
   it("serves seeded setups and tags", async () => {
     const setups = await readJson<{ name: string }[]>(await app.request("/api/setups", { headers: LOCAL }));
     const tags = await readJson<{ kind: string }[]>(await app.request("/api/tags", { headers: LOCAL }));

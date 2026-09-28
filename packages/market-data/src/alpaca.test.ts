@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { alpacaQuotes } from "./alpaca.js";
+import { fakeFetch, json } from "./testing.js";
 
 const KEYS = { keyId: "PKTESTKEYID", secretKey: "test-secret-do-not-log" };
 
@@ -27,24 +28,9 @@ const latestTrades = {
   },
 };
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-
 /** Alpaca's answer when one symbol in a batch is unknown: the whole request fails. */
 const invalidSymbol = (symbol: string) =>
   json({ message: `code=400, message=invalid symbol: ${symbol}` }, 400);
-
-/** Plays back one reply per call and records what each call asked for. */
-function fakeFetch(...replies: Response[]) {
-  const calls: { url: URL; headers: Headers }[] = [];
-  const fetch = async (input: string, init?: RequestInit) => {
-    calls.push({ url: new URL(input), headers: new Headers(init?.headers) });
-    const reply = replies.shift();
-    if (!reply) throw new Error("Alpaca was called more often than expected");
-    return reply;
-  };
-  return { fetch, calls };
-}
 
 describe("alpacaQuotes", () => {
   it("asks the IEX feed for every symbol's latest trade in one call, with the key", async () => {

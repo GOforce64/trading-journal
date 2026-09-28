@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, posix, win32 } from "node:path";
+import type { AlpacaKeys } from "@tj/market-data";
 import { z } from "zod";
 
 /** Data lives outside the repo so trading history can never be committed (spec §5). */
@@ -61,4 +62,49 @@ export function readSecrets(file: string): Secrets {
     throw new Error(`${file}: check ${fields}; expected {"alpaca": {"keyId": "…", "secretKey": "…"}}`);
   }
   return parsed.data;
+}
+
+/** secrets.json exists but is not a JSON object. It is left alone, since it may hold other secrets. */
+export class SecretsFileBroken extends Error {
+  constructor(file: string, problem: string) {
+    super(`${file} ${problem}; fix or delete it by hand`);
+    this.name = "SecretsFileBroken";
+  }
+}
+
+/**
+ * Sets (or, with null, removes) the Alpaca key in secrets.json and keeps every other entry.
+ * The new file is written beside the old one, made readable by its owner only, then renamed
+ * into place, so a crash never leaves half a file.
+ */
+export function writeAlpacaKeys(file: string, keys: AlpacaKeys | null): void {
+  const { alpaca: _replaced, ...rest } = readSecretsObject(file);
+  const next = keys ? { ...rest, alpaca: { keyId: keys.keyId, secretKey: keys.secretKey } } : rest;
+  const temp = `${file}.tmp`;
+  writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  // The mode above only applies to a new file; a temp file left by a crash keeps its old one.
+  chmodSync(temp, 0o600);
+  renameSync(temp, file);
+}
+
+/** The file as a plain object, entries this app does not know included. No file is an empty object. */
+function readSecretsObject(file: string): Record<string, unknown> {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // As in readSecrets: the parser's message would quote the text around the mistake.
+    throw new SecretsFileBroken(file, "is not valid JSON");
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw new SecretsFileBroken(file, "does not hold a JSON object");
+  }
+  return data as Record<string, unknown>;
 }

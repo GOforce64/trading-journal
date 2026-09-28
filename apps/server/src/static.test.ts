@@ -28,6 +28,14 @@ describe("static hosting", () => {
     expect(await res.text()).toContain("Journal");
   });
 
+  it("opens the app from a link on another site", async () => {
+    const res = await appWithWeb().request("/trades/abc", {
+      headers: { ...LOCAL, "sec-fetch-site": "cross-site" },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Journal");
+  });
+
   it("serves built assets", async () => {
     const res = await appWithWeb().request("/assets/app.js", { headers: LOCAL });
     expect(res.status).toBe(200);

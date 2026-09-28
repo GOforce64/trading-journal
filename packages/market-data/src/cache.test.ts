@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { cachedQuotes } from "./cache.js";
+import { cachedLatest } from "./cache.js";
 import type { Quote, QuoteSource } from "./quotes.js";
 
 const TTL = 30_000;
@@ -20,7 +20,7 @@ function fakeSource() {
   return { source, asked, state };
 }
 
-describe("cachedQuotes", () => {
+describe("cachedLatest", () => {
   let clock: number;
   let errors: unknown[];
   let fake: ReturnType<typeof fakeSource>;
@@ -34,7 +34,7 @@ describe("cachedQuotes", () => {
       ["M", M],
       ["ENVX", ENVX],
     ]);
-    quotes = cachedQuotes(fake.source, {
+    quotes = cachedLatest(fake.source, {
       ttlMs: TTL,
       now: () => clock,
       onError: (error) => errors.push(error),

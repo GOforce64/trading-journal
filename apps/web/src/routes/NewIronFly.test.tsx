@@ -55,7 +55,8 @@ describe("NewIronFly", () => {
     fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-id"));
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const post = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "POST");
+    const body = JSON.parse(String(post?.[1]?.body));
     expect(body.strategy).toBe("iron_fly");
     expect(body.netPnl).toBe(512);
     expect(body.fees).toBe(8);

@@ -1,6 +1,27 @@
-import { ironFlyMetrics, ironFlyStructureFromLegs, type PricedLeg, positionCash } from "@tj/core";
-import { type ReactNode, useMemo, useState } from "react";
+import {
+  closeEstimate,
+  ironFlyMetrics,
+  ironFlyStructureFromLegs,
+  type MarkableLeg,
+  type OptionQuote,
+  occSymbol,
+  type PricedLeg,
+  positionCash,
+} from "@tj/core";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ESTIMATE_STYLE, estimateTitle, signedUsd } from "../components/Estimate.js";
 import { Money, Panel } from "../components/ui.js";
+import {
+  openContracts,
+  TICKER,
+  todayNy,
+  useChain,
+  useCompanyName,
+  useOptionQuotes,
+  useQuotes,
+  useSettled,
+} from "../market.js";
+import { ExpirySelect, listedStrike, nearestStrike, StrikeSelect } from "./ChainPickers.js";
 
 /** The four legs of a short iron butterfly, in the order oQuants shows them. */
 const LEG_ROLES = [
@@ -11,6 +32,9 @@ const LEG_ROLES = [
 ] as const;
 
 type LegKey = (typeof LEG_ROLES)[number]["key"];
+
+const FIELD_LABEL = "flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider";
+const NO_QUOTES = new Map<string, OptionQuote>();
 
 export interface LegFields {
   strike: string;
@@ -96,15 +120,71 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     legs: { ...EMPTY.legs, ...initial?.legs },
   });
   const [problem, setProblem] = useState<string | null>(null);
+  /** The user chose to type the expiry and strikes although a chain is available. */
+  const [typed, setTyped] = useState(false);
+  const [cleared, setCleared] = useState<string | null>(null);
 
   const set = (key: keyof IronFlyFormValues) => (event: { target: { value: string } }) =>
     setValues((current) => ({ ...current, [key]: event.target.value }));
 
-  const setLeg = (key: LegKey, field: keyof LegFields) => (event: { target: { value: string } }) =>
+  const setLegValue = (key: LegKey, field: keyof LegFields, value: string) =>
     setValues((current) => ({
       ...current,
-      legs: { ...current.legs, [key]: { ...current.legs[key], [field]: event.target.value } },
+      legs: { ...current.legs, [key]: { ...current.legs[key], [field]: value } },
     }));
+
+  const setLeg = (key: LegKey, field: keyof LegFields) => (event: { target: { value: string } }) =>
+    setLegValue(key, field, event.target.value);
+
+  // The chain from the open date on, so an old trade can still pick its expired contracts (spec §8).
+  const symbol = useSettled(values.underlying.trim().toUpperCase());
+  const today = todayNy();
+  const openedOn = values.openedAt ? values.openedAt.slice(0, 10) : today;
+  const chain = useChain(symbol, openedOn < today ? openedOn : undefined);
+  const expirations = chain.data?.expirations ?? [];
+  const pickers = !typed && expirations.length > 0;
+  const strikes = expirations.find((expiration) => expiration.date === values.expiry)?.strikes ?? [];
+  const { data: stockQuotes } = useQuotes(pickers && openedOn === today ? [symbol] : []);
+  const atm = nearestStrike(strikes, stockQuotes?.[symbol]?.price);
+
+  // Fill a blank Company from Alpaca, or replace a name this form filled in for another symbol, clearing
+  // it when the new symbol has none. A name typed by hand is never touched.
+  const company = useCompanyName(symbol);
+  const autoName = useRef<string | null>(null);
+  const companySettled = !TICKER.test(symbol) || company.isSuccess || company.isError;
+  const companyName = company.isSuccess ? company.data : null;
+  useEffect(() => {
+    if (!companySettled) return;
+    const previous = autoName.current;
+    autoName.current = companyName;
+    setValues((current) => {
+      const untouched =
+        current.underlyingName.trim() === "" || (previous !== null && current.underlyingName === previous);
+      const next = companyName ?? "";
+      return untouched && current.underlyingName !== next ? { ...current, underlyingName: next } : current;
+    });
+  }, [companySettled, companyName]);
+
+  /** Switching expiry keeps the strikes it lists and clears the others, naming them. */
+  function pickExpiry(expiry: string) {
+    const listed = expirations.find((expiration) => expiration.date === expiry)?.strikes ?? [];
+    const dropped = expiry
+      ? LEG_ROLES.filter((role) => {
+          const strike = values.legs[role.key].strike;
+          return strike !== "" && listedStrike(listed, strike) === undefined;
+        })
+      : [];
+    setValues((current) => {
+      const legs = { ...current.legs };
+      for (const role of dropped) legs[role.key] = { ...legs[role.key], strike: "" };
+      return { ...current, expiry, legs };
+    });
+    setCleared(
+      dropped.length > 0
+        ? `Cleared strikes not listed for ${expiry}: ${dropped.map((role) => role.label.toLowerCase()).join(", ")}.`
+        : null,
+    );
+  }
 
   const derived = useMemo(() => {
     const legs = toPricedLegs(values);
@@ -129,6 +209,58 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     return { legs, cash, structure, metrics };
   }, [values]);
 
+  // What closing the open legs now would realise: exit-field hints and a Derived row, never a value (spec §8).
+  const markLegs = useMemo<MarkableLeg[]>(
+    () =>
+      values.expiry && derived
+        ? derived.legs.map((leg) => ({
+            right: leg.right,
+            strike: leg.strike,
+            expiry: values.expiry,
+            quantity: leg.quantity,
+            multiplier: leg.multiplier ?? 100,
+            openPrice: leg.openPrice,
+            closePrice: leg.closePrice ?? null,
+          }))
+        : [],
+    [derived, values.expiry],
+  );
+  const markTrade = {
+    underlying: symbol,
+    legs: markLegs,
+    fees: derived?.cash.fees ?? 0,
+    feesOpen: zeroIfBlank(values.feesOpen),
+    feesClose: zeroIfBlank(values.feesClose),
+  };
+  // A leg's hint needs only its own contract, so it shows before the other legs are filled in.
+  const hinted =
+    TICKER.test(symbol) && values.expiry >= today
+      ? LEG_ROLES.flatMap((role) => {
+          const fields = values.legs[role.key];
+          const strike = num(fields.strike);
+          if (fields.exit.trim() !== "" || Number.isNaN(strike)) return [];
+          const contract = occSymbol({
+            underlying: symbol,
+            expiry: values.expiry,
+            right: role.right,
+            strike,
+          });
+          return [{ key: role.key, contract }];
+        })
+      : [];
+  const { data: optionQuotes } = useOptionQuotes([
+    ...openContracts(markTrade, today),
+    ...hinted.map((leg) => leg.contract),
+  ]);
+  const estimate =
+    markLegs.length > 0 ? closeEstimate(markTrade, optionQuotes?.quotes ?? NO_QUOTES, today) : null;
+  /** The cost to close one leg: a short is bought back at the ask, a long sold at the bid. */
+  const markFor = (role: (typeof LEG_ROLES)[number]) => {
+    const contract = hinted.find((leg) => leg.key === role.key)?.contract;
+    const quote = contract ? optionQuotes?.quotes.get(contract) : undefined;
+    return (role.short ? quote?.ask : quote?.bid)?.toFixed(2);
+  };
+
   function submit() {
     if (toPricedLegs(values) === "fractional-size") {
       setProblem("Sizes are whole contracts.");
@@ -136,6 +268,10 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     }
     if (!derived?.structure) {
       setProblem("Every leg needs a strike, a size and an entry price, and at least one wing is required.");
+      return;
+    }
+    if (!values.expiry) {
+      setProblem("An expiry is required.");
       return;
     }
     setProblem(null);
@@ -156,7 +292,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       legs: legs.map((leg) => ({
         right: leg.right,
         strike: leg.strike,
-        expiry: values.expiry || "2100-01-01",
+        expiry: values.expiry,
         quantity: leg.quantity,
         multiplier: 100,
         openPrice: leg.openPrice,
@@ -189,27 +325,52 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     </label>
   );
 
-  const legInput = (key: LegKey, label: string, field: keyof LegFields) => (
+  const legInput = (key: LegKey, label: string, field: keyof LegFields, placeholder?: string) => (
     <input
       aria-label={label}
       type="number"
       step={field === "size" ? "1" : "0.01"}
       min={field === "size" ? 1 : undefined}
       value={values.legs[key][field]}
+      placeholder={placeholder}
       onChange={setLeg(key, field)}
-      className="num w-full rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-right text-[13px] text-fg outline-none focus:border-accent"
+      className="num w-full rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-right text-[13px] text-fg outline-none placeholder:text-[#4a5163] placeholder:italic focus:border-accent"
     />
   );
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
+    // Side by side from 1280 px: narrower, the legs table can't fit a strike like "1027.5 (ATM)" and its prices.
+    <div className="grid gap-3 xl:grid-cols-[1fr_280px]">
       <div className="flex flex-col gap-3">
         <Panel title="Trade">
           <div className="grid grid-cols-3 gap-2">
             {input("Underlying", values.underlying, set("underlying"))}
             {input("Company", values.underlyingName, set("underlyingName"))}
-            {input("Expiry", values.expiry, set("expiry"), "date")}
+            {/* Before Expiry: the listed expiries start from the open date. */}
             {input("Opened", values.openedAt, set("openedAt"), "datetime-local")}
+            {pickers ? (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="expiry-select" className={FIELD_LABEL}>
+                  Expiry
+                  <ExpirySelect
+                    id="expiry-select"
+                    value={values.expiry}
+                    expirations={expirations}
+                    from={openedOn}
+                    onChange={pickExpiry}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTyped(true)}
+                  className="self-start text-[10px] text-accent"
+                >
+                  type instead
+                </button>
+              </div>
+            ) : (
+              input("Expiry", values.expiry, set("expiry"), "date")
+            )}
             {input("Closed", values.closedAt, set("closedAt"), "datetime-local")}
             <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider">
               Book
@@ -224,6 +385,18 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
               </select>
             </label>
           </div>
+          {!typed && chain.data?.unavailable && (
+            <p className="mt-2 text-[10px] text-muted">{chain.data.unavailable.message}</p>
+          )}
+          {typed && expirations.length > 0 && (
+            <p className="mt-2 text-[10px] text-muted">
+              Typing the expiry and strikes.{" "}
+              <button type="button" onClick={() => setTyped(false)} className="text-accent">
+                pick from the chain
+              </button>
+            </p>
+          )}
+          {pickers && cleared && <p className="mt-2 text-[10px] text-muted">{cleared}</p>}
         </Panel>
 
         <Panel title="Position">
@@ -246,10 +419,24 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
                 return (
                   <tr key={role.key} className="border-line border-t">
                     <td className={`py-1 ${role.short ? "text-down" : "text-up"}`}>{role.label}</td>
-                    <td className="px-1">{legInput(role.key, `${role.label} strike`, "strike")}</td>
+                    <td className="px-1">
+                      {pickers ? (
+                        <StrikeSelect
+                          label={`${role.label} strike`}
+                          value={values.legs[role.key].strike}
+                          strikes={strikes}
+                          atm={atm}
+                          onChange={(strike) => setLegValue(role.key, "strike", strike)}
+                        />
+                      ) : (
+                        legInput(role.key, `${role.label} strike`, "strike")
+                      )}
+                    </td>
                     <td className="px-1">{legInput(role.key, `${role.label} size`, "size")}</td>
                     <td className="px-1">{legInput(role.key, `${role.label} entry`, "entry")}</td>
-                    <td className="px-1">{legInput(role.key, `${role.label} exit`, "exit")}</td>
+                    <td className="px-1">
+                      {legInput(role.key, `${role.label} exit`, "exit", markFor(role))}
+                    </td>
                     <td className="text-right">
                       <Money value={leg ? leg.quantity * 100 * leg.openPrice : null} />
                     </td>
@@ -305,6 +492,17 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
                 <Money value={derived.cash.netPnl} />
               </span>
             </Row>
+            {estimate?.kind === "estimate" && (
+              <Row label="Est. P&L if closed now">
+                <span
+                  data-testid="derived-estimate"
+                  className={ESTIMATE_STYLE}
+                  title={estimateTitle(estimate)}
+                >
+                  est {signedUsd(estimate.netPnl)}
+                </span>
+              </Row>
+            )}
             {derived.metrics && (
               <>
                 <Row label="Max profit">{usd(derived.metrics.maxProfit)}</Row>

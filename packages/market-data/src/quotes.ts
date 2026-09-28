@@ -5,7 +5,9 @@ export interface Quote {
   at: number;
 }
 
-export interface QuoteSource {
-  /** Symbols without a known price are left out rather than guessed. */
-  latest(symbols: readonly string[]): Promise<Map<string, Quote>>;
+/** Answers "what is the latest value for each of these keys". Keys it knows nothing about are left out, never guessed. */
+export interface LatestSource<T> {
+  latest(keys: readonly string[]): Promise<Map<string, T>>;
 }
+
+export type QuoteSource = LatestSource<Quote>;

@@ -7,6 +7,7 @@ import { Import } from "./routes/Import.js";
 import { IronFlies } from "./routes/IronFlies.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
+import { Settings } from "./routes/Settings.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
 
 function RootLayout() {
@@ -84,6 +85,12 @@ const importRoute = createRoute({
   component: () => <Import onDone={() => router.navigate({ to: "/iron-flies" })} />,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: () => <Settings />,
+});
+
 /** Nav destinations whose features arrive in later plans; better than a dead link. */
 const PLACEHOLDERS = [
   {
@@ -103,12 +110,6 @@ const PLACEHOLDERS = [
     title: "Playbook",
     phase: "a later Phase 1 plan",
     blurb: "Your named setups, each with its own win rate, average R and P&L.",
-  },
-  {
-    path: "/settings",
-    title: "Settings",
-    phase: "a later Phase 1 plan",
-    blurb: "Data directory, API tokens, risk-free rate and chart defaults.",
   },
 ];
 
@@ -133,6 +134,7 @@ export const router = createRouter({
     tradeDetailRoute,
     editTradeRoute,
     importRoute,
+    settingsRoute,
     ...placeholderRoutes,
   ]),
 });

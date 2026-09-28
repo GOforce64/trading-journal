@@ -19,6 +19,13 @@ Set `TJ_DATA_DIR` to put it somewhere else. The directory holds `journal.db`, yo
 screenshots, automatic backups taken before every migration, and any API tokens you
 configure. None of it is ever written into the repository.
 
+### Live prices and option chains (optional)
+
+With a free [Alpaca](https://alpaca.markets) paper-account key, saved on the Settings
+page, the journal shows each symbol's last price, lets the builder pick expiries and
+strikes from the listed chain, and estimates what closing an open trade would realise.
+Estimates are shown, never stored. Without a key everything else works as before.
+
 ## Quickstart
 
 ```
