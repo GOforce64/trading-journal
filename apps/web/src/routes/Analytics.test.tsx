@@ -302,6 +302,14 @@ describe("Analytics Iron flies: move data", () => {
     );
     expect(screen.getByTestId("move-scatter").textContent).toBe("AA 10.0/4.0; BB 10.0/15.0");
     const ratio = within(screen.getByRole("region", { name: "P&L by move ratio" }));
+    // Short headers that never wrap: at 1024 px a long first header pushed "Trades" into "Won".
+    expect(ratio.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+      "Ratio",
+      "Trades",
+      "Won",
+      "Net",
+    ]);
+    expect(ratio.getByRole("row", { name: /Ratio/ }).className).toContain("whitespace-nowrap");
     expect(ratio.getByText("< 0.5×").closest("tr")?.textContent).toContain("+$100");
     expect(ratio.getByText("1.5×+").closest("tr")?.textContent).toContain("−$300");
     expect(ratio.getByText(/Moved more than implied/).textContent).toBe(

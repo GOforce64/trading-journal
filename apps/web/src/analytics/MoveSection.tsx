@@ -12,12 +12,12 @@ function RatioTable({ summary }: { summary: RatioSummary }) {
   const beyond = summary.beyondImplied;
   return (
     <>
-      <table className="w-full border-collapse text-[11px]">
+      <table className="w-full border-collapse whitespace-nowrap text-[11px]">
         <thead className="text-[9px] text-muted uppercase tracking-wider">
-          <tr>
-            <th className="text-left font-medium">Actual ÷ implied</th>
-            <th className="text-right font-medium">Trades</th>
-            <th className="text-right font-medium">Won</th>
+          <tr className="whitespace-nowrap">
+            <th className="text-left font-medium">Ratio</th>
+            <th className="pl-3 text-right font-medium">Trades</th>
+            <th className="pl-3 text-right font-medium">Won</th>
             <th className="text-right font-medium">Net</th>
           </tr>
         </thead>
@@ -25,9 +25,9 @@ function RatioTable({ summary }: { summary: RatioSummary }) {
           {summary.buckets.map((bucket) => (
             <tr key={bucket.label} className="border-line border-t">
               <td className="py-0.5">{bucket.label}</td>
-              <td className="num text-right text-muted">{bucket.trades}</td>
-              <td className="num text-right text-muted">{bucket.won}</td>
-              <td className="w-36">
+              <td className="num pl-3 text-right text-muted">{bucket.trades}</td>
+              <td className="num pl-3 text-right text-muted">{bucket.won}</td>
+              <td className="w-28">
                 <div className="flex items-center justify-end gap-1.5">
                   <span className={`num ${tone(bucket.net)}`}>{dollars(bucket.net)}</span>
                   <span className="flex w-12">
