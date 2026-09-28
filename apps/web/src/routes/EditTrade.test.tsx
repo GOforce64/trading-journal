@@ -143,4 +143,36 @@ describe("EditTrade", () => {
     expect(body.legs).toHaveLength(4);
     expect(body.underlying).toBe("ACME");
   });
+
+  it("loads a typed move into its field, with the computed ones as placeholders", async () => {
+    const priced = {
+      ...trade,
+      ironFly: { ...trade.ironFly, impliedMovePct: 6.5, underlyingPriceEntry: 25, underlyingPriceExit: 26 },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(JSON.stringify(priced), { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    setup();
+    await waitFor(() => expect(screen.getByLabelText("Implied %")).toBeTruthy());
+    expect((screen.getByLabelText("Implied %") as HTMLInputElement).value).toBe("6.5");
+    // Straddle 1.40 + 1.10 over $25, and $25 → $26.
+    expect(screen.getByLabelText("Implied %").getAttribute("placeholder")).toBe("10.0");
+    expect(screen.getByLabelText("Actual %").getAttribute("placeholder")).toBe("4.0");
+  });
+
+  it("fetches the trade's stock prices after saving", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    await waitFor(() => expect(screen.getByLabelText("Short call exit")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    await waitFor(() => {
+      const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/moves/fill"));
+      expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["t1"] });
+    });
+  });
 });

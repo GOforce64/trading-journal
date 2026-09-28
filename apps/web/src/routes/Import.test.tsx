@@ -52,7 +52,9 @@ describe("Import", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json(preview))
-      .mockResolvedValueOnce(json({ imported: 1, backupFile: "/data/backups/journal-x.db" }));
+      .mockResolvedValueOnce(
+        json({ imported: 1, backupFile: "/data/backups/journal-x.db", importedIds: [] }),
+      );
     vi.stubGlobal("fetch", fetchMock);
     setup();
 
@@ -100,5 +102,31 @@ describe("Import", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
 
     await waitFor(() => expect(screen.getByText(/"Cost" column is missing/)).toBeTruthy());
+  });
+
+  it("fetches the imported trades' stock prices, and says how it went", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json(preview))
+      .mockResolvedValueOnce(json({ imported: 1, backupFile: null, importedIds: ["id-1"] }))
+      .mockResolvedValueOnce(
+        json({
+          filled: 1,
+          missing: [{ tradeId: "id-1", underlying: "XYZ", side: "exit", reason: "no_bars" }],
+          unavailable: null,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    setup();
+
+    paste('{"format":"oquants-cells/1"}');
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Import 1" }));
+
+    expect(
+      await screen.findByText("Filled 1 of 2 stock prices. 1 missing, see the Iron flies tab."),
+    ).toBeTruthy();
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/api/moves/fill");
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ tradeIds: ["id-1"] });
   });
 });

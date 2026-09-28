@@ -54,6 +54,11 @@ export interface IronFlyFormValues {
   feesOpen: string;
   feesClose: string;
   notes: string;
+  /** Typed move overrides, in percentage points. Blank uses the computed value (spec §9.3). */
+  impliedMovePct: string;
+  actualMovePct: string;
+  ivBefore: string;
+  ivAfter: string;
   legs: Record<LegKey, LegFields>;
 }
 
@@ -70,11 +75,25 @@ const EMPTY: IronFlyFormValues = {
   feesOpen: "0",
   feesClose: "0",
   notes: "",
+  impliedMovePct: "",
+  actualMovePct: "",
+  ivBefore: "",
+  ivAfter: "",
   legs: { shortCall: EMPTY_LEG, shortPut: EMPTY_LEG, longCall: EMPTY_LEG, longPut: EMPTY_LEG },
 };
 
+const OVERRIDES = [
+  { key: "impliedMovePct", label: "Implied %" },
+  { key: "actualMovePct", label: "Actual %" },
+  { key: "ivBefore", label: "IV before %" },
+  { key: "ivAfter", label: "IV after %" },
+] as const;
+
+export type OverrideKey = (typeof OVERRIDES)[number]["key"];
+
 const num = (value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
 const zeroIfBlank = (value: string): number => (Number.isNaN(num(value)) ? 0 : num(value));
+const nullIfBlank = (value: string): number | null => (Number.isNaN(num(value)) ? null : num(value));
 const millis = (value: string): number => (value ? new Date(value).getTime() : Number.NaN);
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -111,9 +130,18 @@ export interface IronFlyFormProps {
   busy?: boolean;
   error?: string | null;
   onSubmit: (payload: Record<string, unknown>) => void;
+  /** The computed moves, shown in the empty override fields; "auto" where there are none. */
+  movePlaceholders?: Partial<Record<OverrideKey, string>>;
 }
 
-export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: IronFlyFormProps) {
+export function IronFlyForm({
+  initial,
+  submitLabel,
+  busy,
+  error,
+  onSubmit,
+  movePlaceholders,
+}: IronFlyFormProps) {
   const [values, setValues] = useState<IronFlyFormValues>({
     ...EMPTY,
     ...initial,
@@ -303,6 +331,10 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
         contracts: cash.contracts,
         creditPerShare: -(cash.netCost - cash.fees) / cash.shares,
         netCost: cash.netCost,
+        impliedMovePct: nullIfBlank(values.impliedMovePct),
+        actualMovePct: nullIfBlank(values.actualMovePct),
+        ivBefore: nullIfBlank(values.ivBefore),
+        ivAfter: nullIfBlank(values.ivAfter),
       },
     });
   }
@@ -312,6 +344,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
     value: string,
     onChange: (e: { target: { value: string } }) => void,
     type = "text",
+    placeholder?: string,
   ) => (
     <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider">
       {label}
@@ -319,8 +352,9 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
         aria-label={label}
         type={type}
         value={value}
+        placeholder={placeholder}
         onChange={onChange}
-        className="num rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[13px] text-fg outline-none focus:border-accent"
+        className="num rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[13px] text-fg outline-none placeholder:text-[#4a5163] placeholder:italic focus:border-accent"
       />
     </label>
   );
@@ -452,6 +486,23 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
           <div className="mt-3 grid grid-cols-3 gap-2">
             {input("Entry fees", values.feesOpen, set("feesOpen"), "number")}
             {input("Exit fees", values.feesClose, set("feesClose"), "number")}
+          </div>
+          <div className="mt-3 text-[10px] text-muted uppercase tracking-wider">Move overrides</div>
+          <p className="text-[10px] text-muted">
+            Blank uses the value worked out from Alpaca's stock prices and your fills.
+          </p>
+          <div className="mt-1 grid grid-cols-4 gap-2">
+            {OVERRIDES.map((override) => (
+              <div key={override.key}>
+                {input(
+                  override.label,
+                  values[override.key],
+                  set(override.key),
+                  "number",
+                  movePlaceholders?.[override.key] ?? "auto",
+                )}
+              </div>
+            ))}
           </div>
           <label className="mt-2 flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider">
             Notes

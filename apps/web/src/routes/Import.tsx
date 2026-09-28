@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api.js";
 import { Money, Panel } from "../components/ui.js";
+import { fillSummary, useFillMoves } from "../moves.js";
 
 interface PreviewRow {
   status: "new" | "existing" | "skipped";
@@ -23,6 +24,7 @@ interface Preview {
 interface CommitResult {
   imported: number;
   backupFile: string | null;
+  importedIds: string[];
 }
 
 const NOT_AN_EXPORT =
@@ -63,6 +65,7 @@ export function Import({ onDone }: { onDone?: () => void }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [result, setResult] = useState<CommitResult | null>(null);
+  const fill = useFillMoves();
 
   const previewStep = useMutation({
     mutationFn: (payload: unknown) => send("preview", payload) as Promise<Preview>,
@@ -79,6 +82,9 @@ export function Import({ onDone }: { onDone?: () => void }) {
       setResult(data);
       setPreview(null);
       queryClient.invalidateQueries({ queryKey: ["trades"] });
+      fill.reset();
+      // The new trades' stock prices, for their move data (spec §9.1).
+      if (data.importedIds.length > 0) fill.mutate(data.importedIds);
     },
     onError: (error) => setProblem(error.message),
   });
@@ -143,6 +149,10 @@ export function Import({ onDone }: { onDone?: () => void }) {
               <button type="button" onClick={onDone} className="ml-2 text-accent underline">
                 Open Iron Flies
               </button>
+            )}
+            {fill.isPending && <p className="mt-1 text-muted">Fetching stock prices from Alpaca…</p>}
+            {fill.data && (
+              <p className="mt-1 text-muted">{fillSummary(fill.data, ", see the Iron flies tab")}</p>
             )}
           </p>
         )}

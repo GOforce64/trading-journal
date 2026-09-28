@@ -226,6 +226,37 @@ describe("IronFlyForm", () => {
     expect(screen.getByLabelText("Short call size").getAttribute("step")).toBe("1");
     expect(screen.getByLabelText("Short call entry").getAttribute("step")).toBe("0.01");
   });
+
+  it("saves typed move overrides, and blank ones as null", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    fill("Implied %", "7.1");
+    fill("Actual %", "-4.2");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit.mock.calls[0]?.[0].ironFly).toMatchObject({
+      impliedMovePct: 7.1,
+      actualMovePct: -4.2,
+      ivBefore: null,
+      ivAfter: null,
+    });
+  });
+
+  it("shows the computed moves as placeholders, and auto where there are none", () => {
+    stubApi();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <IronFlyForm
+          submitLabel="Save changes"
+          onSubmit={vi.fn()}
+          movePlaceholders={{ impliedMovePct: "7.3", ivBefore: "123" }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText("Implied %").getAttribute("placeholder")).toBe("7.3");
+    expect(screen.getByLabelText("IV before %").getAttribute("placeholder")).toBe("123");
+    expect(screen.getByLabelText("Actual %").getAttribute("placeholder")).toBe("auto");
+  });
 });
 
 describe("IronFlyForm with an option chain", () => {

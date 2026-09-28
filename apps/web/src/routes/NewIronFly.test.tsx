@@ -74,4 +74,23 @@ describe("NewIronFly", () => {
     fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
     await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy());
   });
+
+  it("fetches the new trade's stock prices", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ id: "new-id" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onCreated } = setup();
+    priceTheSampleFly();
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-id"));
+    await waitFor(() => {
+      const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/moves/fill"));
+      expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["new-id"] });
+    });
+  });
 });
