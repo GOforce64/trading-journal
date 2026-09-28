@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { type MoveFly, type MoveTrade, tradeMoves } from "./moves.js";
+import {
+  ivCrushHistogram,
+  type MoveFly,
+  type MoveRow,
+  type MoveTrade,
+  movePoints,
+  moveRatioBuckets,
+  tradeMoves,
+} from "./moves.js";
 import { impliedVol, yearsToExpiry } from "./pricing.js";
 
 const NO_TYPED: MoveFly = {
@@ -165,5 +173,107 @@ describe("tradeMoves", () => {
       ivBeforeBlank: null,
       ivAfterBlank: null,
     });
+  });
+});
+
+/** A closed fly with typed moves only: no stock prices, as for a ticker Alpaca can't price. */
+function typedRow(id: string, netPnl: number, typed: Partial<MoveFly>): MoveRow {
+  return {
+    id,
+    underlying: id.toUpperCase(),
+    netPnl,
+    openedAt: Date.UTC(2026, 8, 1, 19, 50),
+    closedAt: Date.UTC(2026, 8, 2, 19, 40),
+    legs: [],
+    ironFly: { ...NO_TYPED, ...typed },
+  };
+}
+
+const mRow: MoveRow = { ...M, id: "m", underlying: "M", netPnl: 224.06 };
+
+describe("movePoints", () => {
+  it("has a point for each fly with both moves, whether computed or typed", () => {
+    const points = movePoints([
+      typedRow("a", 120, { impliedMovePct: 8, actualMovePct: -4 }),
+      typedRow("b", -50, { impliedMovePct: 8 }),
+      mRow,
+    ]);
+    expect(points.map((point) => point.id)).toEqual(["a", "m"]);
+    expect(points[0]).toEqual({ id: "a", ticker: "A", implied: 0.08, absActual: 0.04, netPnl: 120 });
+    expect(points[1]?.implied).toBeCloseTo(0.0729455, 6);
+    expect(points[1]?.absActual).toBeCloseTo(0.0533241, 6);
+  });
+});
+
+describe("moveRatioBuckets", () => {
+  const flies = [
+    typedRow("a", 100, { impliedMovePct: 10, actualMovePct: 4 }), // 0.4×
+    typedRow("b", 50, { impliedMovePct: 10, actualMovePct: -5 }), // 0.5×, on the edge
+    typedRow("c", -80, { impliedMovePct: 10, actualMovePct: 10 }), // 1×, on the edge
+    typedRow("d", -200, { impliedMovePct: 10, actualMovePct: -15 }), // 1.5×, on the edge
+    typedRow("e", 30, { impliedMovePct: 10 }), // no ratio
+  ];
+
+  it("puts each ratio in the bucket its lower edge starts", () => {
+    const summary = moveRatioBuckets(flies);
+    expect(summary.buckets.map((bucket) => [bucket.label, bucket.trades, bucket.won, bucket.net])).toEqual([
+      ["< 0.5×", 1, 1, 100],
+      ["0.5–1×", 1, 1, 50],
+      ["1–1.5×", 1, 0, -80],
+      ["1.5×+", 1, 0, -200],
+    ]);
+  });
+
+  it("isn't fooled by float noise: 15% against 10% is 1.5×, not 1.4999999999999998", () => {
+    const [bucket] = moveRatioBuckets([
+      typedRow("d", -200, { impliedMovePct: 10, actualMovePct: 15 }),
+    ]).buckets.filter((each) => each.trades > 0);
+    expect(bucket?.label).toBe("1.5×+");
+  });
+
+  it("counts the flies with and without a ratio, and the ones that moved at least as much as priced", () => {
+    const summary = moveRatioBuckets(flies);
+    expect(summary.withRatio).toBe(4);
+    expect(summary.without).toBe(1);
+    expect(summary.beyondImplied).toEqual({ trades: 2, won: 0, net: -280 });
+  });
+
+  it("counts a fly Alpaca couldn't price, from its typed moves, next to computed ones", () => {
+    const summary = moveRatioBuckets([mRow, typedRow("x", -90, { impliedMovePct: 6, actualMovePct: 12 })]);
+    expect(summary.buckets.map((bucket) => bucket.trades)).toEqual([0, 1, 0, 1]);
+  });
+});
+
+describe("ivCrushHistogram", () => {
+  const flies = [
+    typedRow("a", 1, { ivBefore: 120, ivAfter: 60 }), // 60 points
+    typedRow("b", 1, { ivBefore: 100, ivAfter: 75 }), // 25, on the edge
+    typedRow("c", 1, { ivBefore: 80, ivAfter: 70 }), // 10
+    typedRow("d", 1, { ivBefore: 50, ivAfter: 100 }), // −50, on the edge: IV rose
+    typedRow("e", 1, { ivBefore: 90 }), // no IV after
+  ];
+
+  it("bins IV before − after in points, each bin starting at its lower edge", () => {
+    const { bins, count } = ivCrushHistogram(flies);
+    expect(bins.map((bin) => [bin.label, bin.tradeIds])).toEqual([
+      ["< −50", []],
+      ["−50…−25", ["d"]],
+      ["−25…0", []],
+      ["0…25", ["c"]],
+      ["25…50", ["b"]],
+      ["50+", ["a"]],
+    ]);
+    expect(count).toBe(4);
+  });
+
+  it("gives the median crush for an even and an odd count, and none without data", () => {
+    expect(ivCrushHistogram(flies).median).toBeCloseTo(17.5, 9); // (10 + 25) / 2
+    expect(ivCrushHistogram(flies.slice(0, 3)).median).toBeCloseTo(25, 9);
+    expect(ivCrushHistogram([typedRow("e", 1, { ivBefore: 90 })])).toMatchObject({ median: null, count: 0 });
+  });
+
+  it("takes M's crush from its own fills", () => {
+    const { bins } = ivCrushHistogram([mRow]);
+    expect(bins.find((bin) => bin.tradeIds.includes("m"))?.label).toBe("25…50"); // 123% → 77%
   });
 });

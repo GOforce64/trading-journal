@@ -1,4 +1,5 @@
 import { expiryMoment } from "./calendar.js";
+import { sumMoney } from "./money.js";
 import { impliedVol, yearsToExpiry } from "./pricing.js";
 
 /** A leg as the journal stores it: what a move needs to know about it. */
@@ -143,5 +144,138 @@ export function tradeMoves(trade: MoveTrade): TradeMoves {
     ivAfter: resolve(fly?.ivAfter, ivAfter),
     ivBeforeBlank,
     ivAfterBlank,
+  };
+}
+
+/** A closed fly as the Iron flies tab has it. */
+export interface MoveRow extends MoveTrade {
+  id: string;
+  underlying: string;
+  netPnl: number;
+}
+
+/** One dot on the implied-vs-actual scatter. */
+export interface MovePoint {
+  id: string;
+  ticker: string;
+  implied: number;
+  absActual: number;
+  netPnl: number;
+}
+
+/** A dot for every fly with both an implied and an actual move, computed or typed (spec §7.4). */
+export function movePoints(flies: readonly MoveRow[]): MovePoint[] {
+  return flies.flatMap((trade) => {
+    const { impliedMove, actualMove } = tradeMoves(trade);
+    if (!impliedMove || !actualMove) return [];
+    return [
+      {
+        id: trade.id,
+        ticker: trade.underlying,
+        implied: impliedMove.value,
+        absActual: Math.abs(actualMove.value),
+        netPnl: trade.netPnl,
+      },
+    ];
+  });
+}
+
+export interface RatioTally {
+  trades: number;
+  won: number;
+  net: number;
+}
+
+export interface RatioBucket extends RatioTally {
+  label: string;
+  from: number;
+  to: number;
+}
+
+export interface RatioSummary {
+  buckets: RatioBucket[];
+  /** Flies with a move ratio, and flies without one. */
+  withRatio: number;
+  without: number;
+  /** The flies whose ratio is 1 or more: the stock moved at least as much as priced. */
+  beyondImplied: RatioTally;
+}
+
+const RATIO_EDGES = [
+  { label: "< 0.5×", from: 0, to: 0.5 },
+  { label: "0.5–1×", from: 0.5, to: 1 },
+  { label: "1–1.5×", from: 1, to: 1.5 },
+  { label: "1.5×+", from: 1.5, to: Number.POSITIVE_INFINITY },
+];
+
+/** Float noise only: 0.15 / 0.1 is 1.4999999999999998. The 0.1% rounding the spec warns about is far coarser. */
+const denoise = (ratio: number) => Math.round(ratio * 1e9) / 1e9;
+
+/** P&L by move ratio, on unrounded ratios (spec §7.4). */
+export function moveRatioBuckets(flies: readonly MoveRow[]): RatioSummary {
+  const rated = flies.flatMap((trade) => {
+    const ratio = tradeMoves(trade).moveRatio;
+    return ratio == null ? [] : [{ trade, ratio: denoise(ratio) }];
+  });
+  const tally = (items: readonly { trade: MoveRow }[]): RatioTally => ({
+    trades: items.length,
+    won: items.filter(({ trade }) => trade.netPnl > 0).length,
+    net: sumMoney(items.map(({ trade }) => trade.netPnl)),
+  });
+  return {
+    buckets: RATIO_EDGES.map((edge) => ({
+      ...edge,
+      ...tally(rated.filter(({ ratio }) => ratio >= edge.from && ratio < edge.to)),
+    })),
+    withRatio: rated.length,
+    without: flies.length - rated.length,
+    beyondImplied: tally(rated.filter(({ ratio }) => ratio >= 1)),
+  };
+}
+
+export interface CrushBin {
+  label: string;
+  from: number;
+  to: number;
+  tradeIds: string[];
+}
+
+export interface CrushSummary {
+  bins: CrushBin[];
+  /** The median of IV before − IV after, in points. */
+  median: number | null;
+  count: number;
+}
+
+const CRUSH_EDGES = [
+  { label: "< −50", from: Number.NEGATIVE_INFINITY, to: -50 },
+  { label: "−50…−25", from: -50, to: -25 },
+  { label: "−25…0", from: -25, to: 0 },
+  { label: "0…25", from: 0, to: 25 },
+  { label: "25…50", from: 25, to: 50 },
+  { label: "50+", from: 50, to: Number.POSITIVE_INFINITY },
+];
+
+/** IV before − IV after, in points, for every fly with both (spec §7.4). */
+export function ivCrushHistogram(flies: readonly MoveRow[]): CrushSummary {
+  const crushed = flies.flatMap((trade) => {
+    const { ivBefore, ivAfter } = tradeMoves(trade);
+    return ivBefore && ivAfter ? [{ id: trade.id, points: (ivBefore.value - ivAfter.value) * 100 }] : [];
+  });
+  const sorted = crushed.map((item) => item.points).sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length === 0
+      ? null
+      : sorted.length % 2 === 1
+        ? (sorted[middle] ?? null)
+        : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+  return {
+    bins: CRUSH_EDGES.map((edge) => ({
+      ...edge,
+      tradeIds: crushed.filter(({ points }) => points >= edge.from && points < edge.to).map(({ id }) => id),
+    })),
+    median,
+    count: crushed.length,
   };
 }
