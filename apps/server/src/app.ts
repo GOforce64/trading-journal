@@ -4,8 +4,10 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import type { Db } from "@tj/db";
 import { Hono } from "hono";
 import type { MarketData } from "./marketData.js";
+import { createMoveFiller } from "./moves.js";
 import { importRoutes } from "./routes/import.js";
 import { marketRoutes } from "./routes/market.js";
+import { moveRoutes } from "./routes/moves.js";
 import { quoteRoutes } from "./routes/quotes.js";
 import { type SettingsDeps, settingsRoutes } from "./routes/settings.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
@@ -48,6 +50,7 @@ export function createApp(deps: AppDeps) {
     .route("/api/setups", setups)
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
+    .route("/api/moves", moveRoutes(createMoveFiller({ db: deps.db, market: deps.market, now: deps.now })))
     .route("/api/quotes", quoteRoutes(deps.market))
     .route("/api/settings", settingsRoutes(deps.market, deps.settings))
     .route("/api", marketRoutes(deps.market));

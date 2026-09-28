@@ -18,6 +18,7 @@ export function fakeSources(overrides: Partial<MarketSources> = {}): MarketSourc
     optionQuotes: { latest: async () => new Map() },
     chains: { listed: async () => [] },
     companies: { name: async () => null },
+    bars: { priceAt: async () => null, closeOn: async () => null },
     ...overrides,
   };
 }
