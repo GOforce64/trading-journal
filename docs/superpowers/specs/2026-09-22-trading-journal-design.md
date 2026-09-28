@@ -67,7 +67,9 @@ Terminology in the UI: **Paper** means the IBKR paper-trading account. **Demo** 
 | Trade charts | **TradingView Lightweight Charts** (Apache-2.0) | Same rendering, crosshair and feel as TradingView. Also used for the equity curve. |
 | Analytics charts | **shadcn charts (Recharts)** for bars and scatters; calendar heatmap as a custom CSS grid | Consistent styling with the UI kit. |
 | API server | **Hono** on Node.js (≥ 22), with **Hono RPC** typed client and `@hono/zod-validator` | Tiny, fast, web-standard, so the same app can also run in a browser (see §11). |
-| Database | **SQLite** via **better-sqlite3**, **Drizzle ORM**, **drizzle-kit** migrations | One portable file. Prebuilt binaries for Linux and Windows. No Docker. |
+| Database | **SQLite** via **better-sqlite3**, **Drizzle ORM**, **drizzle-kit** migrations | One portable file. Builds natively on Linux and Windows. No Docker. |
+| Options data | **Alpaca** (free account, key in the data directory) | Option chains, current quotes for open positions, and historical option bars including expired contracts. |
+| Underlying bars | **Massive** (ex-Polygon, free tier) | Minute bars built from all exchanges, so charts match TradingView. Alpaca's free stock feed is single-exchange and would not. |
 | Dates | **date-fns + @date-fns/tz** | All market logic in `America/New_York`, DST-correct. |
 | Parsing | **fast-xml-parser** (IBKR Flex XML), **papaparse** (CSV / pasted tables), **fflate** (bundle zip) | Pure JS, cross-platform. |
 | Quality | **Vitest**, **fast-check** (property tests), **Playwright** (e2e), **Biome** (lint and format) | |
@@ -144,8 +146,8 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 
 - **accounts**: `name`, `broker` (`ibkr` | `other`), `kind` (`live` | `paper`), `external_id` (IBKR account number).
 - **trades**:
-  - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "Macy's Inc"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
-  - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
+  - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "XYZ Industries"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
+  - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees` (round trip), `fees_open`, `fees_close`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
   - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`
   - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants does not, so those trades key on the natural-key hash of §7.2b)
   - merge: `edited_at` (last *user* edit; see §12). Set at creation for manual and imported trades, which are user-authored. Null for IBKR-synced trades until the user first edits one.
@@ -180,9 +182,18 @@ Derived values that are expensive or need market data (`r_multiple`, IV and gree
 
 ## 7. Features: iron flies (Phase 1)
 
-### 7.1 Manual entry
+### 7.1 The position builder (manual entry and editing)
 
-A form with the structure fields, then fills or a simple entry/exit (credit in, debit out). It computes the metrics live as you type.
+Positions are built the way oQuants shows them: **leg by leg, priced individually**. The builder has one row per leg of the short iron butterfly (short call, short put, long call, long put), each taking a **strike, a size, an entry premium and an exit premium**, plus **entry fees and exit fees** as separate figures.
+
+- **Nothing about money is typed twice.** Net cost, credit per share, P&L before fees, net P&L, contract count, max profit, max loss, the risky side, breakevens and wing widths are all derived from the legs (`positionCash` and `ironFlyMetrics` in `core`) and update as you type. The trade's stored P&L is what those prices imply, never a number typed beside them.
+- **Round-trip fees land in the cost line**, matching oQuants, so an imported row and a hand-built one reconcile identically. `feesOpen` and `feesClose` are stored alongside the total.
+- **Sizes are whole contracts.** A fractional size is a typo and is refused.
+- **A position with any exit price missing is still open**: P&L reads "—" rather than a wrong number, and the exit fields stay empty until real fills are entered. Estimated values for a live position come from market data (§8.6) and are never written into those fields.
+- **The same builder edits an existing trade**, reached from Edit on the trade page. Saving recomputes the P&L from the edited prices rather than trusting what was stored.
+- **Strikes and expirations are not free text.** They are chosen from the option chain for that underlying (§8.6), because a strike that was never listed is always a mistake.
+
+Scalps and any structure that is not a four-legged fly need a general multi-leg editor. That is deliberately **out of scope here** and gets its own plan alongside the Phase 2 scalp work.
 
 ### 7.2 Import: CSV and pasted tables with column mapping
 
@@ -205,9 +216,9 @@ oQuants has no export, so the history is extracted from the user's own logged-in
   2. **The expanded child rows**, one per leg: type (Call/Put), expiry, strike, size (signed: `-5` short, `+5` long), cost, P&L, P&L %.
   3. **The row's designer link**, whose query string encodes every leg — `positions[i][buySell|size|type|strike|expiration]` — plus the structure `name` and the symbol. This is where the **ISO expiry** comes from (`2026-09-11`); the table only shows "Sep 11 (2d)". Leg `price` values in the link are unreliable (mostly `0`) and are ignored.
   - MUI class names are hashed and unstable, so cells are read **by column index resolved from the header labels**, never by class.
-- **Derived on import** (verified against a real row, a 5-lot M iron fly):
+- **Derived on import** (worked through on a sample row, a 4-lot broken-wing fly):
   - leg open price = |leg cost| ÷ (size × 100); leg close cash = leg P&L − leg open cash, giving the close price;
-  - **fees = Σ leg cost − row cost** (that row: −775.00 vs −764.06, so $10.94). The same difference appears in P&L (+235.00 vs +224.06), so the numbers reconcile and fees need not be guessed;
+  - **fees = Σ leg cost − row cost** (that row: −1,200.00 vs −1,192.00, so $8.00). The same difference appears in P&L (+520.00 vs +512.00), so the numbers reconcile and fees need not be guessed;
   - the import preview shows this reconciliation per trade and flags any row where it doesn't balance.
 - **No stable identifier exists.** The link's `portfolio-0-1790108523081` is generated at render time and changes on reload. Identity therefore comes from a **natural key**: ticker + open timestamp + close timestamp + sorted (right, strike, size) legs. The trade's UUID is UUIDv5 of that key, which makes re-imports idempotent and keeps both machines in agreement (§12).
 - **Dates need repair.** Displayed dates carry no year ("Sep 9"), so the year is taken from the link's ISO expiry, stepping back one year if that would place the open after expiry. Times are rendered in the viewer's timezone, so the snippet records `Intl.DateTimeFormat().resolvedOptions().timeZone` in its output, and the import preview shows both the original text and the converted ET time for confirmation.
@@ -284,6 +295,13 @@ oQuants has no export, so the history is extracted from the user's own logged-in
 - **EMA warm-up:** an EMA is only meaningful with roughly 3× its period of prior bars, and the 167 EMA on a 1-minute chart needs about 500 bars, which is more than one session. Bars are therefore loaded from **up to 3 previous sessions** for warm-up, and drawn only once enough history exists. Where it doesn't (a stock's first days, or a gap in free-tier history), that EMA is hidden with a tooltip saying why.
 - On the **daily** timeframe, VWAP and the premarket/previous-day levels don't apply and are disabled; the EMAs use daily bars.
 - **No data** covers: index underlyings not in the free stocks tier (SPX, NDX), sessions older than about 2 years, today's session before data is published, and a missing API key. In these cases the chart area shows an empty state with a reason and an **Attach screenshot** call to action.
+
+### 8.6 Option chains and live marks (used by the builder, §7.1)
+
+- **Chains.** For a given underlying, Alpaca supplies the listed expirations and, for a chosen expiration, the listed strikes. The builder turns both into pickers, so a position can only be built from contracts that exist. Chains are cached per underlying and expiry for the session; when the API is unreachable the fields fall back to plain typed entry with a notice, rather than blocking the entry of an old trade.
+- **Live marks.** While a position is open, the builder and the trade page show the **current premium per leg** and the unrealised P&L it implies, clearly labelled as an estimate and shown in muted type.
+- **Estimates never become records.** A live mark is never written into an exit price, and never stored as the trade's P&L. Exit fields stay empty until the real fills are typed in. A trade only counts as closed once its exit prices are entered.
+- **Credentials** live in `secrets.json` in the data directory (§5), never in the repository or an export bundle. Without a key the app still works; only the pickers and marks go quiet.
 
 ### 8.3 Risk and R (Black-Scholes, in `core/pricing`)
 
@@ -465,6 +483,7 @@ These are facts to confirm at the start of the relevant phase. None of them bloc
    - whether paper accounts support the Flex Web Service (fallback: upload a Flex file);
    - which query type includes same-day executions;
    - the exact field names for execution ID, order ID and conid.
-3. **Massive free tier (Phase 2):** when a session's minute bars become available, whether extended hours are included, and the current rate limits.
-4. **Lightweight Charts (Phase 2):** confirm the current attribution requirement.
-5. **In-browser demo (Phase 3):** the spike in Phase 3, step 1 (§13) confirms that Hono and Drizzle/sql.js work in-page within a reasonable bundle size.
+3. **Alpaca (next):** confirm the free plan's chain endpoint coverage and rate limits, and how quickly indicative quotes update, before relying on live marks during the session.
+4. **Massive free tier (Phase 2):** when a session's minute bars become available, whether extended hours are included, and the current rate limits.
+5. **Lightweight Charts (Phase 2):** confirm the current attribution requirement.
+6. **In-browser demo (Phase 3):** the spike in Phase 3, step 1 (§13) confirms that Hono and Drizzle/sql.js work in-page within a reasonable bundle size.
