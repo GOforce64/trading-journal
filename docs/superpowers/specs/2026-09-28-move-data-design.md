@@ -1,7 +1,7 @@
 # Move Data and Settle at Expiry — Design Spec
 
 - **Date:** 2026-09-28
-- **Status:** Draft, awaiting review.
+- **Status:** Approved 2026-09-28. Plan: [2026-09-28-move-data.md](../plans/2026-09-28-move-data.md)
 - **Scope:**
   - Every iron fly gets its implied move, actual move, move ratio and IV before → after, worked out from its own fills and the stock price at entry and exit.
   - Stock prices come from Alpaca's historical minute bars. They're fetched automatically after a save or an import, and a "Fill in missing" button covers the backlog and retries.
@@ -136,20 +136,20 @@ The names come from the parent spec's data model (§6). Null means "not fetched 
 
 ### 5.3 Edits keep what they don't touch
 
-Today, a patch that carries `ironFly` makes `writeChildren` delete the `iron_fly_details` row and insert a new one. The edit form sends only the structure, contracts, credit and net cost, and the schema's defaults fill the rest with null. So every edit resets the earnings date, the source notes and the four override columns. None are filled yet, so nothing has been lost. It gets fixed at both ends:
+Today, a patch that carries `ironFly` makes `writeChildren` delete the `iron_fly_details` row and insert a new one. The two price columns aren't in the schema, so no patch carries them, and every edit would drop them. The fix is in two places:
 
 - **Repo:** `writeChildren` updates the details row in place (insert if missing) and sets only the columns the input names. The stock prices, which no input names, survive every edit. `ironFly: null` still deletes the row.
-- **Form:** the edit form sends back the detail fields it doesn't show (`earningsDate`, `earningsTiming`, `sourceNotes`), along with its new override row (§9.3).
+- **Form (already done):** `EditTrade`'s `keepIronFlyExtras` sends back the stored detail fields the form doesn't show (`earningsDate`, `earningsTiming`, `sourceNotes`), so those already survive an edit. The new override row (§9.3) goes after them, so the typed values win.
 
 ### 5.4 Stale prices are cleared
 
 A stored price is only right for the time and ticker it was fetched for. `repo.update` clears prices whose inputs change, in the same transaction:
 
 - `underlying` changes → both prices;
-- `openedAt` changes → the entry price;
-- `closedAt` changes, including back to null → the exit price.
+- `openedAt` moves to another minute → the entry price;
+- `closedAt` moves to another minute, or back to null → the exit price.
 
-The automatic fill after that save fetches new ones.
+"Another minute" means a different `sessionMoment` (§7.1), because that decides which bar is read. The edit form drops seconds from every time, so comparing raw timestamps would clear an imported trade's prices on every save. The automatic fill after that save fetches new ones.
 
 ### 5.5 New repo methods
 
@@ -204,7 +204,7 @@ export function alpacaBars(keys: AlpacaKeys, options?: AlpacaOptions): BarSource
 - `impliedVol({ right, price, S, K, T })` → `number | null`: bisection for sigma between 0.01 and 10 (1% to 1000%), 100 steps. It returns null when:
   - T ≤ 0;
   - the price is no more than half a cent above intrinsic;
-  - the solve ends at the upper bound (≥ 9.99).
+  - the solve ends at either bound: the upper one (≥ 9.99), or the 1% lower one, where a price below Black-Scholes at 1% can't be solved either.
 - `yearsToExpiry(at, expiry)` = (`expiryMoment(expiry)` − `at`) ÷ (365 days in ms).
 
 Parent spec §8.3 planned a `core/pricing` for Phase 2's risk engine. This is its start, and Phase 2 can add Newton-Raphson and a rate setting to it.
@@ -255,7 +255,7 @@ function tradeMoves(trade: {
 These run in the browser over the tab's closed, filtered flies, like `keptStats`:
 
 - `movePoints(flies)`: one point per fly with both a resolved implied and actual move. Each point has `{ id, ticker, implied, absActual, netPnl }`.
-- `moveRatioBuckets(flies)`: `< 0.5×`, `0.5–1×`, `1–1.5×` and `1.5×+`. Each includes its lower edge and excludes its upper one. Each bucket has `{ label, trades, won, net }`. It uses unrounded ratios. It also returns `{ withRatio, without }` for the coverage line, and `{ trades, won, net }` for all flies with ratio ≥ 1.
+- `moveRatioBuckets(flies)`: `< 0.5×`, `0.5–1×`, `1–1.5×` and `1.5×+`. Each includes its lower edge and excludes its upper one. Each bucket has `{ label, trades, won, net }`. It uses unrounded ratios, rounded to 1e-9 only to drop float noise: 0.15 ÷ 0.1 is 1.4999999999999998 in JavaScript. It also returns `{ withRatio, without }` for the coverage line, and `{ trades, won, net }` for all flies with ratio ≥ 1.
 - `ivCrushHistogram(flies)`: crush = (IV before − IV after) × 100, in points, for flies with both. The bins are `< −50`, `−50…−25`, `−25…0`, `0…25`, `25…50` and `50+`, each including its lower edge. It also returns `{ median, count }`, and the median of an even count is the mean of the two middle values.
 
 ### 7.5 `settle.ts` (new)
@@ -265,7 +265,7 @@ These run in the browser over the tab's closed, filtered flies, like `keptStats`
 - `exit`: intrinsic value, rounded to cents. That's max(0, S − K) for a call and max(0, K − S) for a put.
 - `flag`: `"assigned"` for an in-the-money short, `"exercised"` for an in-the-money long, otherwise null.
 
-It returns null if the open legs don't share one expiry. It doesn't compute P&L: the caller uses the existing `positionCash`, the same function the edit form uses, so the two can't disagree.
+It returns null if the open legs don't share one expiry. `settleExpiry(legs)` returns that shared expiry, or null, so the page knows which date's close to ask for. `settleAtExpiry` doesn't compute P&L: the caller uses the existing `positionCash`, the same function the edit form uses, so the two can't disagree.
 
 ---
 
@@ -327,7 +327,7 @@ No new trade route. The trade reply already includes every `iron_fly_details` co
 
 ### 9.2 Trade page tiles
 
-The three existing move tiles are rebuilt and a fourth is added. They follow the approved mockup, `move-charts.html`:
+The three existing move tiles are rebuilt and a fourth is added. They get their own row of four, and the five other tiles fit one row of five. They follow the approved mockup, `move-charts.html`:
 
 | Tile | Value | Working (small print) |
 |---|---|---|
@@ -337,7 +337,11 @@ The three existing move tiles are rebuilt and a fourth is added. They follow the
 | Stock at entry / exit | $21.66 / $20.51 | Alpaca, Sep 9 15:54 → Sep 10 15:44 ET |
 
 - **An override** reads "typed", plus "(computed 7.1%)" when the fill data gives a value too.
-- **A missing price** shows why: "Alpaca has no price for this time; type the moves in Edit", "not a trading day", or "Alpaca shares prices 15 min after the fact". A "Fill in missing" button sits beside it when a key is set.
+- **A missing price** is explained on the stock tile only; the other tiles say what they need ("needs the stock at entry"). The reason comes from one of two places:
+  - this session's last fill for that trade: "Alpaca has no price for this time; type the moves in Edit.";
+  - the page itself: "Not a trading day; type the moves in Edit.", "Alpaca shares prices 15 min after the fact; try Fill in missing later." or "Add an Alpaca key in Settings to fetch stock prices.".
+
+  Otherwise it reads "Not fetched yet.". A "Fill in missing" button sits beside it when a key is set.
 - **A blank IV** shows "left blank within 24 h of expiry" or "couldn't solve: price at intrinsic".
 - **An open trade** shows the implied move and IV before, with "—" for the exit side.
 - The times on the stock tile are the `sessionMoment`s, so they show which bar was read.
@@ -366,7 +370,7 @@ The charts are built following the dataviz skill and the existing chart componen
 
 ### 9.5 Settle panel
 
-- **When it shows:** on the trade page of an iron fly in the existing `closeEstimate` "expired" state, meaning an open leg's expiry is before today in New York, and only when `settleAtExpiry` accepts the legs (one shared expiry). It replaces the "EXPIRED · add exits" hint on that page.
+- **When it shows:** on the trade page of an iron fly in the existing `closeEstimate` "expired" state, meaning an open leg's expiry is before today in New York, and only when `settleAtExpiry` accepts the legs (one shared expiry). It sits below the tiles; the header keeps "EXPIRED · add exits" in its P&L slot.
 - **What it shows:** it fetches `GET /api/close/:symbol?date=<expiry>` and renders:
   - "BB closed at $8.21 on Sep 25. Proposed exits at intrinsic value:";
   - a table of leg, strike, size, entry and exit at expiry, with "(in the money: assigned, not cash)" or "(exercised)" beside flagged legs;
@@ -377,7 +381,7 @@ The charts are built following the dataviz skill and the existing chart componen
   - `netPnl`, and `feesClose: 0` if it was empty, with `fees` unchanged.
   
   The fill then runs as after any save and gets the exit price from the 15:59 bar.
-- **Edit them first** opens the edit form with the proposed exits and `closedAt` already filled in, passed as navigation state. A reload falls back to the stored trade.
+- **Edit them first** opens `/trades/:id/edit?settle=true`. The edit page asks for the same close, and starts the form with the proposed exits and `closedAt` already filled in. A reload keeps the proposal.
 - **No close available** (no key, Alpaca down, or no daily bar): the panel says why and offers only "Edit".
 
 Equity options settle in shares, so an assigned short means the real account got stock. The journal records the cash equivalent at the close, and the flag says so.
