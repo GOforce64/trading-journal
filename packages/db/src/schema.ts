@@ -105,6 +105,9 @@ export const ironFlyDetails = sqliteTable("iron_fly_details", {
   actualMovePct: real("actual_move_pct"),
   ivBefore: real("iv_before"),
   ivAfter: real("iv_after"),
+  /** The stock price at openedAt and at closedAt, from Alpaca. Only the move filler writes them (spec §5.1). */
+  underlyingPriceEntry: real("underlying_price_entry"),
+  underlyingPriceExit: real("underlying_price_exit"),
   sourceNotes: text("source_notes"),
 });
 

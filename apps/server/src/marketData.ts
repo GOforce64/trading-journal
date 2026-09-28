@@ -1,10 +1,12 @@
 import {
   AlpacaError,
   type AlpacaKeys,
+  alpacaBars,
   alpacaChains,
   alpacaCompanyNames,
   alpacaOptionQuotes,
   alpacaQuotes,
+  type BarSource,
   type ChainSource,
   type CompanyNames,
   cachedChains,
@@ -18,6 +20,7 @@ export interface MarketSources {
   optionQuotes: OptionQuoteSource;
   chains: ChainSource;
   companies: CompanyNames;
+  bars: BarSource;
 }
 
 export interface MarketStatus {
@@ -89,5 +92,7 @@ function alpacaSources(keys: AlpacaKeys, report: (error: unknown) => void): Mark
     optionQuotes: cachedLatest(alpacaOptionQuotes(keys), { ttlMs: 30_000, onError: report }),
     chains: cachedChains(alpacaChains(keys), { ttlMs: 15 * 60_000 }),
     companies: alpacaCompanyNames(keys),
+    // Each price is stored with its trade once fetched, so no cache.
+    bars: alpacaBars(keys),
   };
 }

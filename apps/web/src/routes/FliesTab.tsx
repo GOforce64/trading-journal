@@ -3,6 +3,7 @@ import { KeptHistogram } from "../analytics/Charts.js";
 import { rememberEdges, resolveEdges } from "../analytics/edges.js";
 import { shareText } from "../analytics/format.js";
 import { KpiStrip } from "../analytics/KpiStrip.js";
+import { MoveSection } from "../analytics/MoveSection.js";
 import { Section } from "../analytics/Section.js";
 import { SplitGrid } from "../analytics/SplitGrid.js";
 import type { TabProps } from "./OverviewTab.js";
@@ -16,9 +17,6 @@ export function FliesTab({ trades, search, onSearch }: TabProps) {
   const kept = keptStats(flies);
   const creditEdges = resolveEdges("usd", search.creditEdges);
   const tickers = new Map(flies.map((trade) => [trade.id, trade.underlying]));
-  const withMoves = flies.filter(
-    (trade) => trade.ironFly?.impliedMovePct != null && trade.ironFly.actualMovePct != null,
-  ).length;
 
   return (
     <div className="flex flex-col gap-3">
@@ -82,12 +80,7 @@ export function FliesTab({ trades, search, onSearch }: TabProps) {
           { title: "Wider wing width", rows: wingWidthSplit(flies) },
         ]}
       />
-      <Section title="Implied vs actual move · IV crush · P&L by move ratio">
-        <p className="rounded-sm border border-line border-dashed p-3 text-center text-[11px] text-muted">
-          These charts fill in once each trade has its implied and actual move. {withMoves} of {flies.length}{" "}
-          closed flies have them.
-        </p>
-      </Section>
+      <MoveSection flies={flies} tickers={tickers} />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { NewTrade } from "@tj/core";
+import type { IronFlyDetailsInput, NewTrade } from "@tj/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
@@ -210,5 +210,134 @@ describe("importing", () => {
       ),
     ).toThrow();
     expect(repo.existingIds([ID_A]).size).toBe(0);
+  });
+});
+
+describe("stock prices for the move data", () => {
+  const OPEN = Date.UTC(2026, 8, 9, 19, 54); // Wed Sep 9, 15:54 ET
+  const CLOSE = Date.UTC(2026, 8, 10, 19, 44); // Thu Sep 10, 15:44 ET
+  const DAY = 86_400_000;
+  const details = sampleFly.ironFly as IronFlyDetailsInput;
+  let db: Db;
+  let clock = 1_000;
+  const repo = () => createTradesRepo(db, () => clock);
+
+  beforeEach(() => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-repo-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    db = openDatabase(file);
+    clock = 1_000;
+  });
+
+  /** A closed fly inside market hours, with both prices stored. */
+  function priced(overrides: Partial<NewTrade> = {}): string {
+    const id = repo().create({ ...sampleFly, openedAt: OPEN, closedAt: CLOSE, ...overrides }).id;
+    repo().setUnderlyingPrice(id, "entry", 21.66);
+    repo().setUnderlyingPrice(id, "exit", 20.505);
+    return id;
+  }
+
+  const prices = (id: string) => {
+    const fly = repo().get(id)?.ironFly;
+    return [fly?.underlyingPriceEntry, fly?.underlyingPriceExit];
+  };
+
+  it("stores a price only where none is stored yet", () => {
+    const id = repo().create({ ...sampleFly, openedAt: OPEN, closedAt: CLOSE }).id;
+    expect(repo().setUnderlyingPrice(id, "entry", 21.66)).toBe(true);
+    expect(repo().setUnderlyingPrice(id, "entry", 99)).toBe(false);
+    expect(prices(id)).toEqual([21.66, null]);
+  });
+
+  it("doesn't count a fill as a user edit", () => {
+    const id = repo().create({ ...sampleFly, source: "oquants_extract" }).id;
+    clock = 2_000;
+    repo().setUnderlyingPrice(id, "entry", 21.66);
+    expect(repo().get(id)).toMatchObject({ updatedAt: 1_000, editedAt: null });
+  });
+
+  it("keeps the prices, the source notes and the typed moves through an edit of the fly details", () => {
+    const id = priced();
+    repo().update(id, { ironFly: { ...details, impliedMovePct: 7.3, ivBefore: 120 } });
+    expect(repo().get(id)?.ironFly).toMatchObject({
+      underlyingPriceEntry: 21.66,
+      underlyingPriceExit: 20.505,
+      impliedMovePct: 7.3,
+      ivBefore: 120,
+      sourceNotes: "sample row",
+    });
+  });
+
+  it("still removes the fly details when a patch sets them to null", () => {
+    const id = priced();
+    repo().update(id, { strategy: "scalp", ironFly: null });
+    expect(repo().get(id)?.ironFly).toBeNull();
+  });
+
+  it("clears the entry price when the open moves to another minute, and the exit price for the close", () => {
+    const id = priced();
+    repo().update(id, { openedAt: OPEN + 60_000 });
+    expect(prices(id)).toEqual([null, 20.505]);
+    repo().setUnderlyingPrice(id, "entry", 21.7);
+    repo().update(id, { closedAt: CLOSE + 3_600_000 });
+    expect(prices(id)).toEqual([21.7, null]);
+  });
+
+  it("keeps the prices when an edit only drops the seconds from the times", () => {
+    const id = priced({ openedAt: OPEN + 37_000, closedAt: CLOSE + 12_000 });
+    repo().update(id, { openedAt: OPEN, closedAt: CLOSE, notes: "edited" });
+    expect(prices(id)).toEqual([21.66, 20.505]);
+  });
+
+  it("clears both prices when the ticker changes", () => {
+    const id = priced();
+    repo().update(id, { underlying: "ABC" });
+    expect(prices(id)).toEqual([null, null]);
+  });
+
+  it("clears the exit price when the trade is reopened", () => {
+    const id = priced();
+    repo().update(id, { closedAt: null, netPnl: null });
+    expect(prices(id)).toEqual([21.66, null]);
+  });
+
+  it("lists the flies missing a price they can have, oldest first, excluded ones included", () => {
+    const open = repo().create({ ...sampleFly, openedAt: OPEN - DAY, closedAt: null }).id;
+    const halfDone = repo().create({ ...sampleFly, openedAt: OPEN, closedAt: CLOSE, excluded: true }).id;
+    repo().setUnderlyingPrice(halfDone, "entry", 21.66);
+    priced({ openedAt: OPEN + DAY, closedAt: CLOSE + DAY });
+    const deleted = repo().create({ ...sampleFly, openedAt: OPEN }).id;
+    repo().softDelete(deleted);
+    repo().create({ ...sampleFly, strategy: "scalp", ironFly: null });
+
+    expect(repo().missingPrices()).toEqual([
+      {
+        tradeId: open,
+        underlying: "XYZ",
+        openedAt: OPEN - DAY,
+        closedAt: null,
+        missingEntry: true,
+        missingExit: false,
+      },
+      {
+        tradeId: halfDone,
+        underlying: "XYZ",
+        openedAt: OPEN,
+        closedAt: CLOSE,
+        missingEntry: false,
+        missingExit: true,
+      },
+    ]);
+  });
+
+  it("narrows to the ids asked for, and to none for an empty list", () => {
+    const first = repo().create({ ...sampleFly, openedAt: OPEN }).id;
+    repo().create({ ...sampleFly, openedAt: OPEN + DAY });
+    expect(
+      repo()
+        .missingPrices([first])
+        .map((gap) => gap.tradeId),
+    ).toEqual([first]);
+    expect(repo().missingPrices([])).toEqual([]);
   });
 });

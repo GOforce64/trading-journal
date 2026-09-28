@@ -152,14 +152,18 @@ describe("TradeDetail", () => {
     expect(screen.getAllByText("+$512.00").length).toBeGreaterThan(0);
   });
 
-  it("marks fields the source did not provide", async () => {
+  it("says why the move data is missing", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse()),
     );
     renderDetail();
     await waitFor(() => expect(screen.getByTestId("tile-implied-move")).toBeTruthy());
-    expect(screen.getByTestId("tile-implied-move").textContent).toContain("add");
+    expect(screen.getByTestId("tile-implied-move").textContent).toContain("needs the stock at entry");
+    // The sample trade opened on a Saturday.
+    expect(screen.getByTestId("tile-stock").textContent).toContain(
+      "Not a trading day; type the moves in Edit.",
+    );
   });
 
   it("shows every leg straight away, no expander", async () => {
@@ -243,6 +247,7 @@ describe("TradeDetail", () => {
     renderDetail();
     expect(await screen.findByText("EXPIRED · add exits")).toBeTruthy();
     expect(screen.queryByText("Mark (to close)")).toBeNull();
+    expect(await screen.findByText("Settle at expiry")).toBeTruthy();
   });
 
   it("shows no marks, and blames no quote, without a market data key", async () => {
@@ -300,5 +305,171 @@ describe("TradeDetail", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "B" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "B" }));
     await waitFor(() => expect(client.getQueryState(["trades", { all: true }])?.isInvalidated).toBe(true));
+  });
+});
+
+const M_ID = "81e7c863-a5ed-522b-b87a-3cb922029179";
+
+/** The M fly from the real journal (spec §3), with both stock prices filled. */
+const mTrade = {
+  ...trade,
+  id: M_ID,
+  underlying: "M",
+  underlyingName: "Macy's",
+  openedAt: Date.UTC(2026, 8, 9, 19, 54),
+  closedAt: Date.UTC(2026, 8, 10, 19, 44),
+  netPnl: 224.06,
+  fees: 10.94,
+  legs: [
+    {
+      id: "m1",
+      right: "C",
+      strike: 21.5,
+      expiry: "2026-09-11",
+      quantity: -5,
+      multiplier: 100,
+      openPrice: 0.88,
+      closePrice: 0.05,
+    },
+    {
+      id: "m2",
+      right: "P",
+      strike: 21.5,
+      expiry: "2026-09-11",
+      quantity: -5,
+      multiplier: 100,
+      openPrice: 0.7,
+      closePrice: 1.03,
+    },
+    {
+      id: "m3",
+      right: "C",
+      strike: 27,
+      expiry: "2026-09-11",
+      quantity: 5,
+      multiplier: 100,
+      openPrice: 0.01,
+      closePrice: 0,
+    },
+    {
+      id: "m4",
+      right: "P",
+      strike: 18,
+      expiry: "2026-09-11",
+      quantity: 5,
+      multiplier: 100,
+      openPrice: 0.02,
+      closePrice: 0,
+    },
+  ],
+  ironFly: {
+    ...trade.ironFly,
+    bodyPutStrike: 21.5,
+    bodyCallStrike: 21.5,
+    putWingStrike: 18,
+    callWingStrike: 27,
+    contracts: 5,
+    creditPerShare: 1.55,
+    underlyingPriceEntry: 21.66,
+    underlyingPriceExit: 20.505,
+  },
+};
+const noPrices = {
+  ...mTrade,
+  ironFly: { ...mTrade.ironFly, underlyingPriceEntry: null, underlyingPriceExit: null },
+};
+
+/** Answers the Settings status, a fill, and the trade for everything else. */
+function stubMoves(body: unknown, { marketOn = true, fillResult = {} as unknown } = {}) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    const payload =
+      path === "/api/settings"
+        ? { dataDir: null, marketData: { state: marketOn ? "on" : "off", message: null, keyIdHint: null } }
+        : path === "/api/moves/fill"
+          ? fillResult
+          : path === "/api/option-quotes"
+            ? { quotes: {}, available: marketOn }
+            : body;
+    return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("TradeDetail move tiles", () => {
+  it("works out the moves from the fills, and shows the working", async () => {
+    stubMoves(mTrade);
+    renderDetail();
+    const implied = await screen.findByTestId("tile-implied-move");
+    expect(implied.textContent).toContain("7.3%");
+    expect(implied.textContent).toContain("straddle 1.58 ÷ $21.66 at entry");
+    const actual = screen.getByTestId("tile-actual-move").textContent;
+    expect(actual).toContain("−5.3%");
+    expect(actual).toContain("$21.66 → $20.51 · 0.73× implied");
+    const iv = screen.getByTestId("tile-iv").textContent;
+    expect(iv).toContain("123% → 77%");
+    // The crush is the difference of the percentages shown (123 − 77), as spec §9.2 has it.
+    expect(iv).toContain("crush 46 pts · from your fills");
+    const stock = screen.getByTestId("tile-stock").textContent;
+    expect(stock).toContain("$21.66 / $20.51");
+    expect(stock).toContain("Alpaca, Sep 9 15:54 → Sep 10 15:44 ET");
+  });
+
+  it("shows a typed value as typed, beside the computed one", async () => {
+    stubMoves({ ...mTrade, ironFly: { ...mTrade.ironFly, impliedMovePct: 7.1 } });
+    renderDetail();
+    const implied = await screen.findByTestId("tile-implied-move");
+    expect(implied.textContent).toContain("7.1%");
+    expect(implied.textContent).toContain("typed (computed 7.3%)");
+  });
+
+  it("fills a missing price on request, and says why it is still missing", async () => {
+    const fetchMock = stubMoves(noPrices, {
+      fillResult: {
+        filled: 0,
+        missing: [
+          { tradeId: M_ID, underlying: "M", side: "entry", reason: "no_bars" },
+          { tradeId: M_ID, underlying: "M", side: "exit", reason: "no_bars" },
+        ],
+        unavailable: null,
+      },
+    });
+    renderDetail();
+    await waitFor(() => expect(screen.getByTestId("tile-stock").textContent).toContain("Not fetched yet."));
+    fireEvent.click(await screen.findByRole("button", { name: "Fill in missing" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("tile-stock").textContent).toContain(
+        "Alpaca has no price for this time; type the moves in Edit.",
+      ),
+    );
+    const post = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/moves/fill"));
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ tradeIds: [M_ID] });
+    expect(screen.getByTestId("tile-implied-move").textContent).toContain("needs the stock at entry");
+  });
+
+  it("asks for a key, and offers no button, when none is set up", async () => {
+    stubMoves(noPrices, { marketOn: false });
+    renderDetail();
+    await waitFor(() =>
+      expect(screen.getByTestId("tile-stock").textContent).toContain(
+        "Add an Alpaca key in Settings to fetch stock prices.",
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Fill in missing" })).toBeNull();
+  });
+
+  it("shows an open trade's entry side, with the exit still open", async () => {
+    stubMoves({
+      ...mTrade,
+      closedAt: null,
+      netPnl: null,
+      legs: mTrade.legs.map((leg) => ({ ...leg, closePrice: null })),
+      ironFly: { ...mTrade.ironFly, underlyingPriceExit: null },
+    });
+    renderDetail();
+    expect((await screen.findByTestId("tile-stock")).textContent).toContain("$21.66 / open");
+    expect(screen.getByTestId("tile-actual-move").textContent).toContain("open");
+    expect(screen.getByTestId("tile-implied-move").textContent).toContain("7.3%");
   });
 });

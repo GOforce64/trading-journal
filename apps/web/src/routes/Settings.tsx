@@ -4,7 +4,7 @@ import { api } from "../api.js";
 import { Panel } from "../components/ui.js";
 
 /** Everything that shows market data, refetched once a key changes. */
-const MARKET_QUERIES = ["settings", "quotes", "option-quotes", "chain", "company"];
+const MARKET_QUERIES = ["settings", "quotes", "option-quotes", "chain", "company", "close"];
 
 const FIELD = "flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider";
 const INPUT =

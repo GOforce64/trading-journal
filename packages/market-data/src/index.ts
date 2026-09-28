@@ -1,5 +1,6 @@
 export * from "./alpaca.js";
 export * from "./assets.js";
+export * from "./bars.js";
 export * from "./cache.js";
 export * from "./chains.js";
 export * from "./http.js";

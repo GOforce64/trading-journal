@@ -82,13 +82,16 @@ export function importRoutes(db: Db, backup?: () => string, now?: () => number) 
       try {
         // Planned again rather than trusting the preview, so a stale page cannot insert twice.
         const { fresh } = plan(c.req.valid("json"));
-        if (fresh.length === 0) return c.json({ imported: 0, backupFile: null as string | null }, 200);
+        if (fresh.length === 0) {
+          return c.json({ imported: 0, backupFile: null as string | null, importedIds: [] as string[] }, 200);
+        }
         const backupFile = backup ? backup() : null;
+        const importedIds = fresh.map((row) => row.id);
         const imported = repo.importMany(
           fresh.map((row) => ({ id: row.id, trade: row.trade })),
           crypto.randomUUID(),
         );
-        return c.json({ imported, backupFile }, 200);
+        return c.json({ imported, backupFile, importedIds }, 200);
       } catch (error) {
         if (error instanceof OquantsFormatError) return c.json({ error: error.message }, 422);
         throw error;

@@ -152,3 +152,35 @@ export function holdBucket(openedAt: number, closedAt: number): HoldBucket {
   }
   return nyMinuteOfDay(closedAt) < NOON ? "overnight" : "1 full day";
 }
+
+const HOUR = 3_600_000;
+
+/**
+ * The instant a New York wall-clock time happens. UTC = NY wall clock − NY's offset, so 16:00 in
+ * daylight time (UTC−4) is 20:00Z. The offset is found by trying both and keeping the one that reads back.
+ */
+export function nyWallClock(date: string, minuteOfDay: number): number {
+  const asIfUtc = utcMidnight(date) + minuteOfDay * 60_000;
+  for (const hours of [4, 5]) {
+    const at = asIfUtc + hours * HOUR;
+    if (nyDate(at) === date && nyMinuteOfDay(at) === minuteOfDay) return at;
+  }
+  // Only a time the spring change skips (02:00–02:59) gets here, never a market time.
+  return asIfUtc + 5 * HOUR;
+}
+
+/** 09:31: the first minute bar, stamped 09:30, has closed. */
+const FIRST_BAR_CLOSE = 9 * 60 + 31;
+const MARKET_CLOSE = 16 * 60;
+
+/**
+ * The moment whose stock price stands for `at`: its New York minute, clamped into 09:31–16:00 on its
+ * own date. Some stored times fall outside market hours (spec §2), and the seconds are dropped.
+ */
+export function sessionMoment(at: number): number {
+  const minute = Math.min(Math.max(nyMinuteOfDay(at), FIRST_BAR_CLOSE), MARKET_CLOSE);
+  return nyWallClock(nyDate(at), minute);
+}
+
+/** Options expire at 16:00 New York on their expiry date. */
+export const expiryMoment = (expiry: string): number => nyWallClock(expiry, MARKET_CLOSE);

@@ -52,13 +52,16 @@ describe("oQuants import", () => {
 
   it("imports new trades into the paper book after a backup", async () => {
     const res = await send("commit", payload);
-    expect(await readJson(res)).toEqual({ imported: 1, backupFile: "journal-backup.db" });
+    const body = await readJson<{ imported: number; backupFile: string | null; importedIds: string[] }>(res);
+    expect(body).toMatchObject({ imported: 1, backupFile: "journal-backup.db" });
     expect(backup).toHaveBeenCalledOnce();
 
-    const list = await readJson<{ underlying: string; book: string; source: string }[]>(
+    const list = await readJson<{ id: string; underlying: string; book: string; source: string }[]>(
       await app.request("/api/trades", { headers: { host: "localhost" } }),
     );
     expect(list).toMatchObject([{ underlying: "XYZ", book: "paper", source: "oquants_extract" }]);
+    // The Import page fills exactly these trades' stock prices next.
+    expect(body.importedIds).toEqual([list[0]?.id]);
   });
 
   it("imports nothing, and takes no backup, when everything is already in", async () => {
@@ -69,7 +72,11 @@ describe("oQuants import", () => {
     expect(preview.counts).toEqual({ new: 0, existing: 1, skipped: 1 });
     expect(preview.rows[0]).toMatchObject({ status: "existing", reason: "already imported" });
 
-    expect(await readJson(await send("commit", payload))).toEqual({ imported: 0, backupFile: null });
+    expect(await readJson(await send("commit", payload))).toEqual({
+      imported: 0,
+      backupFile: null,
+      importedIds: [],
+    });
     expect(backup).not.toHaveBeenCalled();
   });
 

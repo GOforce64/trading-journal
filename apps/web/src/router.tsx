@@ -38,7 +38,9 @@ const rootRoute = createRootRoute({
 });
 
 const openTrade = (id: string) => router.navigate({ to: "/trades/$id", params: { id } });
-const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id } });
+const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id }, search: {} });
+const settleTrade = (id: string) =>
+  router.navigate({ to: "/trades/$id/edit", params: { id }, search: { settle: true } });
 
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -81,16 +83,20 @@ const tradeDetailRoute = createRoute({
   path: "/trades/$id",
   component: function TradeDetailRoute() {
     const { id } = tradeDetailRoute.useParams();
-    return <TradeDetail tradeId={id} onEdit={editTrade} />;
+    return <TradeDetail tradeId={id} onEdit={editTrade} onSettle={settleTrade} />;
   },
 });
 
 const editTradeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/trades/$id/edit",
+  // `settle` opens the form on the exits proposed at expiry (spec §9.5).
+  validateSearch: (raw: Record<string, unknown>): { settle?: true } =>
+    raw.settle === true || raw.settle === "true" ? { settle: true } : {},
   component: function EditTradeRoute() {
     const { id } = editTradeRoute.useParams();
-    return <EditTrade tradeId={id} onSaved={openTrade} />;
+    const { settle } = editTradeRoute.useSearch();
+    return <EditTrade tradeId={id} settle={settle === true} onSaved={openTrade} />;
   },
 });
 

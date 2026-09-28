@@ -180,3 +180,62 @@ describe("GET /api/company/:symbol", () => {
     expect(market.status().state).toBe("error");
   });
 });
+
+describe("GET /api/close/:symbol", () => {
+  it("answers with the stock's close on that date", async () => {
+    const asked: [string, string][] = [];
+    const { app } = withSources({
+      bars: {
+        priceAt: async () => null,
+        closeOn: async (symbol, date) => {
+          asked.push([symbol, date]);
+          return 8.21;
+        },
+      },
+    });
+    const { status, body } = await get(app, "/api/close/bb?date=2026-09-25");
+    expect(status).toBe(200);
+    expect(body).toEqual({ symbol: "BB", date: "2026-09-25", close: 8.21, unavailable: null });
+    expect(asked).toEqual([["BB", "2026-09-25"]]);
+  });
+
+  it("answers no close when Alpaca has no bar that day", async () => {
+    const { app } = withSources({});
+    const { body } = await get(app, "/api/close/BB?date=2026-09-26");
+    expect(body).toEqual({ symbol: "BB", date: "2026-09-26", close: null, unavailable: null });
+  });
+
+  it("says a key is needed when none is set up", async () => {
+    const { body } = await get(testApp(), "/api/close/BB?date=2026-09-25");
+    expect(body).toEqual({
+      symbol: "BB",
+      date: "2026-09-25",
+      close: null,
+      unavailable: { reason: "no_key", message: "Add an Alpaca key in Settings to settle from the close." },
+    });
+  });
+
+  it("says Alpaca didn't answer, and reports the failure", async () => {
+    const { app, market } = withSources({
+      bars: {
+        priceAt: async () => null,
+        closeOn: async () => {
+          throw new AlpacaError(401, "request is not authorized");
+        },
+      },
+    });
+    const { body } = await get(app, "/api/close/BB?date=2026-09-25");
+    expect(body.unavailable).toEqual({
+      reason: "unreachable",
+      message: "Alpaca didn't answer, so type the exits in Edit.",
+    });
+    expect(market.status().state).toBe("error");
+  });
+
+  it("refuses a bad ticker, a bad date, and no date", async () => {
+    const { app } = withSources({});
+    expect((await get(app, "/api/close/B%20B?date=2026-09-25")).status).toBe(400);
+    expect((await get(app, "/api/close/BB?date=2026-02-30")).status).toBe(400);
+    expect((await get(app, "/api/close/BB")).status).toBe(400);
+  });
+});
