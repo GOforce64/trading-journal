@@ -78,7 +78,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
         <table className="w-full table-fixed border-collapse text-[12px]">
           <thead>
             <tr className="text-[9px] text-muted uppercase tracking-wider">
-              <th className="w-28 py-1 text-left font-medium">Opened</th>
+              <th className="w-36 py-1 text-left font-medium">Opened</th>
               <th className="w-20 text-left font-medium">Symbol</th>
               <th className="w-24 text-left font-medium">Strategy</th>
               <th className="w-32 text-left font-medium">Book</th>
@@ -104,7 +104,9 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                 }}
                 className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"
               >
-                <td className="num py-1 text-muted">{ET.format(new Date(trade.openedAt))}</td>
+                <td className="num whitespace-nowrap py-1 pr-3 text-muted">
+                  {ET.format(new Date(trade.openedAt))}
+                </td>
                 <td className="text-fg">{trade.underlying}</td>
                 <td>
                   <Chip tone={trade.strategy}>{trade.strategy === "iron_fly" ? "IRON FLY" : "SCALP"}</Chip>

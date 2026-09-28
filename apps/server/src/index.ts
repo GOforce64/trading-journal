@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import { openDatabase, runMigrations } from "@tj/db";
+import { backupDatabase, openDatabase, runMigrations } from "@tj/db";
 import { createApp } from "./app.js";
 import { dataPaths, resolveDataDir } from "./config.js";
 
@@ -18,7 +18,11 @@ runMigrations(paths.dbFile, { migrationsFolder: MIGRATIONS, backupDir: paths.bac
 
 // The built UI is optional: `pnpm dev:server` runs before the web app is built.
 const webDir = existsSync(WEB_DIST) ? WEB_DIST : undefined;
-const app = createApp({ db: openDatabase(paths.dbFile), webDir });
+const app = createApp({
+  db: openDatabase(paths.dbFile),
+  webDir,
+  backup: () => backupDatabase(paths.dbFile, paths.backupDir),
+});
 
 serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {
   console.log(`Trading journal on http://127.0.0.1:${PORT}`);

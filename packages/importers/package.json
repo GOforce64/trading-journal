@@ -1,0 +1,15 @@
+{
+  "name": "@tj/importers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/oquants/fixture.ts"
+  },
+  "dependencies": {
+    "@tj/core": "workspace:*",
+    "zod": "^4.0.0"
+  }
+}

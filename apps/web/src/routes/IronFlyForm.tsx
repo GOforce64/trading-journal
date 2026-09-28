@@ -22,6 +22,7 @@ export interface LegFields {
 export interface IronFlyFormValues {
   underlying: string;
   underlyingName: string;
+  structureLabel: string;
   book: "live" | "paper";
   openedAt: string;
   closedAt: string;
@@ -37,6 +38,7 @@ const EMPTY_LEG: LegFields = { strike: "", size: "", entry: "", exit: "" };
 const EMPTY: IronFlyFormValues = {
   underlying: "",
   underlyingName: "",
+  structureLabel: "Short Iron Butterfly",
   book: "live",
   openedAt: "",
   closedAt: "",
@@ -52,11 +54,15 @@ const zeroIfBlank = (value: string): number => (Number.isNaN(num(value)) ? 0 : n
 const millis = (value: string): number => (value ? new Date(value).getTime() : Number.NaN);
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+const isBlank = (fields: LegFields) => Object.values(fields).every((value) => value.trim() === "");
+
 /** Legs are only priced once strike, size and entry are all present. */
 function toPricedLegs(values: IronFlyFormValues): PricedLeg[] | null | "fractional-size" {
   const legs: PricedLeg[] = [];
   for (const role of LEG_ROLES) {
     const fields = values.legs[role.key];
+    // A 1-wing trade leaves one long leg blank; the structure check rejects both.
+    if (!role.short && isBlank(fields)) continue;
     const strike = num(fields.strike);
     const size = num(fields.size);
     const entry = num(fields.entry);
@@ -108,14 +114,18 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       close: zeroIfBlank(values.feesClose),
     });
     const structure = ironFlyStructureFromLegs(legs);
-    const metrics = structure
-      ? ironFlyMetrics({
-          ...structure,
-          contracts: cash.contracts,
-          creditPerShare: -(cash.netCost - cash.fees) / cash.shares,
-          fees: cash.fees,
-        })
-      : null;
+    const callWingStrike = structure?.callWingStrike ?? null;
+    // Without a call wing the upside is uncapped, so there is no max loss to show.
+    const metrics =
+      structure && callWingStrike !== null
+        ? ironFlyMetrics({
+            ...structure,
+            callWingStrike,
+            contracts: cash.contracts,
+            creditPerShare: -(cash.netCost - cash.fees) / cash.shares,
+            fees: cash.fees,
+          })
+        : null;
     return { legs, cash, structure, metrics };
   }, [values]);
 
@@ -125,7 +135,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       return;
     }
     if (!derived?.structure) {
-      setProblem("Every leg needs a strike, a size and an entry price.");
+      setProblem("Every leg needs a strike, a size and an entry price, and at least one wing is required.");
       return;
     }
     setProblem(null);
@@ -135,7 +145,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       book: values.book,
       underlying: values.underlying,
       underlyingName: values.underlyingName || null,
-      structureLabel: "Short Iron Butterfly",
+      structureLabel: values.structureLabel || "Short Iron Butterfly",
       openedAt: Number.isNaN(millis(values.openedAt)) ? Date.now() : millis(values.openedAt),
       closedAt: Number.isNaN(millis(values.closedAt)) ? null : millis(values.closedAt),
       netPnl: cash.netPnl,
@@ -248,6 +258,10 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
               })}
             </tbody>
           </table>
+          <p className="mt-1 text-[10px] text-muted">
+            Leave one long leg blank for a 1-wing trade: a missing put wing counts as strike 0, a missing call
+            wing leaves max loss empty.
+          </p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {input("Entry fees", values.feesOpen, set("feesOpen"), "number")}
             {input("Exit fees", values.feesClose, set("feesClose"), "number")}
@@ -275,7 +289,7 @@ export function IronFlyForm({ initial, submitLabel, busy, error, onSubmit }: Iro
       </div>
 
       <Panel title="Derived">
-        {!derived && <p className="text-muted">Price all four legs to see the numbers.</p>}
+        {!derived && <p className="text-muted">Price the legs to see the numbers.</p>}
         {derived && (
           <dl className="grid gap-1" data-testid="derived">
             <Row label="Net cost">

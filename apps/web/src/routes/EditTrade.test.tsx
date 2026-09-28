@@ -86,6 +86,31 @@ function setup() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("EditTrade", () => {
+  it("keeps the imported source notes and structure label when saving", async () => {
+    const imported = {
+      ...trade,
+      structureLabel: "Short Iron Condor",
+      ironFly: { ...trade.ironFly, sourceNotes: "from oQuants", creditPerShare: 1, netCost: -300 },
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(imported), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    await waitFor(() => expect(screen.getByLabelText("Short call exit")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
+    const body = JSON.parse(String(patch?.[1]?.body));
+    expect(body.structureLabel).toBe("Short Iron Condor");
+    expect(body.ironFly.sourceNotes).toBe("from oQuants");
+    expect(body.ironFly.putWingStrike).toBe(25);
+    expect(body.ironFly.tradeId).toBeUndefined();
+  });
+
   it("loads the trade into the builder", async () => {
     vi.stubGlobal(
       "fetch",

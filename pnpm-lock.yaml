@@ -35,6 +35,9 @@ importers:
       '@tj/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@tj/importers':
+        specifier: workspace:*
+        version: link:../../packages/importers
       hono:
         specifier: ^4.13.8
         version: 4.13.8
@@ -119,6 +122,15 @@ importers:
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
+
+  packages/importers:
+    dependencies:
+      '@tj/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^4.0.0
+        version: 4.6.5
 
 packages:
 

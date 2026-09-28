@@ -31,6 +31,21 @@ const sampleFly = {
 };
 
 describe("newTradeSchema", () => {
+  it("accepts a theoretical put wing at strike 0 for a 1-wing trade", () => {
+    const oneWing = { ...sampleFly, ironFly: { ...sampleFly.ironFly, putWingStrike: 0 } };
+    expect(newTradeSchema.parse(oneWing).ironFly?.putWingStrike).toBe(0);
+  });
+
+  it("accepts a missing call wing, for a trade with only a put wing", () => {
+    const putWingOnly = { ...sampleFly, ironFly: { ...sampleFly.ironFly, callWingStrike: null } };
+    expect(newTradeSchema.parse(putWingOnly).ironFly?.callWingStrike).toBeNull();
+  });
+
+  it("rejects a negative put wing", () => {
+    const broken = { ...sampleFly, ironFly: { ...sampleFly.ironFly, putWingStrike: -1 } };
+    expect(newTradeSchema.safeParse(broken).success).toBe(false);
+  });
+
   it("accepts a complete iron fly", () => {
     const parsed = newTradeSchema.parse(sampleFly);
     expect(parsed.underlying).toBe("XYZ");

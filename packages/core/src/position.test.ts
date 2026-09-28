@@ -89,8 +89,26 @@ describe("ironFlyStructureFromLegs", () => {
     });
   });
 
-  it("returns null when the four legs of a fly are not all there", () => {
-    expect(ironFlyStructureFromLegs(legs.slice(0, 3))).toBeNull();
+  it("treats a missing long put as a theoretical wing at strike 0", () => {
+    expect(ironFlyStructureFromLegs([shortCall, shortPut, longCall])).toEqual({
+      bodyPutStrike: 50,
+      bodyCallStrike: 50,
+      putWingStrike: 0,
+      callWingStrike: 58,
+    });
+  });
+
+  it("leaves the call wing empty when there is no long call", () => {
+    expect(ironFlyStructureFromLegs([shortCall, shortPut, longPut])).toEqual({
+      bodyPutStrike: 50,
+      bodyCallStrike: 50,
+      putWingStrike: 45,
+      callWingStrike: null,
+    });
+  });
+
+  it("returns null with no wings at all", () => {
+    expect(ironFlyStructureFromLegs([shortCall, shortPut])).toBeNull();
   });
 
   it("keeps an unequal body, as a broken fly can have", () => {

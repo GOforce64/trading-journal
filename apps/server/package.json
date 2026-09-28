@@ -17,6 +17,7 @@
     "@hono/zod-validator": "^0.7.0",
     "@tj/core": "workspace:*",
     "@tj/db": "workspace:*",
+    "@tj/importers": "workspace:*",
     "hono": "^4.13.8",
     "zod": "^4.0.0"
   },

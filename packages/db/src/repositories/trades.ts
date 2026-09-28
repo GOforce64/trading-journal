@@ -1,5 +1,5 @@
 import type { NewTrade, TradePatch } from "@tj/core";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../client.js";
 import { ironFlyDetails, legs, trades, tradeTags } from "../schema.js";
 
@@ -91,44 +91,71 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
     }
   }
 
+  function insertTrade(
+    conn: DbLike,
+    id: string,
+    input: NewTrade,
+    timestamp: number,
+    importBatchId: string | null,
+  ) {
+    conn
+      .insert(trades)
+      .values({
+        id,
+        strategy: input.strategy,
+        book: input.book,
+        accountId: null,
+        underlying: input.underlying,
+        underlyingName: input.underlyingName,
+        structureLabel: input.structureLabel,
+        openedAt: input.openedAt,
+        closedAt: input.closedAt,
+        netPnl: input.netPnl,
+        fees: input.fees,
+        feesOpen: input.feesOpen,
+        feesClose: input.feesClose,
+        notes: input.notes,
+        grade: input.grade,
+        setupId: input.setupId,
+        excluded: input.excluded,
+        excludeReason: input.excludeReason,
+        source: input.source,
+        externalRef: null,
+        importBatchId,
+        // Typing a trade in by hand is a user edit; an import is not.
+        editedAt: input.source === "manual" ? timestamp : null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        deletedAt: null,
+      })
+      .run();
+    writeChildren(conn, id, input, timestamp);
+  }
+
   return {
     create(input: NewTrade): TradeRecord {
       const timestamp = now();
       const id = crypto.randomUUID();
       return db.transaction((tx) => {
-        tx.insert(trades)
-          .values({
-            id,
-            strategy: input.strategy,
-            book: input.book,
-            accountId: null,
-            underlying: input.underlying,
-            underlyingName: input.underlyingName,
-            structureLabel: input.structureLabel,
-            openedAt: input.openedAt,
-            closedAt: input.closedAt,
-            netPnl: input.netPnl,
-            fees: input.fees,
-            feesOpen: input.feesOpen,
-            feesClose: input.feesClose,
-            notes: input.notes,
-            grade: input.grade,
-            setupId: input.setupId,
-            excluded: input.excluded,
-            excludeReason: input.excludeReason,
-            source: input.source,
-            externalRef: null,
-            importBatchId: null,
-            // Typing a trade in by hand is a user edit; an import is not.
-            editedAt: input.source === "manual" ? timestamp : null,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-            deletedAt: null,
-          })
-          .run();
-        writeChildren(tx, id, input, timestamp);
+        insertTrade(tx, id, input, timestamp, null);
         return requireRow(tx, id);
       });
+    },
+
+    /** Every id already stored, soft-deleted included, so a deleted import stays deleted. */
+    existingIds(ids: string[]): Set<string> {
+      if (ids.length === 0) return new Set();
+      const rows = db.select({ id: trades.id }).from(trades).where(inArray(trades.id, ids)).all();
+      return new Set(rows.map((row) => row.id));
+    },
+
+    /** All or nothing: one failing trade rolls back the whole batch. */
+    importMany(items: { id: string; trade: NewTrade }[], importBatchId: string): number {
+      const timestamp = now();
+      db.transaction((tx) => {
+        for (const item of items) insertTrade(tx, item.id, item.trade, timestamp, importBatchId);
+      });
+      return items.length;
     },
 
     get(id: string): TradeRecord | null {

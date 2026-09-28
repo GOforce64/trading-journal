@@ -31,8 +31,10 @@ export const legInputSchema = z.object({
 export const ironFlyDetailsSchema = z.object({
   bodyPutStrike: z.number().positive(),
   bodyCallStrike: z.number().positive(),
-  putWingStrike: z.number().positive(),
-  callWingStrike: z.number().positive(),
+  /** 0 marks a 1-wing trade: with no long put, the stock going to zero caps the put side. */
+  putWingStrike: z.number().nonnegative(),
+  /** Null when there is no long call: the upside is uncapped, so max loss is undefined. */
+  callWingStrike: z.number().positive().nullable(),
   contracts: z.number().int().positive(),
   /** Gross credit per share, before fees. */
   creditPerShare: z.number(),

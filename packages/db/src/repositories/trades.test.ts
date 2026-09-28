@@ -162,3 +162,46 @@ describe("trades repository", () => {
     expect(repo().update(crypto.randomUUID(), { grade: "A" })).toBeNull();
   });
 });
+
+describe("importing", () => {
+  let repo: ReturnType<typeof createTradesRepo>;
+
+  beforeEach(() => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-import-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    repo = createTradesRepo(openDatabase(file), () => 1_790_000_000_000);
+  });
+
+  const imported: NewTrade = { ...sampleFly, source: "oquants_extract", book: "paper" };
+  const ID_A = "0b0e0a2e-5b1c-5d8f-9a53-8a0f0f0f0f01";
+  const ID_B = "0b0e0a2e-5b1c-5d8f-9a53-8a0f0f0f0f02";
+
+  it("inserts under the given ids, tagged with the batch and not marked as user-edited", () => {
+    expect(repo.importMany([{ id: ID_A, trade: imported }], "batch-1")).toBe(1);
+    const stored = repo.get(ID_A);
+    expect(stored?.importBatchId).toBe("batch-1");
+    expect(stored?.source).toBe("oquants_extract");
+    expect(stored?.editedAt).toBeNull();
+    expect(stored?.legs).toHaveLength(imported.legs.length);
+    expect(stored?.ironFly?.putWingStrike).toBe(45);
+  });
+
+  it("reports which ids exist, soft-deleted ones included", () => {
+    repo.importMany([{ id: ID_A, trade: imported }], "batch-1");
+    repo.softDelete(ID_A);
+    expect(repo.existingIds([ID_A, ID_B])).toEqual(new Set([ID_A]));
+  });
+
+  it("writes nothing when any trade in the batch fails", () => {
+    expect(() =>
+      repo.importMany(
+        [
+          { id: ID_A, trade: imported },
+          { id: ID_A, trade: imported },
+        ],
+        "batch-1",
+      ),
+    ).toThrow();
+    expect(repo.existingIds([ID_A]).size).toBe(0);
+  });
+});
