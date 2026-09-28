@@ -28,6 +28,27 @@ vi.mock("../analytics/Charts.js", () => ({
   ),
 }));
 
+vi.mock("../analytics/MoveCharts.js", () => ({
+  MoveScatter: ({ points }: { points: { ticker: string; implied: number; absActual: number }[] }) => (
+    <div data-testid="move-scatter">
+      {points
+        .map(
+          (point) =>
+            `${point.ticker} ${(point.implied * 100).toFixed(1)}/${(point.absActual * 100).toFixed(1)}`,
+        )
+        .join("; ")}
+    </div>
+  ),
+  CrushHistogram: ({ bins }: { bins: { label: string; tradeIds: string[] }[] }) => (
+    <div data-testid="crush-histogram">
+      {bins
+        .filter((bin) => bin.tradeIds.length > 0)
+        .map((bin) => `${bin.label}: ${bin.tradeIds.length}`)
+        .join("; ")}
+    </div>
+  ),
+}));
+
 /*
  * AA +100 (paper, fees 4), BB −300 (paper, fees 6), CC +280 (live, fees 2): net +80, 2 of 3 won, PF 380 / 300 = 1.27.
  * XX +999 is excluded.
@@ -234,9 +255,96 @@ describe("Analytics Iron flies", () => {
     expect(localStorage.getItem("tj.edges.credit")).toBe("300");
   });
 
-  it("holds a place for the move charts, counting the flies that have the data", async () => {
+  it("says how many flies have move data, and what each panel lacks without any", async () => {
     stubTrades(FLIES);
     renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
-    expect(await screen.findByText(/0 of 3 closed flies have them/)).toBeTruthy();
+    expect((await screen.findByTestId("move-coverage")).textContent).toContain(
+      "Move data for 0 of 3 closed flies",
+    );
+    expect(screen.getByText("No move data in this range.")).toBeTruthy();
+    expect(screen.getByText("No IV data in this range.")).toBeTruthy();
+  });
+});
+
+describe("Analytics Iron flies: move data", () => {
+  /* AA moved 0.4× its implied move and won; BB moved 1.5× and lost; CC has no move data. */
+  const MOVED = [
+    tradeRow({
+      id: "a",
+      underlying: "AA",
+      opened: "2026-09-02 15:45",
+      closed: "2026-09-03 09:50",
+      netPnl: 100,
+      fly: { impliedMovePct: 10, actualMovePct: -4, ivBefore: 120, ivAfter: 60 },
+    }),
+    tradeRow({
+      id: "b",
+      underlying: "BB",
+      opened: "2026-09-03 15:50",
+      closed: "2026-09-04 15:40",
+      netPnl: -300,
+      fly: { impliedMovePct: 10, actualMovePct: 15, ivBefore: 100, ivAfter: 75 },
+    }),
+    tradeRow({
+      id: "c",
+      underlying: "CC",
+      opened: "2026-09-04 15:30",
+      closed: "2026-09-08 09:45",
+      netPnl: 280,
+    }),
+  ];
+
+  it("shows the three move panels for the flies that have move data", async () => {
+    stubTrades(MOVED);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    expect((await screen.findByTestId("move-coverage")).textContent).toContain(
+      "Move data for 2 of 3 closed flies",
+    );
+    expect(screen.getByTestId("move-scatter").textContent).toBe("AA 10.0/4.0; BB 10.0/15.0");
+    const ratio = within(screen.getByRole("region", { name: "P&L by move ratio" }));
+    expect(ratio.getByText("< 0.5×").closest("tr")?.textContent).toContain("+$100");
+    expect(ratio.getByText("1.5×+").closest("tr")?.textContent).toContain("−$300");
+    expect(ratio.getByText(/Moved more than implied/).textContent).toBe(
+      "Moved more than implied: 1 trade, 0 won, net −$300.",
+    );
+    expect(screen.getByTestId("crush-histogram").textContent).toBe("25…50: 1; 50+: 1");
+    expect(screen.getByText(/Median crush/).textContent).toBe(
+      "Median crush 43 pts over 2 trades. IV after is left blank within 24 h of expiry.",
+    );
+  });
+
+  it("disables Fill in missing without a key, saying why", async () => {
+    stubTrades(MOVED);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    const button = await screen.findByRole("button", { name: "Fill in missing" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.getAttribute("title")).toBe("Add an Alpaca key in Settings to fetch stock prices.");
+  });
+
+  it("fills every fly's missing stock prices on request, and says how it went", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      const body =
+        path === "/api/settings"
+          ? { dataDir: null, marketData: { state: "on", message: null, keyIdHint: null } }
+          : path === "/api/moves/fill"
+            ? {
+                filled: 2,
+                missing: [{ tradeId: "c", underlying: "CC", side: "exit", reason: "no_bars" }],
+                unavailable: null,
+              }
+            : path === "/api/option-quotes"
+              ? { quotes: {}, available: true }
+              : MOVED;
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    const button = await screen.findByRole("button", { name: "Fill in missing" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    expect(await screen.findByText("Filled 2 of 3 stock prices. 1 missing.")).toBeTruthy();
+    const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/moves/fill"));
+    expect(JSON.parse(String(fill?.[1]?.body))).toEqual({});
   });
 });

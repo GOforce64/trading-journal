@@ -20,6 +20,8 @@ interface RowSpec {
   contracts?: number;
   creditPerShare?: number;
   strategy?: "iron_fly" | "scalp";
+  /** Fly detail fields to set, such as typed moves or stock prices. */
+  fly?: Record<string, unknown>;
 }
 
 /** A trade as GET /api/trades returns it: a balanced 9 / 10 / 11 fly unless the strategy says scalp. */
@@ -71,7 +73,10 @@ export function tradeRow(spec: RowSpec) {
           actualMovePct: null,
           ivBefore: null,
           ivAfter: null,
+          underlyingPriceEntry: null,
+          underlyingPriceExit: null,
           sourceNotes: null,
+          ...spec.fly,
         }
       : null,
     metrics: null,
