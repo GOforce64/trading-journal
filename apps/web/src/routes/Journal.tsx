@@ -28,6 +28,21 @@ export function useTrades(filter: JournalFilter) {
   });
 }
 
+/** Live reference prices, refreshed each minute and never stored. None at all without a data key. */
+export function useQuotes(symbols: string[]) {
+  const unique = [...new Set(symbols)].sort();
+  return useQuery({
+    queryKey: ["quotes", unique],
+    queryFn: async () => {
+      const res = await api.api.quotes.$get({ query: { symbols: unique.join(",") } });
+      if (!res.ok) throw new Error(`quotes failed: ${res.status}`);
+      return (await res.json()).quotes;
+    },
+    enabled: unique.length > 0,
+    refetchInterval: 60_000,
+  });
+}
+
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short",
@@ -35,6 +50,21 @@ const ET = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+const PRICE = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function LivePrice({ tradeId, quote }: { tradeId: string; quote?: { price: number; at: number } }) {
+  if (!quote) return null;
+  return (
+    <span
+      data-testid={`price-${tradeId}`}
+      title={`Last trade ${ET.format(new Date(quote.at))} ET, IEX. For reference only.`}
+      className="num ml-1.5 text-muted"
+    >
+      {PRICE.format(quote.price)}
+    </span>
+  );
+}
 
 export interface JournalProps {
   /** Fixed part of the filter, e.g. the Iron Flies page pins the strategy. */
@@ -47,6 +77,7 @@ export interface JournalProps {
 export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade }: JournalProps) {
   const [book, setBook] = useState<JournalFilter["book"]>(undefined);
   const { data, isLoading, error } = useTrades({ ...lockedFilter, book });
+  const { data: quotes } = useQuotes(data?.map((trade) => trade.underlying) ?? []);
 
   return (
     <Panel
@@ -79,7 +110,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
           <thead>
             <tr className="text-[9px] text-muted uppercase tracking-wider">
               <th className="w-36 py-1 text-left font-medium">Opened</th>
-              <th className="w-20 text-left font-medium">Symbol</th>
+              <th className="w-32 text-left font-medium">Symbol</th>
               <th className="w-24 text-left font-medium">Strategy</th>
               <th className="w-32 text-left font-medium">Book</th>
               <th className="text-left font-medium">Notes</th>
@@ -107,7 +138,10 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                 <td className="num whitespace-nowrap py-1 pr-3 text-muted">
                   {ET.format(new Date(trade.openedAt))}
                 </td>
-                <td className="text-fg">{trade.underlying}</td>
+                <td className="whitespace-nowrap text-fg">
+                  {trade.underlying}
+                  <LivePrice tradeId={trade.id} quote={quotes?.[trade.underlying]} />
+                </td>
                 <td>
                   <Chip tone={trade.strategy}>{trade.strategy === "iron_fly" ? "IRON FLY" : "SCALP"}</Chip>
                 </td>
