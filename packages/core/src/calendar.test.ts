@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   easterSunday,
+  expiryMoment,
   holdBucket,
   holidayName,
   isTradingDay,
   nyMinuteOfDay,
   nyseHolidays,
+  nyWallClock,
   nyWeekday,
+  sessionMoment,
   sessionsBetween,
   weekdayOfDate,
 } from "./calendar.js";
@@ -144,5 +147,49 @@ describe("holdBucket", () => {
 
   it("is unknown when the close is before the open", () => {
     expect(holdBucket(ny("2026-09-03 09:50"), ny("2026-09-02 15:45"))).toBe("unknown");
+  });
+});
+
+describe("nyWallClock", () => {
+  it("reads a New York time in daylight time as UTC−4", () => {
+    expect(nyWallClock("2026-09-09", 15 * 60 + 54)).toBe(Date.UTC(2026, 8, 9, 19, 54));
+  });
+
+  it.each([
+    ["2026-03-06", 16 * 60, Date.UTC(2026, 2, 6, 21, 0)],
+    ["2026-03-08", 12 * 60, Date.UTC(2026, 2, 8, 16, 0)],
+    ["2026-03-09", 16 * 60, Date.UTC(2026, 2, 9, 20, 0)],
+    ["2026-10-30", 16 * 60, Date.UTC(2026, 9, 30, 20, 0)],
+    ["2026-11-01", 12 * 60, Date.UTC(2026, 10, 1, 17, 0)],
+    ["2026-11-02", 16 * 60, Date.UTC(2026, 10, 2, 21, 0)],
+  ])("gets the offset right around the clock changes: %s at minute %i", (date, minute, expected) => {
+    expect(nyWallClock(date, minute)).toBe(expected);
+  });
+});
+
+describe("sessionMoment", () => {
+  it("keeps a time inside the session and drops its seconds", () => {
+    expect(sessionMoment(Date.UTC(2026, 8, 9, 19, 54, 37))).toBe(Date.UTC(2026, 8, 9, 19, 54));
+  });
+
+  it("moves a time before the open to 09:31, when the first bar has closed", () => {
+    expect(sessionMoment(ny("2026-08-05 07:45"))).toBe(ny("2026-08-05 09:31"));
+  });
+
+  it("moves a time after the close to 16:00 on the same New York date", () => {
+    expect(sessionMoment(ny("2026-08-26 18:11"))).toBe(ny("2026-08-26 16:00"));
+    // 23:30 ET is already the next day in UTC.
+    expect(sessionMoment(ny("2026-09-09 23:30"))).toBe(ny("2026-09-09 16:00"));
+  });
+
+  it("uses 16:00 on a half day too, where the bars simply stop earlier", () => {
+    expect(sessionMoment(ny("2026-11-27 17:30", "-05:00"))).toBe(ny("2026-11-27 16:00", "-05:00"));
+  });
+});
+
+describe("expiryMoment", () => {
+  it("puts expiry at 16:00 New York, in summer and in winter", () => {
+    expect(expiryMoment("2026-09-11")).toBe(Date.UTC(2026, 8, 11, 20, 0));
+    expect(expiryMoment("2026-12-18")).toBe(Date.UTC(2026, 11, 18, 21, 0));
   });
 });
