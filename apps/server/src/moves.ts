@@ -85,8 +85,23 @@ export function createMoveFiller({
           sources.report(error);
           return { filled, missing, unavailable: UNREACHABLE };
         }
-        if (price == null) miss("no_bars");
-        else if (repo.setUnderlyingPrice(gap.tradeId, side, price)) filled++;
+        if (price == null) {
+          miss("no_bars");
+          continue;
+        }
+        // The user may have edited the trade while Alpaca answered. A price read for the old ticker or
+        // minute would never be corrected, so it's dropped; the fill after that edit fetches the right one.
+        const current = repo.get(gap.tradeId);
+        const time = side === "entry" ? current?.openedAt : current?.closedAt;
+        if (
+          !current ||
+          current.underlying !== gap.underlying ||
+          time == null ||
+          sessionMoment(time) !== moment
+        ) {
+          continue;
+        }
+        if (repo.setUnderlyingPrice(gap.tradeId, side, price)) filled++;
       }
     }
     return { filled, missing, unavailable: null };

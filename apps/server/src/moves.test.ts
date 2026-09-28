@@ -68,6 +68,14 @@ function setup(bars: BarSource | null, now = NOW) {
     async create(body: Record<string, unknown> = fly()) {
       return ((await (await post("/api/trades", body)).json()) as { id: string }).id;
     },
+    async patch(id: string, body: unknown) {
+      const res = await app.request(`/api/trades/${id}`, {
+        method: "PATCH",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(200);
+    },
     async fill(body: unknown = {}) {
       const res = await post("/api/moves/fill", body);
       return { status: res.status, body: (await res.json()) as FillBody };
@@ -208,6 +216,24 @@ describe("POST /api/moves/fill", () => {
     const [first, second] = await both;
     expect(first.body.filled + second.body.filled).toBe(2);
     expect(asked).toHaveLength(2);
+  });
+
+  it("drops a price whose time or ticker changed while Alpaca was answering", async () => {
+    let release: () => void = () => {};
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { bars, asked } = fakeBars(M_PRICES, hold);
+    const app = setup(bars);
+    const id = await app.create(fly({ closedAt: null, netPnl: null }));
+    const run = app.fill();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(asked).toEqual([`M@${iso(OPEN)}`]);
+    // The user fixes the open time while the run waits on Alpaca for the old one.
+    await app.patch(id, { openedAt: OPEN + 86_400_000 });
+    release();
+    expect((await run).body.filled).toBe(0);
+    expect(await app.prices(id)).toEqual([null, null]);
   });
 
   it("refuses a body that isn't a list of trade ids, and ignores ids it doesn't know", async () => {
