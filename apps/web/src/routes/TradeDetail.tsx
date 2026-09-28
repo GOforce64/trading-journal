@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
-import type { ReactNode } from "react";
 import { api, type TradeView } from "../api.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
-import { Chip, Money, Panel, Pct } from "../components/ui.js";
+import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { MoveTiles } from "./MoveTiles.js";
 
 const GRADES = ["A", "B", "C", "D", "F"] as const;
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -107,7 +107,7 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
         </button>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <Tile label="Structure" testId="tile-structure">
           {metrics ? `${detail?.putWingStrike} / ${detail?.bodyPutStrike} / ${detail?.callWingStrike}` : "—"}
           <small className="mt-1 block text-[10px] text-muted">
@@ -132,16 +132,9 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
         <Tile label="Breakevens" testId="tile-breakevens">
           {metrics ? `${metrics.breakevenLow} / ${metrics.breakevenHigh}` : "—"}
         </Tile>
-        <Tile label="Implied move" testId="tile-implied-move" empty={detail?.impliedMovePct == null}>
-          {detail?.impliedMovePct != null ? `${detail.impliedMovePct}%` : "— add"}
-        </Tile>
-        <Tile label="Actual move" empty={detail?.actualMovePct == null}>
-          {detail?.actualMovePct != null ? `${detail.actualMovePct}%` : "— add"}
-        </Tile>
-        <Tile label="IV before → after" empty={detail?.ivBefore == null}>
-          {detail?.ivBefore != null ? `${detail.ivBefore}% → ${detail.ivAfter ?? "—"}%` : "— add"}
-        </Tile>
       </div>
+
+      {trade.strategy === "iron_fly" && <MoveTiles trade={trade} />}
 
       <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
         <Panel title="Legs">
@@ -269,30 +262,6 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
           />
           {patch.error && <p className="mt-2 text-down">{String(patch.error)}</p>}
         </Panel>
-      </div>
-    </div>
-  );
-}
-
-function Tile({
-  label,
-  children,
-  testId,
-  empty = false,
-}: {
-  label: string;
-  children: ReactNode;
-  testId?: string;
-  empty?: boolean;
-}) {
-  return (
-    <div className={`rounded-sm border bg-panel p-2 ${empty ? "border-line border-dashed" : "border-line"}`}>
-      <div className="text-[10px] text-muted uppercase tracking-wider">{label}</div>
-      <div
-        className={`num mt-1 font-semibold text-[15px] ${empty ? "text-[#4b5263]" : ""}`}
-        data-testid={testId}
-      >
-        {children}
       </div>
     </div>
   );

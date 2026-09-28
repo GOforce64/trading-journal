@@ -6,3 +6,7 @@ export const api = hc<AppType>("/");
 
 type TradeListResponse = Awaited<ReturnType<Awaited<ReturnType<typeof api.api.trades.$get>>["json"]>>;
 export type TradeView = TradeListResponse[number];
+
+type FillResponse = Awaited<ReturnType<typeof api.api.moves.fill.$post>>;
+/** What one fill run did (spec §8.2). */
+export type FillResult = Awaited<ReturnType<FillResponse["json"]>>;
