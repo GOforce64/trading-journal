@@ -161,6 +161,13 @@ describe("trades repository", () => {
   it("returns null when updating a trade that does not exist", () => {
     expect(repo().update(crypto.randomUUID(), { grade: "A" })).toBeNull();
   });
+
+  it("lists 500 trades by default, and every trade when the limit is null", () => {
+    const trades = repo();
+    for (let index = 0; index < 501; index++) trades.create({ ...sampleFly, openedAt: 1000 + index });
+    expect(trades.list()).toHaveLength(500);
+    expect(trades.list({ limit: null })).toHaveLength(501);
+  });
 });
 
 describe("importing", () => {

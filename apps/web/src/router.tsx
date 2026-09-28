@@ -1,7 +1,16 @@
-import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Outlet,
+  useRouterState,
+} from "@tanstack/react-router";
+import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
+import { Dashboard } from "./routes/Dashboard.js";
 import { EditTrade } from "./routes/EditTrade.js";
 import { Import } from "./routes/Import.js";
 import { IronFlies } from "./routes/IronFlies.js";
@@ -34,11 +43,17 @@ const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", para
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: () => (
-    <Panel title="Dashboard">
-      <p className="text-muted">Your numbers appear here once trades are logged.</p>
-    </Panel>
-  ),
+  validateSearch: parseDashboardSearch,
+  component: function DashboardRoute() {
+    const search = dashboardRoute.useSearch();
+    return (
+      <Dashboard
+        search={search}
+        onSearch={(next) => router.navigate({ to: "/", search: next })}
+        onOpenTrade={openTrade}
+      />
+    );
+  },
 });
 
 const journalRoute = createRoute({
@@ -79,6 +94,13 @@ const editTradeRoute = createRoute({
   },
 });
 
+const analyticsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/analytics",
+  validateSearch: parseAnalyticsSearch,
+  component: lazyRouteComponent(() => import("./routes/AnalyticsRoute.js"), "AnalyticsRoute"),
+});
+
 const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import",
@@ -93,12 +115,6 @@ const settingsRoute = createRoute({
 
 /** Nav destinations whose features arrive in later plans; better than a dead link. */
 const PLACEHOLDERS = [
-  {
-    path: "/analytics",
-    title: "Analytics",
-    phase: "a later Phase 1 plan",
-    blurb: "Equity curve, P&L calendar, time-of-day buckets and per-setup breakdowns.",
-  },
   {
     path: "/missed",
     title: "Missed",
@@ -129,6 +145,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     dashboardRoute,
     journalRoute,
+    analyticsRoute,
     ironFliesRoute,
     newIronFlyRoute,
     tradeDetailRoute,

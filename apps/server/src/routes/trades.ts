@@ -16,6 +16,8 @@ const listQuerySchema = z.object({
   book: z.enum(["live", "paper", "missed"]).optional(),
   underlying: z.string().optional(),
   includeExcluded: z.enum(["true", "false"]).optional(),
+  /** Every trade rather than the newest 500, for pages that aggregate. */
+  all: z.enum(["true"]).optional(),
 });
 
 export interface TradeView extends TradeRecord {
@@ -66,6 +68,7 @@ export function tradeRoutes(db: Db, now?: () => number) {
             book: query.book,
             underlying: query.underlying,
             includeExcluded: query.includeExcluded === "true",
+            limit: query.all === "true" ? null : undefined,
           })
           .map(withMetrics),
       );

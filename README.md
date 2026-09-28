@@ -48,14 +48,17 @@ requests that don't come from `localhost`.
 ## What it tracks
 
 - **Iron flies** — structure (including broken wings, where each side's risk is
-  measured separately), credit, max loss, return on risk, breakevens, and the
+  measured separately), credit and how much of it you keep, max loss, breakevens, and the
   earnings context around the trade.
 - **Scalps** — planned stop on the underlying, a Black-Scholes estimate of the
   dollar risk that stop implies, R-multiples, and a generated chart of the session.
+- **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
+  P&L calendar, open and recent trades) and an Analytics page with every split at once
+  and an Iron flies tab measured against max profit.
 - **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
   dollar statistics.
 
-Scalps, charts, imports and analytics arrive in later phases; see
+Scalps, trade charts and IBKR sync arrive in later phases; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
 [the plans](docs/superpowers/plans/).
 

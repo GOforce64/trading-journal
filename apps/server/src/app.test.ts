@@ -142,6 +142,15 @@ describe("createApp", () => {
     expect(res.status).toBe(200);
   });
 
+  it("lists every trade when asked for all of them, and refuses other values", async () => {
+    await post(sampleFly);
+    await post(sampleFly);
+    const all = await app.request("/api/trades?all=true", { headers: LOCAL });
+    expect(all.status).toBe(200);
+    expect(await readJson<TradeBody[]>(all)).toHaveLength(2);
+    expect((await app.request("/api/trades?all=yes", { headers: LOCAL })).status).toBe(400);
+  });
+
   it("serves seeded setups and tags", async () => {
     const setups = await readJson<{ name: string }[]>(await app.request("/api/setups", { headers: LOCAL }));
     const tags = await readJson<{ kind: string }[]>(await app.request("/api/tags", { headers: LOCAL }));
