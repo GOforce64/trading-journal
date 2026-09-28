@@ -5,6 +5,7 @@ import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../compon
 import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { MoveTiles } from "./MoveTiles.js";
+import { SettlePanel } from "./SettlePanel.js";
 
 const GRADES = ["A", "B", "C", "D", "F"] as const;
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -32,7 +33,15 @@ const ET = new Intl.DateTimeFormat("en-US", {
 
 const NO_QUOTES = new Map<string, OptionQuote>();
 
-export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id: string) => void }) {
+export function TradeDetail({
+  tradeId,
+  onEdit,
+  onSettle,
+}: {
+  tradeId: string;
+  onEdit?: (id: string) => void;
+  onSettle?: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
 
   const { data: trade, isLoading } = useQuery({
@@ -135,6 +144,9 @@ export function TradeDetail({ tradeId, onEdit }: { tradeId: string; onEdit?: (id
       </div>
 
       {trade.strategy === "iron_fly" && <MoveTiles trade={trade} />}
+      {trade.strategy === "iron_fly" && estimate?.kind === "expired" && (
+        <SettlePanel trade={trade} onEdit={onEdit} onEditSettled={onSettle} />
+      )}
 
       <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
         <Panel title="Legs">

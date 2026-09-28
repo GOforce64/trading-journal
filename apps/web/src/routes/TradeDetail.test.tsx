@@ -247,6 +247,7 @@ describe("TradeDetail", () => {
     renderDetail();
     expect(await screen.findByText("EXPIRED · add exits")).toBeTruthy();
     expect(screen.queryByText("Mark (to close)")).toBeNull();
+    expect(await screen.findByText("Settle at expiry")).toBeTruthy();
   });
 
   it("shows no marks, and blames no quote, without a market data key", async () => {

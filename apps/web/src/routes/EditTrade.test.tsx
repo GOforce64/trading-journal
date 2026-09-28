@@ -175,4 +175,93 @@ describe("EditTrade", () => {
       expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["t1"] });
     });
   });
+
+  it("starts from the exits proposed at expiry when asked to settle", async () => {
+    const bb = {
+      ...trade,
+      underlying: "BB",
+      closedAt: null,
+      netPnl: null,
+      fees: 5,
+      feesOpen: 5,
+      feesClose: 0,
+      legs: [
+        {
+          id: "b1",
+          right: "C",
+          strike: 8.5,
+          expiry: "2026-09-25",
+          quantity: -6,
+          multiplier: 100,
+          openPrice: 0.48,
+          closePrice: null,
+        },
+        {
+          id: "b2",
+          right: "P",
+          strike: 8.5,
+          expiry: "2026-09-25",
+          quantity: -6,
+          multiplier: 100,
+          openPrice: 0.6,
+          closePrice: null,
+        },
+        {
+          id: "b3",
+          right: "C",
+          strike: 12,
+          expiry: "2026-09-25",
+          quantity: 6,
+          multiplier: 100,
+          openPrice: 0.04,
+          closePrice: null,
+        },
+        {
+          id: "b4",
+          right: "P",
+          strike: 6,
+          expiry: "2026-09-25",
+          quantity: 6,
+          multiplier: 100,
+          openPrice: 0.02,
+          closePrice: null,
+        },
+      ],
+      ironFly: {
+        ...trade.ironFly,
+        bodyPutStrike: 8.5,
+        bodyCallStrike: 8.5,
+        putWingStrike: 6,
+        callWingStrike: 12,
+        contracts: 6,
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const body = String(input).includes("/api/close/")
+        ? { symbol: "BB", date: "2026-09-25", close: 8.21, unavailable: null }
+        : bb;
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onSaved = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <EditTrade tradeId="t1" settle onSaved={onSaved} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Short put exit") as HTMLInputElement).value).toBe("0.29"),
+    );
+    expect((screen.getByLabelText("Short call exit") as HTMLInputElement).value).toBe("0");
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
+    const body = JSON.parse(String(patch?.[1]?.body));
+    expect(body.closedAt).toBe(Date.UTC(2026, 8, 25, 20, 0));
+    expect(body.netPnl).toBe(433);
+  });
 });

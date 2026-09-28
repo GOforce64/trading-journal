@@ -95,3 +95,17 @@ export function useCompanyName(symbol: string) {
     staleTime: Number.POSITIVE_INFINITY,
   });
 }
+
+/** The stock's close on a past date, for settling at expiry. A past close never changes. */
+export function useClose(symbol: string, date: string | null) {
+  return useQuery({
+    queryKey: ["close", symbol, date],
+    enabled: date != null && TICKER.test(symbol),
+    staleTime: Number.POSITIVE_INFINITY,
+    queryFn: async () => {
+      const res = await api.api.close[":symbol"].$get({ param: { symbol }, query: { date: date ?? "" } });
+      if (!res.ok) throw new Error(`close failed: ${res.status}`);
+      return res.json();
+    },
+  });
+}

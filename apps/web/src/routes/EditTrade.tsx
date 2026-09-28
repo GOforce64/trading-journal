@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type MoveValue, tradeMoves } from "@tj/core";
+import { type MoveValue, settleExpiry, tradeMoves } from "@tj/core";
 import { api, type TradeView } from "../api.js";
 import { Panel } from "../components/ui.js";
+import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
+import { settleProposal } from "../settle.js";
 import { IronFlyForm, type IronFlyFormValues, type LegFields, type OverrideKey } from "./IronFlyForm.js";
 
 /** datetime-local wants local wall-clock text, not an ISO instant. */
@@ -16,6 +18,7 @@ function toLocalInput(epochMs: number | null): string {
 }
 
 const asText = (value: number | null | undefined): string => (value == null ? "" : String(value));
+const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function legFields(legs: TradeView["legs"], right: "C" | "P", short: boolean): LegFields {
   const leg = legs.find((candidate) => candidate.right === right && candidate.quantity < 0 === short);
@@ -76,7 +79,15 @@ function keepIronFlyExtras(payload: Record<string, unknown>, trade: TradeView): 
   return { ...payload, ironFly: { ...stored, ...(payload.ironFly as Record<string, unknown>) } };
 }
 
-export function EditTrade({ tradeId, onSaved }: { tradeId: string; onSaved?: (id: string) => void }) {
+export function EditTrade({
+  tradeId,
+  settle = false,
+  onSaved,
+}: {
+  tradeId: string;
+  settle?: boolean;
+  onSaved?: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
   const fill = useFillMoves();
 
@@ -108,7 +119,21 @@ export function EditTrade({ tradeId, onSaved }: { tradeId: string; onSaved?: (id
     },
   });
 
+  // Asked to settle: start from the exits proposed at expiry (spec §9.5).
+  const expiry = settle && trade ? settleExpiry(trade.legs) : null;
+  const close = useClose(trade?.underlying ?? "", expiry);
+
   if (isLoading || !trade) return <p className="text-muted">Loading…</p>;
+  if (expiry && close.isLoading) return <p className="text-muted">Asking Alpaca for the close…</p>;
+  const proposal = expiry && close.data?.close != null ? settleProposal(trade, close.data.close) : null;
+  const initial = proposal
+    ? toFormValues({
+        ...trade,
+        legs: proposal.legs,
+        closedAt: proposal.closedAt,
+        feesClose: proposal.feesClose,
+      })
+    : toFormValues(trade);
   if (trade.strategy !== "iron_fly") {
     return (
       <Panel title="Edit">
@@ -118,13 +143,21 @@ export function EditTrade({ tradeId, onSaved }: { tradeId: string; onSaved?: (id
   }
 
   return (
-    <IronFlyForm
-      initial={toFormValues(trade)}
-      movePlaceholders={movePlaceholders(trade)}
-      submitLabel="Save changes"
-      busy={save.isPending}
-      error={save.error ? String(save.error) : null}
-      onSubmit={(payload) => save.mutate(keepIronFlyExtras(payload, trade))}
-    />
+    <div className="flex flex-col gap-2">
+      {proposal && (
+        <p className="text-[11px] text-muted">
+          Exits proposed at intrinsic value from {trade.underlying}'s {usd(proposal.close)} close on{" "}
+          {proposal.expiry}. Check them and the fees, then save.
+        </p>
+      )}
+      <IronFlyForm
+        initial={initial}
+        movePlaceholders={movePlaceholders(trade)}
+        submitLabel="Save changes"
+        busy={save.isPending}
+        error={save.error ? String(save.error) : null}
+        onSubmit={(payload) => save.mutate(keepIronFlyExtras(payload, trade))}
+      />
+    </div>
   );
 }
