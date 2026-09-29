@@ -1,7 +1,7 @@
 # IBKR Flex Sync and Scalps — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Draft, awaiting review.
+- **Status:** Approved 2026-09-29. Plan: [2026-09-29-ibkr-flex-sync.md](../plans/2026-09-29-ibkr-flex-sync.md), whose deviations are folded in below.
 - **Scope:**
   - **The sync:** trades from the IBKR paper account come into the journal from the Flex Web Service, from 2026-09-28 on. A Sync button starts it, and so does opening the app when the last sync is more than 15 minutes old.
   - **Grouping:** every fill is kept, and the fills are regrouped into trades on every sync. Scalps become scalp trades and flies become iron fly trades, without mixing the two up or duplicating what oQuants already imported.
@@ -139,11 +139,11 @@ One row per IBKR execution, expiry, exercise or assignment. These are facts: not
 
 ### 5.2 `sync_state`
 
-One row per account: `account_id` (the primary key), `last_run_at`, `last_status` (`ok` | `error`), `last_error`, `last_summary` (JSON, §8.2).
+One row per source: `source` (the primary key, `"ibkr"`), `account_id` (nullable: a run that fails before any statement names the account, such as a rejected token, is still recorded and shown), `last_run_at`, `last_status` (`ok` | `error`), `last_error`, `last_summary` (JSON, §8.2).
 
 ### 5.3 `trades.facts_edited_at`
 
-A new nullable epoch-ms column. `repo.update` sets it when a patch **actually changes** a sync-owned value (§5.5): a leg, a price, a size, a time, fees, P&L or the fly's structure. Saving the fly form sends the legs every time, so the values are compared, not just the keys. Notes, exclude, the move overrides and earnings fields never set it.
+A new nullable epoch-ms column. `repo.update` sets it when a patch **actually changes** a sync-owned value (§5.5): a leg, a price, a size, a time, fees, P&L or the fly's structure. Saving the fly form sends the legs every time, so the values are compared, not just the keys. Times are compared **to the minute**, because the forms drop seconds. Notes, exclude, the move overrides and earnings fields never set it.
 
 ### 5.4 Accounts and synced trades
 
@@ -203,7 +203,7 @@ Both machines need the same `since` to produce identical trades, and the Setting
 
 ### 6.2 `parse.ts`
 
-`parseFlex(xml)` returns `{ accountId, kind: "activity" | "confirm", fromDate, toDate, fills: ParsedFill[], canceledTradeIds: string[], ignored: { stock, other, malformed } }`.
+`parseFlex(xml)` returns `{ accountId, kind: "activity" | "confirm", fromDate, toDate, fills: ParsedFill[], cancels: { tradeId, quantity, price }[], ignored: { stock, other, malformed } }`.
 
 - **Parsing:** fast-xml-parser with attributes kept as strings, so no id becomes a number.
 - **Rows read:** Activity `<Trade>` and `<OptionEAE>`, and Today `<TradeConfirm>`. Only `assetCategory = OPT`; stock rows are counted as `stock`.
@@ -212,9 +212,9 @@ Both machines need the same `since` to produce identical trades, and the Setting
 - **Kind:**
   - `ExchTrade` is `trade`.
   - `BookTrade` is `expiration` when its notes say `Ep`, `exercise` for `Ex`, and `assignment` for `A`.
-  - An exercise or assignment takes its price from the `OptionEAE` row with the same `conid` and date (`markPrice`). If there's none, the price is $0 and the row is counted as malformed for the summary.
+  - An exercise or assignment takes its price from the `OptionEAE` row with the same `tradeID`, which both rows carry (`markPrice`). If there's none, the price is $0 and the row is counted as malformed for the summary.
 - **Open or close:** `openCloseIndicator`, or `O` / `C` found in `code`, stored as `open_close`.
-- **Cancels:** `TradeCancel` rows go to `canceledTradeIds` (their `origTradeID`), and are not fills themselves.
+- **Cancels:** `TradeCancel` rows go to `cancels` with their `origTradeID`, size and price, and are not fills themselves. IBKR re-books a corrected fill under the **same** trade id (the CZR 2-lot was canceled and re-booked as a 1-lot, `.01.01` and `.01.02`), so the size and price pick the fill that was canceled.
 - **Validation:** each row is checked with zod. A malformed row is counted and skipped; it never fails the parse.
 
 ---
@@ -238,8 +238,8 @@ Both machines need the same `since` to produce identical trades, and the Setting
    - `closePrice` is the size-weighted average of the closing fills, and only once the contract is flat; otherwise null.
    - Expiries close at $0, and exercises and assignments at `markPrice`.
 4. **The trade:**
-   - `openedAt` is the first fill, and `closedAt` is the last fill once everything is flat, otherwise null.
-   - `feesOpen` and `feesClose` are the commissions of the opening and closing fills; `fees` is their sum.
+   - `openedAt` is the first fill. Once everything is flat, `closedAt` is the last **exchange** fill that closed a position. Expiry bookings (16:20) count only when nothing else closed the trade: the AA fly's body was bought back at 09:52 and its wings expired untouched, and move data reads the exit stock price at `closedAt`. While anything is open, it's null.
+   - `feesOpen` and `feesClose` are the commissions of the opening and closing fills, each rounded to cents. `fees` is the sum of those two rounded parts, as the forms add them, so re-saving a trade can't move its fees by a cent.
    - `netPnl` comes from `positionCash(legs, { open, close })`.
    - A fly's details are computed as the fly form computes them: `ironFlyStructureFromLegs`, `contracts`, `creditPerShare = −(netCost − fees) ÷ shares`, and `netCost`.
    - Labels are "Long call" or "Long put", and "Short Iron Butterfly".
@@ -262,11 +262,11 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
    - An Activity failure after Today worked makes the run **partial**: today's fills go in, and `activityFailed: true`.
 4. **Account:** find or create it from the statement's `accountId`.
 5. **Everything below happens in one transaction**, after all network calls:
-   - **Store fills.** Drop fills whose `tradeDate` is before `since`, and count them. Insert new ones. An Activity row replaces a `confirm` row with the same key (final commissions). Mark `canceledTradeIds`.
+   - **Store fills.** Drop fills whose `tradeDate` is before `since`, and count them. Insert new ones. An Activity row replaces a `confirm` row with the same key (final commissions). Mark the cancels, each on the first fill with its trade id, size and price.
    - **Regroup.** Run `groupFills` over the account's fills on or after `since`.
    - **Guards, per candidate:**
      - A trade with the candidate's id that was deleted is skipped: "deleted".
-     - **Already in the journal:** a fly with the same ticker, expiry and body strike(s), opened the same New York day, from any non-IBKR source (oQuants or typed). For a scalp, a typed scalp on the same contract (ticker, right, strike, expiry) opened the same New York day. Either is skipped: "already in the journal".
+     - **Already in the journal:** a fly with the same ticker, expiry and body strike(s), opened the same New York day, from any non-IBKR source (oQuants or typed). For a scalp, a typed scalp on the same contract (ticker, right, strike, expiry) opened the same New York day. Either is skipped: "already in the journal". The oQuants import applies the same test the other way round: a fly already synced from IBKR shows as "already synced from IBKR" and is never imported, because for a few days flies are logged in both.
      - **Your edits:** a trade with `facts_edited_at` set is not written. If the candidate differs from it, the summary adds "kept your edits".
    - **Write.**
      - Insert new trades (`source = ibkr_flex`).
@@ -284,9 +284,9 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
   status: "ok" | "error" | "not_configured";
   ran: boolean;
   account: { externalId: string; kind: "paper" | "live" } | null;
-  added: number; updated: number; unchanged: number;
+  added: number; updated: number; unchanged: number; orphaned: number;
   skipped: { reason: "before_start" | "unrecognised" | "duplicate" | "deleted"; ticker: string; openedAt: number }[];
-  keptEdits: { tradeId: string; ticker: string }[];
+  keptEdits: { tradeId: string; ticker: string; netPnl: number | null }[];   // IBKR's own net P&L
   ignored: { beforeStart: number; stock: number; other: number; malformed: number };
   activityFailed: boolean;
   changedTradeIds: string[];          // added or updated, for the browser's move-data fill
@@ -338,7 +338,7 @@ A new **IBKR** card sits above the oQuants import.
 
 ### 9.3 Auto-sync on open
 
-The app shell sends one `POST /api/ibkr/sync { auto: true }` when the app loads.
+The app shell sends one `POST /api/ibkr/sync { auto: true }` when the app loads. A `useRef` guard keeps React's StrictMode double effect to one request. The nav's plain links reload the page, and the server's 15-minute rule answers those repeats.
 
 - While it runs, the Import / Sync nav item shows a small spinner.
 - When it finishes, `["trades"]` and `["trade"]` are invalidated, and the move-data fill runs for `changedTradeIds`.
@@ -372,7 +372,7 @@ It adapts to the strategy.
 **Also on the page:**
 
 - **A Fills panel** on every synced trade, flies included. It lists the time (ET), buy or sell, size, price and commission. Expiries, exercises, assignments and canceled fills are labelled.
-- **When the user has changed a synced trade's facts,** a banner reads "Your edits are kept. Later syncs won't change this trade." It carries a **Use IBKR's numbers** button. If the last sync saw a difference, it adds what IBKR now has.
+- **When the user has changed a synced trade's facts,** a banner reads "Your edits are kept. Later syncs won't change this trade." It carries a **Use IBKR's numbers** button. If the last sync saw a difference, it adds IBKR's net P&L: "IBKR now has +$44.74 net."
 - The Review panel (notes, exclude) is unchanged.
 
 ### 9.6 The scalp form
@@ -447,7 +447,7 @@ No failure leaves half a sync behind: every database write happens in one transa
 - **The parser**, on trimmed copies of the real statements, with the account renamed `DU1234567`:
   - the AA fly's eight opening fills, its closing fills, and two expiries at $0;
   - the CLF exercise at $0.42;
-  - the CZR cancel in `canceledTradeIds`;
+  - the CZR cancel in `cancels`, canceling only the original fill;
   - stock rows ignored and counted;
   - 13:52:42 New York in July becoming 17:52:42Z, and a row with no time getting 16:20;
   - Today and Activity rows giving the same fill shape;
@@ -462,7 +462,7 @@ No failure leaves half a sync behind: every database write happens in one transa
   - `checkQuery`.
 - **Grouping:**
   - NVDA 232.5C at **+$44.74** and TSLA 365P at **+$300.55**, from the Today fixture;
-  - the AA fly as one iron fly (40 / 47 / 54, 2 contracts), with **net P&L reconciling with the oQuants AA row**;
+  - the AA fly as one iron fly (40 / 47 / 54, 2 contracts). Its structure and credit match the oQuants AA row ($2.65 × 2), and its net P&L is IBKR's **+$27.32**. It doesn't reconcile to the cent with oQuants' $33.56: oQuants rounds the 47C close to 0.33 (IBKR 0.325), books the expiring wings at 0.01 (IBKR 0), and uses its own fee model ($6.44 against IBKR's $9.68);
   - two strikes bought at once becoming two scalps, and two round trips in one contract becoming two trades;
   - an unsold contract as an open trade;
   - "opened before the start date" and "unrecognised structure";
