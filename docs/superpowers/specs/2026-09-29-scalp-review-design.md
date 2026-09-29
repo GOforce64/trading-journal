@@ -1,7 +1,7 @@
 # Scalp Review — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Draft, awaiting the user's review.
+- **Status:** Approved by the user on 2026-09-29. Plan: [2026-09-29-scalp-review.md](../plans/2026-09-29-scalp-review.md).
 - **Scope:** reviewing scalps on their trade page. A scalp gets a **stop** and a **target**, drawn as lines you drag on the intraday chart, plus a **setup**, **mistake** and **emotion** tags, a **grade** and notes. A **To review** queue holds the scalps not yet reviewed. The **Playbook** page manages setups and tags.
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §6, §8.3 and §9. This is the review half of Phase 2, step 3 (§13); R, the risk engine and MAE/MFE are the other half and come next.
 - **Builds on:** the trade chart ([2026-09-29-trade-chart-design.md](2026-09-29-trade-chart-design.md)), whose `IntradayChart` takes extra price lines, and the IBKR sync ([2026-09-29-ibkr-flex-sync-design.md](2026-09-29-ibkr-flex-sync-design.md)), which fills the queue.
@@ -116,7 +116,7 @@ The review status lives in `core` so the server's filter and the web's labels ca
 - **`PATCH /api/trades/:id`** gains two fields:
   - `scalp: { levelBasis?, stopPrice?, targetPrice? }` merges into the row, the way `ironFly` does. A missing row is created; `levelBasis` is then required, and the web always sends it. A stock price must be above 0; a premium can be 0, meaning "let it ride to zero"; both are rounded to $0.01. Only a scalp takes `scalp` (400 otherwise).
   - `reviewed: true` stamps `reviewed_at` with the server's clock; `false` clears it.
-- **Changing the basis clears both levels** on the server, whatever else the patch carries: a stock level means nothing as a premium.
+- **Changing the basis clears both levels** on the server, unless the same patch sets them, since they're then in the new basis. A stock level means nothing as a premium. The web never sends both.
 - **At most one emotion tag:** a `tagIds` holding two tags of kind `emotion` is refused (400, "A trade has at most one emotion").
 - **Ownership:** the levels, the basis, `reviewed_at`, the setup, the tags, the grade and the notes belong to the user. Changing any of them stamps `edited_at`, never `facts_edited_at`, and the sync never writes them.
 
@@ -191,14 +191,14 @@ Along the bottom: **Exclude from stats** on the left; **Done reviewing** on the 
   - target: green (`#26a69a`), dashed, labelled **TARGET**;
   - both show their price on the price axis.
 - **Premium basis:** no lines. Under the fields: "Premium levels aren't drawn yet: there's no option chart."
-- Without a chart (no key, an index, Alpaca down), the fields still work and the strip notes "Lines appear when the chart loads."
+- Without a chart (no key, an index, Alpaca down), the fields still work.
 
 ### 8.2 Placing
 
-- **+ Stop** (or **+ Target**) puts the intraday chart in placing mode:
+- **+ Stop** (or **+ Target**) opens the typed field and puts the intraday chart in placing mode, so you click the chart or type:
   - the cursor becomes a crosshair;
   - a hint over the chart reads "Click the chart to place the stop · Esc to cancel".
-- The click's price (`coordinateToPrice`, rounded to $0.01) is saved, and placing mode ends. **Esc**, or pressing the button again, cancels.
+- The click's price (`coordinateToPrice`, rounded to $0.01) is saved, and placing mode ends. **Esc** cancels.
 - A click that lands outside the price pane (on an axis, or off the data) is ignored and placing continues.
 
 ### 8.3 Dragging
@@ -212,14 +212,15 @@ Along the bottom: **Exclude from stats** on the left; **Done reviewing** on the 
 - **Release** saves once, and turns panning and scaling back on.
 - **Nearest wins:** if both lines are within 6 px, the drag takes the closer one.
 - A press away from the lines pans the chart as before.
-- **Pointer capture** keeps the drag going if the pointer leaves the chart, and **Esc** during a drag puts the line back.
+- **The drag follows the mouse across the window**, so it keeps going if the pointer leaves the chart. **Esc** during a drag puts the line back.
+- Lightweight Charts listens to mouse events, not pointer events, so the drag does too. It starts on a capture-phase `mousedown` on the chart's container, stopped there so the chart doesn't pan, then follows `mousemove` and `mouseup` on `window`.
 
 ### 8.4 Typing
 
 - Each field saves on **Enter** or when it loses focus, rounded to $0.01.
 - **Esc** restores the saved value.
 - **✕** clears the level.
-- A negative number, an empty field, or 0 on the stock basis is refused inline, with nothing sent.
+- Anything but digits and a decimal point (a `$`, a comma, a minus sign), or 0 on the stock basis, is refused inline, with nothing sent. An emptied field goes back to the saved value.
 
 ### 8.5 Switching the basis
 
@@ -233,7 +234,7 @@ Along the bottom: **Exclude from stats** on the left; **Done reviewing** on the 
   - `nearestLine(lines, y, toY)`: the id of the line within 6 px of `y`, or null;
   - `priceAt(y, toPrice)`: the price at `y`, rounded to $0.01.
 - **`IntradayChart`** gains optional props, used only by scalps:
-  - `editing: { placing: "stop" | "target" | null, onPlace(kind, price), onMove(kind, price), onCancel() }`;
+  - `editing: { placing: "stop" | "target" | null, onPlace(kind, price), onDrag(kind, price), onDrop(kind, price), onCancel() }`: `onDrag` reports a line while it moves, unsaved, and `onDrop` saves it;
   - an `id` on each `PriceLine` (`"stop"`, `"target"`), so a drag knows which line it moved.
 
   Without `editing` the chart behaves exactly as today.
@@ -276,7 +277,7 @@ The Scalps nav item shows the pending count, "Scalps 5", while it's above zero.
 
 **Setups:**
 - **The table:** name, strategy (Scalps / Iron flies / Both), description and **trades**, the trade count, so it's clear whether a setup is in use before archiving it.
-- **Editing:** click a row to edit it inline. Enter saves and Esc cancels. **Archive** and **Restore** sit at the end of the row.
+- **Editing:** **Edit** turns the row into fields. Enter saves and Esc cancels. **Archive** and **Restore** sit at the end of the row.
 - **+ New setup** adds a row.
 - **Show archived** lists archived setups too, dimmed.
 
@@ -304,10 +305,10 @@ The seeded placeholders are ordinary rows, renamed or archived like any other. P
 | A bad price (negative, empty, 0 on stock) | Refused inline. The server refuses it too (400). |
 | A second emotion tag (a stale tab, or by hand) | 400, "A trade has at most one emotion". The chips show the saved state. |
 | A duplicate setup or tag name | 409, shown beside the field. The field keeps what was typed. |
-| No chart for the underlying | The fields work, with "Lines appear when the chart loads" (§8.1). |
+| No chart for the underlying | The fields work (§8.1). |
 | A level outside the chart's visible range | The line is off-screen; the axis label still shows it. Scrolling or **Fit trade** brings it back. |
 | Switching the basis with levels set | A confirm (§8.5). Cancel leaves everything as it was. |
-| The trade is still open | The strip works, but there's no queue bar or Done reviewing. It enters the queue when it closes. |
+| The trade is still open | The strip works, but there's no Done reviewing, and the queue bar offers only Next (§7.2). It enters the queue when it closes. |
 | An excluded scalp | Out of the queue. Un-excluding it brings it back if it's incomplete. |
 | A synced scalp picks up a later fill | Same trade id, so the review stays (§3). |
 | A scalp is deleted while it's next in the queue | The refetched list no longer has it, so **Next** skips it. |
