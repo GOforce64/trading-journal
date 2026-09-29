@@ -4,6 +4,8 @@ import type { Db } from "../client.js";
 import { barDays, bars } from "../schema.js";
 
 export type BarTimeframe = "1m" | "1d";
+/** Rows per insert: a row per statement makes a week of minute bars take seconds. 500 rows is 4,000 parameters. */
+const INSERT_ROWS = 500;
 
 /** The chart's bar cache (trade-chart spec §5). Only finished days are stored, so nothing here goes stale. */
 export function createBarsRepo(db: Db) {
@@ -44,9 +46,20 @@ export function createBarsRepo(db: Db) {
     ): void {
       db.transaction((tx) => {
         for (const day of days) {
-          for (const bar of day.bars) {
+          for (let start = 0; start < day.bars.length; start += INSERT_ROWS) {
             tx.insert(bars)
-              .values({ symbol, timeframe, t: bar.t, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v })
+              .values(
+                day.bars.slice(start, start + INSERT_ROWS).map((bar) => ({
+                  symbol,
+                  timeframe,
+                  t: bar.t,
+                  o: bar.o,
+                  h: bar.h,
+                  l: bar.l,
+                  c: bar.c,
+                  v: bar.v,
+                })),
+              )
               .onConflictDoNothing()
               .run();
           }

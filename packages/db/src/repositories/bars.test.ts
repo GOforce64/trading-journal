@@ -49,4 +49,11 @@ describe("the bar cache", () => {
     expect(repo.knownDays("NVDA", "1d", ["2026-09-28"]).size).toBe(0);
     expect(repo.knownDays("NVDA", "1m", []).size).toBe(0);
   });
+
+  it("stores a whole extended session, more bars than one insert takes", () => {
+    const repo = createBarsRepo(db);
+    const session = Array.from({ length: 960 }, (_, index) => bar(MON + index * 60_000, 200 + index / 100));
+    repo.store("NVDA", "1m", [{ date: "2026-09-28", bars: session }], 1_000);
+    expect(repo.read("NVDA", "1m", MON, MON + 960 * 60_000)).toEqual(session);
+  });
 });
