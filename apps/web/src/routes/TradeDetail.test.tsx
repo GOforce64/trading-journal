@@ -15,6 +15,13 @@ vi.mock("../review/ReviewPanel.js", () => ({
   ReviewPanel: ({ layout }: { layout: string }) => <div data-testid="review-panel">{layout}</div>,
 }));
 
+// A scalp's charts and review strip have their own tests; here they're one placeholder.
+vi.mock("../review/ScalpWorkspace.js", () => ({
+  ScalpWorkspace: ({ trade }: { trade: { underlying: string } }) => (
+    <div data-testid="scalp-workspace">{trade.underlying}</div>
+  ),
+}));
+
 const trade = {
   id: "t1",
   strategy: "iron_fly",
@@ -593,15 +600,14 @@ function stubSynced(
 }
 
 describe("TradeDetail for a scalp", () => {
-  it("puts the review strip under the charts and above the tiles", async () => {
+  it("puts a scalp's charts and review strip under the header, above the tiles", async () => {
     stubSynced(nvda);
     renderDetail();
-    const review = await screen.findByTestId("review-panel");
-    expect(review.textContent).toBe("strip");
+    const workspace = await screen.findByTestId("scalp-workspace");
     const follows = (a: Element, b: Element) =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-    expect(follows(screen.getByTestId("trade-charts"), review)).toBe(true);
-    expect(follows(review, screen.getByTestId("tile-contract"))).toBe(true);
+    expect(follows(workspace, screen.getByTestId("tile-contract"))).toBe(true);
+    expect(screen.queryByTestId("review-panel")).toBeNull();
   });
 
   it("shows the scalp's own tiles", async () => {

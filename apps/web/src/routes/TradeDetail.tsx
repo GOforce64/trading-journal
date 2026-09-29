@@ -6,6 +6,7 @@ import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../compon
 import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
+import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
 import { ScalpTiles } from "./ScalpTiles.js";
@@ -104,8 +105,7 @@ export function TradeDetail({
         </button>
       </header>
       <SyncedBanner trade={trade} />
-      <TradeCharts trade={trade} />
-      {trade.strategy === "scalp" && <ReviewPanel trade={trade} layout="strip" />}
+      {trade.strategy === "scalp" ? <ScalpWorkspace trade={trade} /> : <TradeCharts trade={trade} />}
 
       {trade.strategy === "iron_fly" ? (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
