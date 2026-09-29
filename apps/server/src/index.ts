@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { backupDatabase, openDatabase, runMigrations } from "@tj/db";
+import { checkFlexQuery } from "@tj/importers";
 import { type AlpacaKeys, checkAlpacaKeys } from "@tj/market-data";
 import { createApp } from "./app.js";
 import { dataPaths, readSecrets, resolveDataDir } from "./config.js";
@@ -39,7 +40,10 @@ const app = createApp({
     dataDir: paths.dataDir,
     secretsFile: paths.secretsFile,
     checkKeys: (keys) => checkAlpacaKeys(keys),
+    checkIbkr: (token, queryId) => checkFlexQuery(token, queryId),
   },
+  // Read on every sync, so saving in Settings applies at once; a broken file means not set up.
+  ibkrConfig: () => readSecrets(paths.secretsFile).ibkr ?? null,
 });
 
 serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {
