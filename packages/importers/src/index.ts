@@ -1,4 +1,5 @@
 export * from "./ibkr/flexClient.js";
+export * from "./ibkr/group.js";
 export * from "./ibkr/parse.js";
 export * from "./oquants/ids.js";
 export * from "./oquants/parse.js";

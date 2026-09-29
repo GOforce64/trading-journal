@@ -150,6 +150,10 @@ importers:
       zod:
         specifier: ^4.0.0
         version: 4.6.5
+    devDependencies:
+      fast-check:
+        specifier: ^4.10.2
+        version: 4.10.2
 
   packages/market-data:
     dependencies:
