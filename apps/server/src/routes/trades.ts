@@ -5,9 +5,18 @@ import {
   ironFlyMetrics,
   ironFlyOutcome,
   newTradeSchema,
+  type ReviewStatus,
+  reviewStatus,
   tradePatchSchema,
 } from "@tj/core";
-import { createIbkrRepo, createTradesRepo, type Db, type FillRow, type TradeRecord } from "@tj/db";
+import {
+  createIbkrRepo,
+  createTradesRepo,
+  type Db,
+  type FillRow,
+  ReviewRuleError,
+  type TradeRecord,
+} from "@tj/db";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -18,14 +27,22 @@ const listQuerySchema = z.object({
   includeExcluded: z.enum(["true", "false"]).optional(),
   /** Every trade rather than the newest 500, for pages that aggregate. */
   all: z.enum(["true"]).optional(),
+  /** The To review queue (scalp-review spec §6.2): pending trades only, oldest first, with no row limit. */
+  review: z.enum(["pending"]).optional(),
 });
 
 export interface TradeView extends TradeRecord {
   metrics: (IronFlyMetrics & IronFlyOutcome) | null;
+  /** Whether the trade waits in the To review queue (scalp-review spec §6.1); null where the queue doesn't apply. */
+  review: ReviewStatus | null;
 }
 
-/** Metrics are derived on read, so a stored trade and its numbers can never drift apart. */
+/** Metrics and the review status are derived on read, so a stored trade and its numbers can never drift apart. */
 export function withMetrics(trade: TradeRecord): TradeView {
+  return { ...trade, metrics: flyMetrics(trade), review: reviewStatus(trade) };
+}
+
+function flyMetrics(trade: TradeRecord): TradeView["metrics"] {
   const detail = trade.ironFly;
   if (
     !detail ||
@@ -36,7 +53,7 @@ export function withMetrics(trade: TradeRecord): TradeView {
     detail.contracts == null ||
     detail.creditPerShare == null
   ) {
-    return { ...trade, metrics: null };
+    return null;
   }
   const metrics = ironFlyMetrics({
     bodyPutStrike: detail.bodyPutStrike,
@@ -52,7 +69,7 @@ export function withMetrics(trade: TradeRecord): TradeView {
     trade.netPnl == null
       ? { returnOnRisk: null, pctOfMaxProfit: null, pnlPctOfCost: null }
       : ironFlyOutcome(metrics, trade.netPnl);
-  return { ...trade, metrics: { ...metrics, ...outcome } };
+  return { ...metrics, ...outcome };
 }
 
 /** What the trade page's Fills panel shows of a fill. */
@@ -77,12 +94,21 @@ export function tradeRoutes(db: Db, now?: () => number) {
   return new Hono()
     .get("/", zValidator("query", listQuerySchema), (c) => {
       const query = c.req.valid("query");
+      const filter = { strategy: query.strategy, book: query.book, underlying: query.underlying };
+      if (query.review === "pending") {
+        // Every pending trade, oldest first: the queue must never stop at the newest 500.
+        return c.json(
+          repo
+            .list({ ...filter, limit: null })
+            .map(withMetrics)
+            .filter((trade) => trade.review?.status === "pending")
+            .reverse(),
+        );
+      }
       return c.json(
         repo
           .list({
-            strategy: query.strategy,
-            book: query.book,
-            underlying: query.underlying,
+            ...filter,
             includeExcluded: query.includeExcluded === "true",
             limit: query.all === "true" ? null : undefined,
           })
@@ -99,8 +125,14 @@ export function tradeRoutes(db: Db, now?: () => number) {
         : c.json({ error: "not found" }, 404);
     })
     .patch("/:id", zValidator("json", tradePatchSchema), (c) => {
-      const updated = repo.update(c.req.param("id"), c.req.valid("json"));
-      return updated ? c.json(withMetrics(updated)) : c.json({ error: "not found" }, 404);
+      try {
+        const updated = repo.update(c.req.param("id"), c.req.valid("json"));
+        return updated ? c.json(withMetrics(updated)) : c.json({ error: "not found" }, 404);
+      } catch (error) {
+        if (error instanceof ReviewRuleError)
+          return c.json({ error: "invalid", message: error.message }, 400);
+        throw error;
+      }
     })
     .delete("/:id", (c) =>
       repo.softDelete(c.req.param("id")) ? c.json({ ok: true }) : c.json({ error: "not found" }, 404),
