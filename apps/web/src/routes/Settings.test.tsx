@@ -61,7 +61,7 @@ describe("Settings", () => {
   it("tests and saves a key, then shows the new status and clears the fields", async () => {
     const fetchMock = stubApi(OFF, { status: 200, body: view(ON) });
     renderSettings();
-    await screen.findByText(/Not set up/);
+    await screen.findByText("Not set up: live prices, chains and marks are off");
     fireEvent.change(screen.getByLabelText("Key ID"), { target: { value: "PKTESTKEY7QXA" } });
     fireEvent.change(screen.getByLabelText("Secret key"), { target: { value: "test-secret-do-not-log" } });
     fireEvent.click(screen.getByRole("button", { name: "Save and test" }));
@@ -80,7 +80,7 @@ describe("Settings", () => {
       "Alpaca accepted this key for prices but not for option chains. It looks like a live-account key, so use your Paper account's key instead.";
     stubApi(OFF, { status: 400, body: { error: "not_paper", message } });
     renderSettings();
-    await screen.findByText(/Not set up/);
+    await screen.findByText("Not set up: live prices, chains and marks are off");
     fireEvent.change(screen.getByLabelText("Key ID"), { target: { value: "AKLIVEKEY" } });
     fireEvent.change(screen.getByLabelText("Secret key"), { target: { value: "live-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "Save and test" }));

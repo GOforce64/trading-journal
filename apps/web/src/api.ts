@@ -10,3 +10,12 @@ export type TradeView = TradeListResponse[number];
 type FillResponse = Awaited<ReturnType<typeof api.api.moves.fill.$post>>;
 /** What one fill run did (spec §8.2). */
 export type FillResult = Awaited<ReturnType<FillResponse["json"]>>;
+
+/** The server explains a refusal in `message`; fall back to the status. */
+export async function refusal(
+  res: { status: number; json(): Promise<unknown> },
+  action: string,
+): Promise<Error> {
+  const body = (await res.json().catch(() => ({}))) as { message?: string };
+  return new Error(body.message ?? `${action} failed: ${res.status}`);
+}
