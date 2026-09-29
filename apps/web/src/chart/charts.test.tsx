@@ -61,6 +61,18 @@ describe("IntradayChart", () => {
     expect(lines[5]?.data).toHaveLength(MODEL.levelTimes.length);
   });
 
+  it("hides the VWAP line between sessions, so it never bridges the night", () => {
+    render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} />);
+    const vwap = seriesOf("Line")[4]?.data as { time: number; value: number; color?: string }[];
+    const at = (date: string, minute: number) =>
+      vwap.find((point) => point.time === nyWallClock(date, minute) / 1000);
+    // Lightweight Charts joins consecutive points, drawing each segment in its first point's colour.
+    expect(at("2026-09-25", 957)?.color).toBe("transparent");
+    expect(at("2026-09-25", 954)?.color).toBeUndefined();
+    expect(at(DAY, 240)).toBeUndefined();
+    expect(at(DAY, 570)?.color).toBeUndefined();
+  });
+
   it("marks the fills and opens on the trade", () => {
     render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} />);
     const markers = library.markers.at(-1) as { text: string; position: string }[];

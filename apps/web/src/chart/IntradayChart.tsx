@@ -1,3 +1,4 @@
+import { nyClock } from "@tj/core";
 import {
   CandlestickSeries,
   createChart,
@@ -153,7 +154,16 @@ export function IntradayChart({
     chart.emas.forEach((series, index) => {
       series.setData((model.emas[index]?.points ?? []).map(line));
     });
-    chart.vwap.setData(model.vwap.map(line));
+    chart.vwap.setData(
+      model.vwap.map((point, index) => {
+        const next = model.vwap[index + 1];
+        // Lightweight Charts joins consecutive points, drawing each segment in its first point's colour. The day's
+        // last VWAP is transparent, so the line never bridges the night to the next session (spec §7).
+        return next && nyClock(next.t).date !== nyClock(point.t).date
+          ? { ...line(point), color: "transparent" }
+          : line(point);
+      }),
+    );
     for (const [label, series] of chart.levels) {
       const level = model.levels.find((each) => each.label === label);
       series.setData(level ? model.levelTimes.map((t) => ({ time: seconds(t), value: level.price })) : []);
