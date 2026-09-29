@@ -54,8 +54,10 @@ requests that don't come from `localhost`.
   value. Imported from oQuants, typed in, and synced from IBKR paper, as one trade however
   many orders its legs took.
 - **Scalps** — synced from IBKR (Flex Web Service) from a start date you choose, or
-  typed in, with every fill kept; then a planned stop on the underlying, a Black-Scholes
-  estimate of the dollar risk that stop implies, R-multiples, and a chart of the session on the trade page: 3-minute candles (1m to 1h),
+  typed in, with every fill kept; reviewed on the trade page with the chart: drag the stop and
+  target on the chart (or type them as option premium), pick a setup, mistakes, an emotion and a grade,
+  and work through a To review queue; setups and tags live on the Playbook page. Next: a Black-Scholes
+  estimate of the dollar risk the stop implies, and R-multiples. The chart of the session: 3-minute candles (1m to 1h),
   with a daily chart beside it, your fills marked, EMAs, VWAP, and premarket and prior-day
   levels, from Alpaca's free data.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
@@ -64,7 +66,7 @@ requests that don't come from `localhost`.
 - **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
   dollar statistics.
 
-Scalps, trade charts and IBKR sync arrive in later phases; see
+R-multiples, missed trades and an option-premium chart arrive in later steps; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
 [the plans](docs/superpowers/plans/).
 

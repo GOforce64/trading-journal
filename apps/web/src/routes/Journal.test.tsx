@@ -41,15 +41,23 @@ interface StubbedApi {
   optionQuotes?: Record<string, { bid: number | null; ask: number | null; at: number }>;
   /** Whether a market data key is set up. */
   marketOn?: boolean;
+  setups?: unknown[];
 }
 
 /** Answers the calls the journal makes: its trades, live prices, and option quotes for open trades. */
-function stubApi({ trades = [trade], quotes = {}, optionQuotes = {}, marketOn = true }: StubbedApi = {}) {
+function stubApi({
+  trades = [trade],
+  quotes = {},
+  optionQuotes = {},
+  marketOn = true,
+  setups = [],
+}: StubbedApi = {}) {
   // Typed parameters so the recorded call arguments can be inspected.
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/api/option-quotes"))
       return jsonResponse({ quotes: optionQuotes, available: marketOn });
+    if (url.includes("/api/setups")) return jsonResponse(setups);
     if (!url.includes("/api/quotes")) return jsonResponse(trades);
     return typeof quotes === "number" ? new Response("down", { status: quotes }) : jsonResponse({ quotes });
   });
@@ -286,5 +294,16 @@ describe("Journal", () => {
     const cell = screen.getByTestId("est-t2");
     expect(cell.textContent).toBe("—");
     expect(cell.getAttribute("title")).toBeNull();
+  });
+
+  it("names each trade's setup, and dots the scalps waiting for review", async () => {
+    stubApi({
+      trades: [{ ...trade, setupId: "orb", review: { status: "pending", missing: ["stop"] } }],
+      setups: [{ id: "orb", name: "ORB breakout" }],
+    });
+    renderJournal();
+    const row = await screen.findByTestId("row-t1");
+    await waitFor(() => expect(row.textContent).toContain("ORB breakout"));
+    expect(within(row).getByText("Waiting for review")).toBeTruthy();
   });
 });

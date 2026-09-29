@@ -149,7 +149,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **trades**:
   - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "XYZ Industries"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
   - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees` (round trip), `fees_open`, `fees_close`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
-  - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`
+  - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`, `reviewed_at`
   - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants has none, so its trades are identified by the UUIDv5 of a natural key instead, see §7.2b)
   - merge: `edited_at` (last *user* edit; see §12). Set at creation for manual and imported trades, which are user-authored. Null for IBKR-synced trades until the user first edits one. `facts_edited_at`: when the user last changed a broker fact on a synced trade (a leg, a price, a time, fees, P&L); from then on the sync leaves the trade alone.
 - **legs**: `trade_id`, `right` (C/P), `strike`, `expiry`, `multiplier`, `side` (long/short), `quantity`, `avg_open_price`, `avg_close_price`, `broker_conid`.
@@ -158,7 +158,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
   IBKR sync is detailed in [2026-09-29-ibkr-flex-sync-design.md](2026-09-29-ibkr-flex-sync-design.md), which adds `broker_trade_id`, `conid`, the contract, `open_close`, `kind`, `origin` and `canceled` to `fills`, and `facts_edited_at` to `trades`. `sync_state` is keyed by source and keeps the last summary. `scalp_details` comes with R.
 - **scalp_details** (1:1 with trade):
   - context: `direction` (long/short underlying; calls are long, puts short), `underlying_entry_price`, `underlying_exit_price`
-  - plan: `stop_level`, `target_level`
+  - plan: `level_basis` (`stock` | `premium`), `stop_price`, `target_price`, built by the scalp review ([2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md)). The risk-model and outcome columns come with R.
   - risk model: `iv_at_entry`, `delta_at_entry`, `gamma_at_entry`, `est_option_price_at_stop`, `risk_override`, `risk_free_rate_used`
   - outcome: `mae_underlying`, `mfe_underlying`, `mae_r`, `mfe_r`, `minutes_after_open`, `hold_seconds`
   - missed trades only: `planned_entry_at`, `planned_entry_price`, `planned_exit_at`, `planned_exit_price`, `skip_reason`
@@ -173,7 +173,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 
   The four contracts themselves live in the shared **legs** table (right, strike, expiry, side, quantity), so the trade page can show an oQuants-style leg breakdown, and non-butterfly structures fit the same model later.
 - **setups**: `name`, `description`, `strategy` (nullable = both), `color`, `archived`.
-- **tags**: `name`, `kind` (`mistake` | `emotion`), `color`, `archived`. **trade_tags**: `trade_id`, `tag_id`.
+- **tags**: `name`, `kind` (`mistake` | `emotion`), `color`, `archived`. **trade_tags**: `trade_id`, `tag_id`. Setups and tags have no colours yet.
 - **attachments**: `trade_id`, `sha256`, `ext`, `mime`, `bytes`, `caption`.
 - Imports tag their trades with `import_batch_id` (one id per run); there is no batches table. A backup taken before every import is the undo.
 - **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `t`, `o`, `h`, `l`, `c`, `v`, keyed by (`symbol`, `timeframe`, `t`). **bar_days** records each finished day fetched, empty ones included. See [2026-09-29-trade-chart-design.md](2026-09-29-trade-chart-design.md).
@@ -250,7 +250,7 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Scope:** episodes that only buy are scalps, one per contract round trip. Iron flies (one short call, one short put, one or two wings) are imported as iron fly trades. Other structures are skipped with a reason. Stock executions are ignored.
 - **Duplicates:** two guards skip trades already in the journal: from oQuants, or typed by hand, in both directions.
 - **No resurrection:** a sync never revives a soft-deleted trade. Its fills are stored, but the trade stays deleted.
-- **Review queue:** moves to the scalp-review step, with stops, setups and grades (§13, Phase 2 item 3).
+- **Review queue:** built in [2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md). A closed scalp waits in **To review** until it has a setup, a grade and a stop, or until the user clicks **Done reviewing**.
 
 ### 8.2 Market data and the generated chart
 
@@ -298,6 +298,7 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Estimated option price at stop:** a full Black-Scholes reprice with S = stop level, the same IV and the same time to expiry (the "instant move" assumption). The UI notes that for 0DTE, time decay makes the real loss at the stop somewhat larger.
 - **Planned risk ($)** = (avg entry price − est. price at stop) × contracts × multiplier. `risk_override` replaces it when set. Targets give **planned reward** and **planned R:R** the same way.
 - **R-multiple** = net P&L ÷ planned risk.
+- **A stop on the premium:** a trade's levels can be option prices instead (scalp-review spec §15). Planned risk is then (entry − stop premium) × contracts × multiplier, with no model.
 - **MAE/MFE:** from the 1m bars between first entry and last exit, the worst and best underlying excursion against the trade direction. Stored in dollars of underlying and in R units (÷ |entry − stop|).
 - Also stored per trade: **minutes after open** (first entry − 09:30 ET), **hold time**, and **option cost** (avg entry × contracts × multiplier).
 - `core/pricing` exists since move data: bisection on [1%, 1000%] with a fixed 4% rate. Phase 2 adds Newton-Raphson and the rate setting.
@@ -327,7 +328,7 @@ Detailed for iron flies in [2026-09-27-analytics-and-dashboard-design.md](2026-0
 - Analytics filters live on the page for now, not in a global bar;
 - CSV export is deferred.
 
-- **Tagging:** a setup (playbook page with per-setup stat cards), mistake tags, one emotion tag, grade A–F, and Markdown notes. All are editable inline from the trade page and the journal grid.
+- **Tagging:** a setup (playbook page with per-setup stat cards), mistake tags, one emotion tag, grade A–F, and Markdown notes. All are editable inline from the trade page and the journal grid. Built in the scalp-review spec: edited from the trade page, not inline in the grid. The grid shows the setup. The Playbook page manages setups and tags, and its stat cards come with R.
 - **Global filter bar** (persisted in the URL): book (Live / Paper / Missed, multi-select), strategy, account, date range, ticker, setup, tag, and **include excluded**.
 - **Two separate surfaces:**
   - the **Dashboard** is the landing page: how the current period is going, recent trades, and anything sitting in the review queue;
@@ -424,7 +425,7 @@ Each phase ends usable, and each gets its own implementation plan.
 **Phase 2: Scalps**
 1. IBKR Flex sync (live + paper), deterministic IDs, fill grouping, review queue (done for paper: plus the scalp form, the Scalps page and the scalp trade page; the review queue moves to item 3).
 2. Market data module (Massive), bar cache, trade chart with markers, stop/target lines, indicators and levels.
-3. Black-Scholes and IV risk engine, R-multiples, MAE/MFE, time-of-day analytics.
+3. The scalp review (stops and targets, setups, tags, grades, the queue and the Playbook page): done, [2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md). Then the Black-Scholes and IV risk engine, R-multiples, MAE/MFE and time-of-day analytics.
 4. Screenshots.
 5. Missed trades with chart marking.
 6. Iron fly backfill: derive `actual_move_pct` from daily bars where missing.

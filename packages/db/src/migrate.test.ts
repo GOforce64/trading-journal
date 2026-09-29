@@ -15,6 +15,16 @@ function tempDir(): string {
 }
 
 describe("runMigrations", () => {
+  it("adds the scalp review's table and column", () => {
+    const file = join(tempDir(), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const db = openDatabase(file);
+    const columns = (table: string) =>
+      db.all<{ name: string }>(sql.raw(`pragma table_info(${table})`)).map((column) => column.name);
+    expect(columns("scalp_details")).toEqual(["trade_id", "level_basis", "stop_price", "target_price"]);
+    expect(columns("trades")).toContain("reviewed_at");
+  });
+
   it("creates the schema in a fresh database", () => {
     const file = join(tempDir(), "journal.db");
     runMigrations(file, { migrationsFolder: MIGRATIONS });

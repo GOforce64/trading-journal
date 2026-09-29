@@ -80,3 +80,24 @@ export function Tile({
     </div>
   );
 }
+
+export function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`-mb-px border-b-2 px-0.5 py-1 ${active ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
+    >
+      {children}
+    </button>
+  );
+}

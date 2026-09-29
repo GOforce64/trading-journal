@@ -40,3 +40,17 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* The scalp review's lines (scalp-review spec §8): the cursor says what a press on the chart will do. Lightweight
+   Charts sets a cursor on its own canvases, so this has to win over it. */
+[data-cursor="ns-resize"],
+[data-cursor="ns-resize"] * {
+  /* biome-ignore lint/complexity/noImportantStyles: Lightweight Charts sets an inline cursor on its canvases */
+  cursor: ns-resize !important;
+}
+
+[data-cursor="crosshair"],
+[data-cursor="crosshair"] * {
+  /* biome-ignore lint/complexity/noImportantStyles: Lightweight Charts sets an inline cursor on its canvases */
+  cursor: crosshair !important;
+}

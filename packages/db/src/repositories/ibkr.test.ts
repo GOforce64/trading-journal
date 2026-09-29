@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { createIbkrRepo, type FillInput, type SyncedTradeInput } from "./ibkr.js";
+import { createTaxonomyRepo } from "./taxonomy.js";
 import { createTradesRepo } from "./trades.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../migrations", import.meta.url));
@@ -228,6 +229,34 @@ describe("storing fills", () => {
 });
 
 describe("applying a synced trade", () => {
+  it("keeps the review when it rewrites a scalp's facts", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    const taxonomy = createTaxonomyRepo(db);
+    const setup = taxonomy.createSetup({ name: "ORB breakout", strategy: "scalp" }).id;
+    const calm = taxonomy.createTag({ name: "Calm", kind: "emotion" }).id;
+    clock = 2_000;
+    trades().update("trade-nvda", {
+      setupId: setup,
+      grade: "B",
+      tagIds: [calm],
+      notes: "clean break",
+      reviewed: true,
+      scalp: { levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 },
+    });
+    clock = 5_000;
+    expect(ibkr().apply(scalp({ netPnl: 40.1 }), ACCOUNT.id)).toBe("updated");
+    const stored = trades().get("trade-nvda");
+    expect(stored).toMatchObject({
+      netPnl: 40.1,
+      setupId: setup,
+      grade: "B",
+      tagIds: [calm],
+      notes: "clean break",
+      reviewedAt: 2_000,
+    });
+    expect(stored?.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 });
+  });
+
   it("adds a new trade as the sync's, with its leg ids", () => {
     expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("added");
     const stored = trades().get("trade-nvda");

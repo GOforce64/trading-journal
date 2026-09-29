@@ -6,7 +6,7 @@ import { DailyChart } from "./DailyChart.js";
 import { IntradayChart } from "./IntradayChart.js";
 import { type ChartTrade, dailyModel, intradayModel } from "./model.js";
 import { DEFAULT_PREFS } from "./prefs.js";
-import { library, resetLibrary, seriesOf } from "./testing.js";
+import { library, resetLibrary, seriesOf, yOf } from "./testing.js";
 
 vi.mock("lightweight-charts", async (importOriginal) => {
   const { fakeLibrary } = await import("./testing.js");
@@ -162,5 +162,100 @@ describe("ChartToolbar", () => {
     expect(screen.getByRole("button", { name: "EMA 8" }).getAttribute("title")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Fit trade" }));
     expect(onFit).toHaveBeenCalled();
+  });
+});
+
+describe("IntradayChart editing the review's lines", () => {
+  const STOP = { id: "stop" as const, price: 231.8, color: "#ef5350", dashed: true, label: "STOP" };
+  const editing = (placing: "stop" | "target" | null = null) => ({
+    placing,
+    onPlace: vi.fn(),
+    onDrag: vi.fn(),
+    onDrop: vi.fn(),
+    onCancel: vi.fn(),
+  });
+  const chart = () => screen.getByTestId("intraday-chart");
+  const stopLine = () => seriesOf("Candlestick")[0]?.priceLines[0];
+  const renderEditing = (edit: ReturnType<typeof editing>, lines = [STOP]) =>
+    render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} lines={lines} editing={edit} />);
+
+  it("places the stop where the chart is clicked, to the cent", () => {
+    const edit = editing("stop");
+    renderEditing(edit, []);
+    expect(screen.getByTestId("placing-hint").textContent).toBe(
+      "Click the chart to place the stop · Esc to cancel",
+    );
+    expect(chart().dataset.cursor).toBe("crosshair");
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
+    expect(edit.onPlace).toHaveBeenCalledWith("stop", 231.8);
+  });
+
+  it("ignores a click on the price axis while placing, and stops placing on Esc", () => {
+    const edit = editing("stop");
+    renderEditing(edit, []);
+    fireEvent.mouseDown(chart(), { clientX: 850, clientY: yOf(231.8), button: 0 });
+    expect(edit.onPlace).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(edit.onCancel).toHaveBeenCalled();
+  });
+
+  it("drags a line: it follows, the chart stops panning, and the release saves once", () => {
+    const edit = editing();
+    renderEditing(edit);
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8) + 3, button: 0 });
+    expect(library.chartOptions.at(-1)).toEqual({ handleScroll: false, handleScale: false });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(231) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230.5) });
+    expect(edit.onDrag).toHaveBeenLastCalledWith("stop", 230.5);
+    expect(stopLine()?.price).toBe(230.5);
+    expect(edit.onDrop).not.toHaveBeenCalled();
+    fireEvent.mouseUp(window);
+    expect(edit.onDrop).toHaveBeenCalledTimes(1);
+    expect(edit.onDrop).toHaveBeenCalledWith("stop", 230.5);
+    expect(library.chartOptions.at(-1)).toEqual({ handleScroll: true, handleScale: true });
+  });
+
+  it("keeps a drag going outside the chart, saving where it's released", () => {
+    const edit = editing();
+    renderEditing(edit);
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
+    fireEvent.mouseMove(document.body, { clientX: 1200, clientY: yOf(229) });
+    fireEvent.mouseUp(document.body);
+    expect(edit.onDrop).toHaveBeenCalledTimes(1);
+    expect(edit.onDrop).toHaveBeenCalledWith("stop", 229);
+    expect(library.chartOptions.at(-1)).toEqual({ handleScroll: true, handleScale: true });
+  });
+
+  it("puts a dragged line back on Esc, saving nothing", () => {
+    const edit = editing();
+    renderEditing(edit);
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230) });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(stopLine()?.price).toBe(231.8);
+    expect(edit.onCancel).toHaveBeenCalled();
+    fireEvent.mouseUp(window);
+    expect(edit.onDrop).not.toHaveBeenCalled();
+  });
+
+  it("shows ↕ only over a line, and leaves a press away from the lines to the chart", () => {
+    const edit = editing();
+    renderEditing(edit);
+    fireEvent.mouseMove(chart(), { clientX: 100, clientY: yOf(231.8) + 2 });
+    expect(chart().dataset.cursor).toBe("ns-resize");
+    fireEvent.mouseMove(chart(), { clientX: 100, clientY: 300 });
+    expect(chart().dataset.cursor).toBeUndefined();
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: 300, button: 0 });
+    fireEvent.mouseUp(window);
+    expect(library.chartOptions).toEqual([]);
+    expect(edit.onDrop).not.toHaveBeenCalled();
+  });
+
+  it("does nothing with the mouse without editing, as on a fly's page", () => {
+    render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} lines={[STOP]} />);
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230) });
+    expect(library.chartOptions).toEqual([]);
+    expect(stopLine()?.price).toBe(231.8);
   });
 });

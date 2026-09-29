@@ -5,11 +5,14 @@ import { api, type TradeView } from "../api.js";
 import { EstimatedPnl } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes, useQuotes } from "../market.js";
+import { useSetups } from "../review/data.js";
 
 export interface JournalFilter {
   strategy?: "scalp" | "iron_fly";
   book?: "live" | "paper" | "missed";
   includeExcluded?: boolean;
+  /** Only the scalps waiting for review, oldest first (scalp-review spec §9.3). */
+  review?: "pending";
 }
 
 const BOOKS = ["live", "paper", "missed"] as const;
@@ -23,6 +26,7 @@ export function useTrades(filter: JournalFilter) {
           strategy: filter.strategy,
           book: filter.book,
           includeExcluded: filter.includeExcluded ? "true" : undefined,
+          review: filter.review,
         },
       });
       if (!res.ok) throw new Error(`list trades failed: ${res.status}`);
@@ -62,11 +66,15 @@ export interface JournalProps {
   title?: string;
   actions?: React.ReactNode;
   onOpenTrade?: (id: string) => void;
+  /** What an empty list says. */
+  emptyText?: string;
 }
 
-export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade }: JournalProps) {
+export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade, emptyText }: JournalProps) {
   const [book, setBook] = useState<JournalFilter["book"]>(undefined);
   const { data, isLoading, error } = useTrades({ ...lockedFilter, book });
+  const { data: setups } = useSetups();
+  const setupNames = new Map((setups ?? []).map((setup) => [setup.id, setup.name]));
   const { data: quotes } = useQuotes(data?.map((trade) => trade.underlying) ?? []);
   const today = todayNy();
   // One call for the open legs of every open trade on screen; the server splits it for Alpaca.
@@ -98,7 +106,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
       {isLoading && <p className="text-muted">Loading…</p>}
       {error && <p className="text-down">Could not load trades: {String(error)}</p>}
       {data?.length === 0 && (
-        <p className="text-muted">No trades yet. Add one from Iron Flies → New trade.</p>
+        <p className="text-muted">{emptyText ?? "No trades yet. Add one from Iron Flies → New trade."}</p>
       )}
       {data && data.length > 0 && (
         <table className="w-full table-fixed border-collapse text-[12px]">
@@ -108,6 +116,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
               <th className="w-32 text-left font-medium">Symbol</th>
               <th className="w-24 text-left font-medium">Strategy</th>
               <th className="w-32 text-left font-medium">Book</th>
+              <th className="w-36 text-left font-medium">Setup</th>
               <th className="text-left font-medium">Notes</th>
               <th className="w-28 text-right font-medium">Net P&amp;L</th>
               <th className="w-28 text-right font-medium">% kept</th>
@@ -134,6 +143,16 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                   {ET.format(new Date(trade.openedAt))}
                 </td>
                 <td className="whitespace-nowrap text-fg">
+                  {trade.review?.status === "pending" && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        title="To review"
+                        className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle"
+                      />
+                      <span className="sr-only">Waiting for review</span>
+                    </>
+                  )}
                   {trade.underlying}
                   <LivePrice tradeId={trade.id} quote={quotes?.[trade.underlying]} />
                 </td>
@@ -144,6 +163,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade 
                   <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>{" "}
                   {trade.excluded && <Chip tone="excluded">EXCLUDED</Chip>}
                 </td>
+                <td className="truncate pr-3 text-muted">{setupNames.get(trade.setupId ?? "") ?? "—"}</td>
                 <td className="max-w-0 pr-3">
                   <span
                     data-testid={`note-${trade.id}`}

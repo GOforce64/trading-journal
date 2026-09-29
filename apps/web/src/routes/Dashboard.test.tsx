@@ -117,4 +117,37 @@ describe("Dashboard", () => {
       within(screen.getByRole("region", { name: "Recent" })).getByText("No closed trades in this range."),
     ).toBeTruthy();
   });
+
+  it("lists the oldest scalps waiting for review, with what each lacks, and starts on the first", async () => {
+    const scalps = Array.from({ length: 6 }, (_, index) => ({
+      ...tradeRow({
+        id: `s${index}`,
+        underlying: "NVDA",
+        opened: `2026-09-28 09:3${index}`,
+        closed: `2026-09-28 09:4${index}`,
+        netPnl: 10 + index,
+        strategy: "scalp",
+      }),
+      review: { status: "pending", missing: ["setup", "stop"] },
+    }));
+    stubTrades(TRADES, scalps);
+    const onOpenTrade = vi.fn();
+    renderWithClient(
+      <Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} onOpenTrade={onOpenTrade} />,
+    );
+    const section = await screen.findByRole("region", { name: "To review · 6" });
+    const rows = within(section).getAllByRole("listitem");
+    expect(rows).toHaveLength(5);
+    expect(rows[0]?.textContent).toContain("NVDA 10C");
+    expect(rows[0]?.textContent).toContain("setup, stop");
+    fireEvent.click(within(section).getByRole("button", { name: "Start reviewing →" }));
+    expect(onOpenTrade).toHaveBeenCalledWith("s0");
+  });
+
+  it("shows no To review section when nothing waits", async () => {
+    stubTrades(TRADES);
+    renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$260.00"));
+    expect(screen.queryByRole("region", { name: /To review/ })).toBeNull();
+  });
 });

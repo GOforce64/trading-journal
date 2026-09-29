@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Scalps } from "./Scalps.js";
 
@@ -35,11 +35,13 @@ const scalp = {
   ],
 };
 
-function setup(onNewScalp?: () => void) {
-  const fetchMock = vi.fn(
-    async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify([scalp]), { headers: { "content-type": "application/json" } }),
-  );
+/** Answers the scalps, the scalps waiting (`pending`), and an empty setup list. */
+function setup(onNewScalp?: () => void, pending: unknown[] = [scalp]) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const url = String(input);
+    const body = url.includes("/api/setups") ? [] : url.includes("review=pending") ? pending : [scalp];
+    return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+  });
   vi.stubGlobal("fetch", fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -66,5 +68,25 @@ describe("Scalps", () => {
     setup(onNewScalp);
     fireEvent.click(await screen.findByRole("button", { name: "+ New scalp" }));
     expect(onNewScalp).toHaveBeenCalled();
+  });
+
+  it("counts the scalps to review, and lists them on their own tab", async () => {
+    const fetchMock = setup();
+    fireEvent.click(await screen.findByRole("button", { name: "To review (1)" }));
+    expect(await screen.findByText("To review")).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          (call) => String(call[0]).includes("review=pending") && String(call[0]).includes("strategy=scalp"),
+        ),
+      ).toBe(true),
+    );
+    expect(await screen.findByText("NVDA")).toBeTruthy();
+  });
+
+  it("says so when nothing waits", async () => {
+    setup(undefined, []);
+    fireEvent.click(await screen.findByRole("button", { name: "To review (0)" }));
+    expect(await screen.findByText("Nothing to review.")).toBeTruthy();
   });
 });

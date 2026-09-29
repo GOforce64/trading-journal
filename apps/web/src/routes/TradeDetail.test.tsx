@@ -10,6 +10,29 @@ vi.mock("../chart/TradeCharts.js", () => ({
   ),
 }));
 
+// The review has its own tests; here it's a placeholder saying which layout it was given.
+vi.mock("../review/ReviewPanel.js", () => ({
+  ReviewPanel: ({ layout }: { layout: string }) => <div data-testid="review-panel">{layout}</div>,
+}));
+
+// A scalp's charts and review strip have their own tests; here they're one placeholder that can ask for Next.
+vi.mock("../review/ScalpWorkspace.js", () => ({
+  ScalpWorkspace: ({
+    trade,
+    onOpenTrade,
+  }: {
+    trade: { underlying: string };
+    onOpenTrade?: (id: string) => void;
+  }) => (
+    <div data-testid="scalp-workspace">
+      {trade.underlying}
+      <button type="button" onClick={() => onOpenTrade?.("t2")}>
+        workspace: next
+      </button>
+    </div>
+  ),
+}));
+
 const trade = {
   id: "t1",
   strategy: "iron_fly",
@@ -130,13 +153,13 @@ function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes, 
   return fetchMock;
 }
 
-function renderDetail() {
+function renderDetail(onOpenTrade?: (id: string) => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <TradeDetail tradeId="t1" />
+      <TradeDetail tradeId="t1" onOpenTrade={onOpenTrade} />
     </QueryClientProvider>,
   );
 }
@@ -144,6 +167,15 @@ function renderDetail() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("TradeDetail", () => {
+  it("puts the review beside a fly's legs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    expect((await screen.findByTestId("review-panel")).textContent).toBe("side");
+  });
+
   it("shows the headline metrics and marks the broken wing", async () => {
     vi.stubGlobal(
       "fetch",
@@ -206,31 +238,6 @@ describe("TradeDetail", () => {
     const shortCall = await screen.findByTestId("leg-row-l1");
     expect(shortCall.textContent).toContain("840.00"); // 4 x 100 x 2.10 credit
     expect(shortCall.textContent).toContain("440.00"); // bought back at 1.00
-  });
-
-  it("patches the grade when a grade button is pressed", async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse());
-    vi.stubGlobal("fetch", fetchMock);
-    renderDetail();
-    await waitFor(() => expect(screen.getByRole("button", { name: "B" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "B" }));
-    await waitFor(() => {
-      const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
-      expect(patch).toBeTruthy();
-      expect(JSON.parse(String(patch?.[1]?.body)).grade).toBe("B");
-    });
-  });
-
-  it("patches the exclude flag", async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse());
-    vi.stubGlobal("fetch", fetchMock);
-    renderDetail();
-    await waitFor(() => expect(screen.getByLabelText(/exclude from stats/i)).toBeTruthy());
-    fireEvent.click(screen.getByLabelText(/exclude from stats/i));
-    await waitFor(() => {
-      const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
-      expect(JSON.parse(String(patch?.[1]?.body)).excluded).toBe(true);
-    });
   });
 
   it("marks each open leg at its cost to close and estimates the trade", async () => {
@@ -312,25 +319,6 @@ describe("TradeDetail", () => {
     expect(screen.getByTestId("tile-kept").textContent).toContain("+42.95%");
     expect(screen.queryByText("Return on risk")).toBeNull();
     expect(screen.getByTestId("tile-max-loss").textContent).toContain("2,008.00");
-  });
-
-  it("marks the trade lists stale after a change, so Analytics and the lists refetch", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse()),
-    );
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    client.setQueryData(["trades", { all: true }], []);
-    render(
-      <QueryClientProvider client={client}>
-        <TradeDetail tradeId="t1" />
-      </QueryClientProvider>,
-    );
-    await waitFor(() => expect(screen.getByRole("button", { name: "B" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "B" }));
-    await waitFor(() => expect(client.getQueryState(["trades", { all: true }])?.isInvalidated).toBe(true));
   });
 
   it("shows the charts under the header", async () => {
@@ -623,6 +611,24 @@ function stubSynced(
 }
 
 describe("TradeDetail for a scalp", () => {
+  it("opens the trade the queue bar asks for", async () => {
+    stubSynced(nvda);
+    const onOpenTrade = vi.fn();
+    renderDetail(onOpenTrade);
+    fireEvent.click(await screen.findByRole("button", { name: "workspace: next" }));
+    expect(onOpenTrade).toHaveBeenCalledWith("t2");
+  });
+
+  it("puts a scalp's charts and review strip under the header, above the tiles", async () => {
+    stubSynced(nvda);
+    renderDetail();
+    const workspace = await screen.findByTestId("scalp-workspace");
+    const follows = (a: Element, b: Element) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(follows(workspace, screen.getByTestId("tile-contract"))).toBe(true);
+    expect(screen.queryByTestId("review-panel")).toBeNull();
+  });
+
   it("shows the scalp's own tiles", async () => {
     stubSynced(nvda);
     renderDetail();

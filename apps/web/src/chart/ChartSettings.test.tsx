@@ -21,4 +21,12 @@ describe("ChartSettings", () => {
     fireEvent.change(screen.getByLabelText("EMA 1"), { target: { value: "9x" } });
     expect((screen.getByRole("button", { name: "Save chart" }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("keeps the default basis for stops and targets in this browser, stock to start", () => {
+    render(<ChartSettings />);
+    expect(screen.getByRole("button", { name: "Stock" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Premium" }));
+    expect(screen.getByRole("button", { name: "Premium" }).getAttribute("aria-pressed")).toBe("true");
+    expect(JSON.parse(localStorage.getItem("tj.review") ?? "{}")).toEqual({ levelBasis: "premium" });
+  });
 });
