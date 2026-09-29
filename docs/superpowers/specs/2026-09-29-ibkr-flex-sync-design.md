@@ -1,7 +1,7 @@
 # IBKR Flex Sync and Scalps — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Approved 2026-09-29. Plan: [2026-09-29-ibkr-flex-sync.md](../plans/2026-09-29-ibkr-flex-sync.md), whose deviations are folded in below.
+- **Status:** Approved; implemented on feat/ibkr-sync. Plan: [2026-09-29-ibkr-flex-sync.md](../plans/2026-09-29-ibkr-flex-sync.md), whose deviations are folded in below.
 - **Scope:**
   - **The sync:** trades from the IBKR paper account come into the journal from the Flex Web Service, from 2026-09-28 on. A Sync button starts it, and so does opening the app when the last sync is more than 15 minutes old.
   - **Grouping:** every fill is kept, and the fills are regrouped into trades on every sync. Scalps become scalp trades and flies become iron fly trades, without mixing the two up or duplicating what oQuants already imported.
@@ -510,5 +510,17 @@ No failure leaves half a sync behind: every database write happens in one transa
    - an assigned leg's `markPrice` equals its intrinsic value at the close.
 
    The design relies on the first. If it fails, the fallback key is `tradeID`, which both statements carry.
+
+   **Still open after the live check.** The check ran at 23:25 New York time on 2026-09-28, when Activity still ended at Friday 2026-09-25. So all seven NVDA and TSLA fills came in through `TJ Today` (`origin = confirm`), with exactly the fixture's execution ids. It settles on the first sync after Activity includes 2026-09-28: the seven rows should turn `origin = activity` with the same keys, and no second NVDA or TSLA trade should appear.
 2. **Token expiry.** The paper token's lifetime isn't recorded. The error message covers expiry, and Settings could show the token's date if IBKR exposes it.
 3. **IV-after cutoff (from move data, spec §13 item 5).** Still the user's call. It's unrelated to this spec.
+4. **Closing `BookTrade` rows with no notes.** The real Activity statement has 76 of them: option positions closed at $0 on 2026-07-25 and 2026-08-06, weeks before expiry, most likely paper-account adjustments. They're counted as `other` and ignored. All are before the start date, so nothing is affected today. One after the start date would leave its position open, so a later trade in that contract would join the same episode.
+
+**Live check (2026-09-28, 23:25 New York time)**, on a copy of the real journal, with the real paper token and both real queries:
+- The first sync took 6 s: `status: ok`, 2 added, nothing skipped. Ignored: 840 fills before the start date, 6 stock rows, 77 other (the 76 rows in item 4 and 1 CASH row).
+- **NVDA 232.5C:** +$44.74, 2 contracts, 1.06 → 1.295, fees $2.26 (0.93 + 1.33), opened 09:31:05, closed 09:46:12.
+- **TSLA 365P:** +$300.55, 2 contracts, 1.64 → 3.155, fees $2.45 (0.83 + 1.62), opened 09:37:15, closed 09:52:59.
+- Nothing before 2026-09-28 came in: the account's only synced trades are these two.
+- The second sync: 0 added, 0 updated, 2 unchanged.
+- There were no commission differences to compare, because Activity didn't include the day yet (item 1).
+- Screenshots of Scalps, the NVDA trade page, Import / Sync, Settings and the scalp form at 1280 and 1024 px showed nothing overlapping or cut off.

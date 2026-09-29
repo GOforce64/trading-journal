@@ -51,9 +51,12 @@ requests that don't come from `localhost`.
   measured separately), credit and how much of it you keep, max loss, breakevens, and the
   earnings context around the trade: implied vs actual move and IV crush, worked out from
   your fills and Alpaca's historical stock prices, and settling an expired fly at intrinsic
-  value.
-- **Scalps** — planned stop on the underlying, a Black-Scholes estimate of the
-  dollar risk that stop implies, R-multiples, and a generated chart of the session.
+  value. Imported from oQuants, typed in, and synced from IBKR paper, as one trade however
+  many orders its legs took.
+- **Scalps** — synced from IBKR (Flex Web Service) from a start date you choose, or
+  typed in, with every fill kept; then a planned stop on the underlying, a Black-Scholes
+  estimate of the dollar risk that stop implies, R-multiples, and a generated chart of the
+  session.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
   P&L calendar, open and recent trades) and an Analytics page with every split at once
   and an Iron flies tab measured against max profit.
