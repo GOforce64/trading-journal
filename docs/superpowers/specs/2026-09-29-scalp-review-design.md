@@ -368,5 +368,10 @@ The seeded placeholders are ordinary rows, renamed or archived like any other. P
 
 ## 16. Open items
 
-1. **An option-premium chart** (chart spec §13, item 1), so premium levels can be drawn and dragged too.
+1. **An option-premium chart** (chart spec §13, item 1), so premium levels can be drawn and dragged too. Its own spec, after this one and before R. Probed on 2026-09-29 with the user's key:
+   - **The free plan serves historical 1-minute option bars** (`/v1beta1/options/bars`). NVDA 232.5C Sep 28: 387 of 390 regular-session minutes, in 1.6 s. The 09:31 bar (0.97–1.53) holds the 1.06 buy, and the 09:46 bar (1.10–1.32) holds the last sell.
+   - **Regular hours only:** 09:30–16:00 (SPY to 16:15), so no premarket candles.
+   - **Thin strikes are sparse:** the far out-of-the-money 245C had bars in 79 of 390 minutes.
+   - **History starts in 2024:** a Mar 2024 SPY contract returns bars, and a Mar 2023 one returns none.
+   - **About 70 minutes behind, not 15:** a request ending within roughly the last 65–75 minutes is refused outright (403, "OPRA agreement is not signed"), even for an older contract. The client must end its requests before that.
 2. **Bulk review:** if the sync's start date is moved back months, the queue could hold hundreds of old scalps. A "Mark all before a date as reviewed" action can come if that happens.
