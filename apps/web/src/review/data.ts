@@ -1,0 +1,103 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, refusal, type TradeDetailView } from "../api.js";
+
+type SetupsResponse = Awaited<ReturnType<Awaited<ReturnType<typeof api.api.setups.$get>>["json"]>>;
+/** A setup as the pickers and the Playbook list it: archived ones included, each with its trade count. */
+export type Setup = SetupsResponse[number];
+type TagsResponse = Awaited<ReturnType<Awaited<ReturnType<typeof api.api.tags.$get>>["json"]>>;
+export type Tag = TagsResponse[number];
+/** What PATCH /api/trades/:id takes. */
+export type TradePatchBody = Parameters<(typeof api.api.trades)[":id"]["$patch"]>[0]["json"];
+
+/** Every setup, archived ones too: a trade keeps showing an archived setup it has (scalp-review spec §9.1). */
+export function useSetups() {
+  return useQuery({
+    queryKey: ["setups"],
+    queryFn: async (): Promise<Setup[]> => {
+      const res = await api.api.setups.$get({ query: { includeArchived: "true" } });
+      if (!res.ok) throw new Error(`load setups failed: ${res.status}`);
+      return res.json();
+    },
+  });
+}
+
+/** Every tag, archived ones too. */
+export function useTags() {
+  return useQuery({
+    queryKey: ["tags"],
+    queryFn: async (): Promise<Tag[]> => {
+      const res = await api.api.tags.$get({ query: { includeArchived: "true" } });
+      if (!res.ok) throw new Error(`load tags failed: ${res.status}`);
+      return res.json();
+    },
+  });
+}
+
+/** The review's own fields, shown before the server answers so a second click builds on the first. */
+function shownAtOnce(body: TradePatchBody) {
+  return {
+    ...(body.grade === undefined ? {} : { grade: body.grade }),
+    ...(body.setupId === undefined ? {} : { setupId: body.setupId }),
+    ...(body.tagIds === undefined ? {} : { tagIds: body.tagIds }),
+    ...(body.notes === undefined ? {} : { notes: body.notes }),
+    ...(body.excluded === undefined ? {} : { excluded: body.excluded }),
+  };
+}
+
+/**
+ * Saves part of a trade (scalp-review spec §7.3). The review's fields change on the page at once and go back if
+ * the server refuses. Afterwards the trade, the lists and the queue refetch, after a refusal too.
+ */
+export function useSaveTrade(tradeId: string) {
+  const queryClient = useQueryClient();
+  const key = ["trade", tradeId];
+  return useMutation({
+    mutationFn: async (body: TradePatchBody) => {
+      const res = await api.api.trades[":id"].$patch({ param: { id: tradeId }, json: body });
+      if (!res.ok) throw await refusal(res, "save");
+      return res.json();
+    },
+    onMutate: async (body) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const before = queryClient.getQueryData<TradeDetailView>(key);
+      if (before) queryClient.setQueryData(key, { ...before, ...shownAtOnce(body) });
+      return { before };
+    },
+    onError: (_error, _body, context) => {
+      if (context?.before) queryClient.setQueryData(key, context.before);
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: key }),
+        queryClient.invalidateQueries({ queryKey: ["trades"] }),
+      ]),
+  });
+}
+
+export function useCreateSetup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      name: string;
+      strategy: "scalp" | "iron_fly" | null;
+      description?: string | null;
+    }) => {
+      const res = await api.api.setups.$post({ json: input });
+      if (!res.ok) throw await refusal(res, "create the setup");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["setups"] }),
+  });
+}
+
+export function useCreateTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { name: string; kind: "mistake" | "emotion" }) => {
+      const res = await api.api.tags.$post({ json: input });
+      if (!res.ok) throw await refusal(res, "create the tag");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tags"] }),
+  });
+}

@@ -1,17 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { ReviewPanel } from "../review/ReviewPanel.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
 import { ScalpTiles } from "./ScalpTiles.js";
 import { SettlePanel } from "./SettlePanel.js";
 import { SyncedBanner } from "./SyncedBanner.js";
 
-const GRADES = ["A", "B", "C", "D", "F"] as const;
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Cash paid (positive) or received (negative) to open a leg. */
@@ -46,8 +46,6 @@ export function TradeDetail({
   onEdit?: (id: string) => void;
   onSettle?: (id: string) => void;
 }) {
-  const queryClient = useQueryClient();
-
   const { data: trade, isLoading } = useQuery({
     queryKey: ["trade", tradeId],
     queryFn: async (): Promise<TradeDetailView> => {
@@ -55,20 +53,6 @@ export function TradeDetail({
       if (!res.ok) throw new Error(`load failed: ${res.status}`);
       return res.json();
     },
-  });
-
-  const patch = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => {
-      const res = await api.api.trades[":id"].$patch({ param: { id: tradeId }, json: body });
-      if (!res.ok) throw new Error(`patch failed: ${res.status}`);
-      return res.json();
-    },
-    // The lists and Analytics read every trade; a new grade or exclusion must reach them too.
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["trade", tradeId] }),
-        queryClient.invalidateQueries({ queryKey: ["trades"] }),
-      ]),
   });
 
   const today = todayNy();
@@ -121,6 +105,7 @@ export function TradeDetail({
       </header>
       <SyncedBanner trade={trade} />
       <TradeCharts trade={trade} />
+      {trade.strategy === "scalp" && <ReviewPanel trade={trade} layout="strip" />}
 
       {trade.strategy === "iron_fly" ? (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
@@ -168,7 +153,7 @@ export function TradeDetail({
           <SettlePanel trade={trade} onEdit={onEdit} onEditSettled={onSettle} />
         ))}
 
-      <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+      <div className={`grid gap-3 ${trade.strategy === "iron_fly" ? "lg:grid-cols-[1.35fr_1fr]" : ""}`}>
         <Panel title="Legs">
           <div
             data-testid="legs-total"
@@ -263,37 +248,7 @@ export function TradeDetail({
           )}
         </Panel>
 
-        <Panel title="Review">
-          <div className="mb-2 flex gap-1">
-            {GRADES.map((grade) => (
-              <button
-                key={grade}
-                type="button"
-                onClick={() => patch.mutate({ grade })}
-                className={`num w-6 rounded-[2px] border py-0.5 ${
-                  trade.grade === grade ? "border-accent bg-accent text-white" : "border-line text-muted"
-                }`}
-              >
-                {grade}
-              </button>
-            ))}
-          </div>
-          <label className="flex items-center gap-2 text-muted">
-            <input
-              type="checkbox"
-              checked={trade.excluded}
-              onChange={(event) => patch.mutate({ excluded: event.target.checked })}
-            />
-            Exclude from stats
-          </label>
-          <textarea
-            aria-label="Notes"
-            defaultValue={trade.notes ?? ""}
-            onBlur={(event) => patch.mutate({ notes: event.target.value })}
-            className="mt-2 min-h-20 w-full rounded-sm border border-line bg-[#0e1118] p-2 text-fg outline-none focus:border-accent"
-          />
-          {patch.error && <p className="mt-2 text-down">{String(patch.error)}</p>}
-        </Panel>
+        {trade.strategy === "iron_fly" && <ReviewPanel trade={trade} layout="side" />}
       </div>
       <FillsPanel fills={trade.fills ?? []} />
     </div>
