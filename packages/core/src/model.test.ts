@@ -89,6 +89,12 @@ describe("newTradeSchema", () => {
     expect(tradePatchSchema.parse({ grade: "B" })).toEqual({ grade: "B" });
   });
 
+  it("accepts negative fees in a patch: an IBKR commission rebate, as the sync stores it", () => {
+    // IBKR pays some exchanges' rebates, so one side's net commission can be a credit.
+    expect(tradePatchSchema.safeParse({ fees: 1.61, feesOpen: -0.2027, feesClose: 1.81 }).success).toBe(true);
+    expect(tradePatchSchema.safeParse({ fees: -0.2, feesOpen: -0.2, feesClose: 0 }).success).toBe(true);
+  });
+
   it("rejects an unknown grade in a patch", () => {
     expect(tradePatchSchema.safeParse({ grade: "S" }).success).toBe(false);
   });

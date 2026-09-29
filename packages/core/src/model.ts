@@ -68,9 +68,10 @@ const tradeFields = {
   openedAt: epochMs,
   closedAt: epochMs.nullable(),
   netPnl: z.number().nullable(),
-  fees: z.number().min(0),
-  feesOpen: z.number().min(0).nullable(),
-  feesClose: z.number().min(0).nullable(),
+  // Negative is a rebate: IBKR credits some exchanges' fees, so one side's net commission can be a credit.
+  fees: z.number(),
+  feesOpen: z.number().nullable(),
+  feesClose: z.number().nullable(),
   notes: z.string().max(10_000).nullable(),
   grade: z.enum(GRADES).nullable(),
   excluded: z.boolean(),
