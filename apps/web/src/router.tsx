@@ -102,7 +102,10 @@ const tradeDetailRoute = createRoute({
   path: "/trades/$id",
   component: function TradeDetailRoute() {
     const { id } = tradeDetailRoute.useParams();
-    return <TradeDetail tradeId={id} onEdit={editTrade} onSettle={settleTrade} />;
+    // Keyed by id: Next opens the next scalp with fresh fields, not the last one's typing.
+    return (
+      <TradeDetail key={id} tradeId={id} onEdit={editTrade} onSettle={settleTrade} onOpenTrade={openTrade} />
+    );
   },
 });
 

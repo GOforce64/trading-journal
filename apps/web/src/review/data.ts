@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, refusal, type TradeDetailView } from "../api.js";
+import { api, refusal, type TradeDetailView, type TradeView } from "../api.js";
 
 type SetupsResponse = Awaited<ReturnType<Awaited<ReturnType<typeof api.api.setups.$get>>["json"]>>;
 /** A setup as the pickers and the Playbook list it: archived ones included, each with its trade count. */
@@ -99,5 +99,20 @@ export function useCreateTag() {
       return res.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tags"] }),
+  });
+}
+
+/**
+ * The To review queue (scalp-review spec §6.2): pending scalps, oldest first. The nav badge, the Scalps tab, the
+ * Dashboard and the queue bar share this one query, and every trade save refetches it.
+ */
+export function usePendingReviews() {
+  return useQuery({
+    queryKey: ["trades", { review: "pending" }],
+    queryFn: async (): Promise<TradeView[]> => {
+      const res = await api.api.trades.$get({ query: { strategy: "scalp", review: "pending" } });
+      if (!res.ok) throw new Error(`load the queue failed: ${res.status}`);
+      return res.json();
+    },
   });
 }

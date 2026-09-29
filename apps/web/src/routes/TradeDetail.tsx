@@ -42,10 +42,13 @@ export function TradeDetail({
   tradeId,
   onEdit,
   onSettle,
+  onOpenTrade,
 }: {
   tradeId: string;
   onEdit?: (id: string) => void;
   onSettle?: (id: string) => void;
+  /** Opens another trade: the queue bar's Next and Prev. */
+  onOpenTrade?: (id: string) => void;
 }) {
   const { data: trade, isLoading } = useQuery({
     queryKey: ["trade", tradeId],
@@ -105,7 +108,11 @@ export function TradeDetail({
         </button>
       </header>
       <SyncedBanner trade={trade} />
-      {trade.strategy === "scalp" ? <ScalpWorkspace trade={trade} /> : <TradeCharts trade={trade} />}
+      {trade.strategy === "scalp" ? (
+        <ScalpWorkspace trade={trade} onOpenTrade={onOpenTrade} />
+      ) : (
+        <TradeCharts trade={trade} />
+      )}
 
       {trade.strategy === "iron_fly" ? (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">

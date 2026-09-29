@@ -15,10 +15,21 @@ vi.mock("../review/ReviewPanel.js", () => ({
   ReviewPanel: ({ layout }: { layout: string }) => <div data-testid="review-panel">{layout}</div>,
 }));
 
-// A scalp's charts and review strip have their own tests; here they're one placeholder.
+// A scalp's charts and review strip have their own tests; here they're one placeholder that can ask for Next.
 vi.mock("../review/ScalpWorkspace.js", () => ({
-  ScalpWorkspace: ({ trade }: { trade: { underlying: string } }) => (
-    <div data-testid="scalp-workspace">{trade.underlying}</div>
+  ScalpWorkspace: ({
+    trade,
+    onOpenTrade,
+  }: {
+    trade: { underlying: string };
+    onOpenTrade?: (id: string) => void;
+  }) => (
+    <div data-testid="scalp-workspace">
+      {trade.underlying}
+      <button type="button" onClick={() => onOpenTrade?.("t2")}>
+        workspace: next
+      </button>
+    </div>
   ),
 }));
 
@@ -142,13 +153,13 @@ function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes, 
   return fetchMock;
 }
 
-function renderDetail() {
+function renderDetail(onOpenTrade?: (id: string) => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <TradeDetail tradeId="t1" />
+      <TradeDetail tradeId="t1" onOpenTrade={onOpenTrade} />
     </QueryClientProvider>,
   );
 }
@@ -600,6 +611,14 @@ function stubSynced(
 }
 
 describe("TradeDetail for a scalp", () => {
+  it("opens the trade the queue bar asks for", async () => {
+    stubSynced(nvda);
+    const onOpenTrade = vi.fn();
+    renderDetail(onOpenTrade);
+    fireEvent.click(await screen.findByRole("button", { name: "workspace: next" }));
+    expect(onOpenTrade).toHaveBeenCalledWith("t2");
+  });
+
   it("puts a scalp's charts and review strip under the header, above the tiles", async () => {
     stubSynced(nvda);
     renderDetail();

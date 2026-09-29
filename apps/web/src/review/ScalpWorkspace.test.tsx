@@ -251,4 +251,14 @@ describe("ScalpWorkspace levels", () => {
     expect(drawn.at(-1)).toEqual(before);
     await waitFor(() => expect(field("Stop").value).toBe("231.80"));
   });
+
+  it("puts the queue bar above the charts", async () => {
+    stubApi();
+    renderWorkspace();
+    const bar = await screen.findByTestId("queue-bar");
+    expect(
+      bar.compareDocumentPosition(screen.getByTestId("trade-charts")) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(bar.textContent).toContain("1 of 1");
+  });
 });
