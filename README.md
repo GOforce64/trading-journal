@@ -55,8 +55,9 @@ requests that don't come from `localhost`.
   many orders its legs took.
 - **Scalps** — synced from IBKR (Flex Web Service) from a start date you choose, or
   typed in, with every fill kept; then a planned stop on the underlying, a Black-Scholes
-  estimate of the dollar risk that stop implies, R-multiples, and a generated chart of the
-  session.
+  estimate of the dollar risk that stop implies, R-multiples, and a chart of the session on the trade page: 3-minute candles (1m to 1h),
+  with a daily chart beside it, your fills marked, EMAs, VWAP, and premarket and prior-day
+  levels, from Alpaca's free data.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
   P&L calendar, open and recent trades) and an Analytics page with every split at once
   and an Iron flies tab measured against max profit.

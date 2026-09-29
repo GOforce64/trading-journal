@@ -1,7 +1,7 @@
 # Trade Chart — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Approved 2026-09-29. Plan: [2026-09-29-trade-chart.md](../plans/2026-09-29-trade-chart.md), whose deviations are folded in below.
+- **Status:** Approved; implemented on feat/trade-chart. Plan: [2026-09-29-trade-chart.md](../plans/2026-09-29-trade-chart.md), whose deviations are folded in below.
 - **Scope:** every trade page gets two charts:
   - a **3-minute intraday chart** of the underlying, with the trade's fills marked on it;
   - a **daily chart** beside it.
@@ -243,3 +243,18 @@ Decided with the user on 2026-09-29, and designed in the next spec:
 
 1. **Option-premium chart:** Alpaca's option bars on the free plan, for when stops move to premium.
 2. **Index underlyings:** chart SPX, NDX and RUT through SPY, QQQ and IWM, labelled as a proxy, if the user trades index options.
+
+### Live check (2026-09-29)
+
+On a copy of the real journal, with the user's key, and this morning's NVDA 232.5C scalp added by hand:
+- **NVDA, Sep 21–28:** 5,613 one-minute bars in 1.7 s the first time and 0.07 s from the cache, the same bars both times, `partial: false`.
+  - Storing a row per statement had made the first open take 4.4 s, so the cache now inserts 500 rows at a time.
+- **Daily:** 500 bars up to Sep 28 (close 228.86) in 0.7 s.
+- **SPX:** "No stock bars for SPX."
+- **Screenshots at 1280 and 1024 px:**
+  - The trade opens on 3m, zoomed on 08:30–10:45, with "B 2 @ 1.06" and "S 2 @ 1.295".
+  - The EMAs, VWAP, and the labelled PM and PD lines are drawn. The premarket candles are lighter.
+  - The daily chart sits beside the intraday chart at 1280 and below it at 1024. 5m, zooming out, Fit trade and the hover legend all work.
+  - AA's iron fly (Jul 16–17) shows "Open" and "Close" markers.
+  - Settings has the Chart panel. Without a key, the page reads "Add your Alpaca key in Settings to see the chart."
+- **Found and fixed:** Lightweight Charts joins a line's points across gaps, so VWAP ran straight from one session's close to the next open. Each day's last VWAP point is now transparent.
