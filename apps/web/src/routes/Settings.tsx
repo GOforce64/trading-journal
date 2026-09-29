@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, refusal } from "../api.js";
+import { ChartSettings } from "../chart/ChartSettings.js";
 import { Panel } from "../components/ui.js";
 import { IbkrSettings, type IbkrView } from "./IbkrSettings.js";
 
@@ -145,6 +146,7 @@ export function Settings({
           confirm={confirm}
         />
       )}
+      <ChartSettings />
       <Panel title="Data">
         <p className="text-muted">
           Data directory <span className="num text-fg">{data?.dataDir}</span>

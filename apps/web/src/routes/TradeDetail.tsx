@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
+import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
@@ -119,6 +120,7 @@ export function TradeDetail({
         </button>
       </header>
       <SyncedBanner trade={trade} />
+      <TradeCharts trade={trade} />
 
       {trade.strategy === "iron_fly" ? (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
