@@ -1,5 +1,7 @@
+import { LEVEL_BASES } from "@tj/core";
 import { useState } from "react";
 import { Panel } from "../components/ui.js";
+import { useDefaultBasis } from "../review/prefs.js";
 import { useChartPrefs } from "./prefs.js";
 
 const FIELD = "flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider";
@@ -12,6 +14,7 @@ export function ChartSettings() {
   const [prefs, setPrefs] = useChartPrefs();
   const [lengths, setLengths] = useState(prefs.emaLengths.map(String));
   const [saved, setSaved] = useState(false);
+  const [levelBasis, setLevelBasis] = useDefaultBasis();
   const ready = lengths.every(valid);
   return (
     <Panel title="Chart">
@@ -51,6 +54,30 @@ export function ChartSettings() {
         </button>
         {saved && <span className="text-muted">Saved</span>}
       </div>
+      <div className="mt-3 flex items-center gap-2 border-line border-t pt-2">
+        <span className="text-[10px] text-muted uppercase tracking-wider">
+          Stop and target levels default to
+        </span>
+        {LEVEL_BASES.map((basis) => (
+          <button
+            key={basis}
+            type="button"
+            aria-pressed={levelBasis === basis}
+            onClick={() => setLevelBasis(basis)}
+            className={`rounded-[2px] border px-2 py-0.5 ${
+              levelBasis === basis
+                ? "border-accent bg-accent text-white"
+                : "border-line text-muted hover:text-fg"
+            }`}
+          >
+            {basis === "stock" ? "Stock" : "Premium"}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-[10px] text-muted">
+        Where a scalp's review starts. A trade that already has a stop or target keeps its own. Kept in this
+        browser.
+      </p>
     </Panel>
   );
 }
