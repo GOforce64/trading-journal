@@ -33,6 +33,32 @@ const preview = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+/** The IBKR card asks for its status on mount; every other request gets the next of `responses`, in order. */
+function stubFetch(...responses: Response[]) {
+  const queue = [...responses];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    if (String(input).includes("/api/ibkr/status")) {
+      return json({
+        configured: false,
+        since: null,
+        lastRunAt: null,
+        lastStatus: null,
+        lastError: null,
+        lastSummary: null,
+      });
+    }
+    const next = queue.shift();
+    if (!next) throw new Error(`unexpected request ${String(input)}`);
+    return next;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+/** The requests the Import panel made: all but the IBKR card's status. */
+const requests = (fetchMock: ReturnType<typeof stubFetch>) =>
+  fetchMock.mock.calls.filter((call) => !String(call[0]).includes("/api/ibkr/status"));
+
 function setup() {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   render(
@@ -49,13 +75,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("Import", () => {
   it("previews the pasted export, then imports the new trades", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(preview))
-      .mockResolvedValueOnce(
-        json({ imported: 1, backupFile: "/data/backups/journal-x.db", importedIds: [] }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    stubFetch(
+      json(preview),
+      json({ imported: 1, backupFile: "/data/backups/journal-x.db", importedIds: [] }),
+    );
     setup();
 
     paste('{"format":"oquants-cells/1"}');
@@ -71,7 +94,7 @@ describe("Import", () => {
   });
 
   it("drops the preview when the pasted text changes, so only what was previewed can be imported", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(preview)));
+    stubFetch(json(preview));
     setup();
 
     paste('{"format":"oquants-cells/1"}');
@@ -83,19 +106,18 @@ describe("Import", () => {
   });
 
   it("says so, without calling the server, when the paste is not JSON", () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetch();
     setup();
 
     paste("Copied 12 trades");
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
 
     expect(screen.getByText(/isn't the snippet's output/)).toBeTruthy();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(requests(fetchMock)).toEqual([]);
   });
 
   it("shows the server's reason when oQuants changed its table", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: 'the "Cost" column is missing' }, 422)));
+    stubFetch(json({ error: 'the "Cost" column is missing' }, 422));
     setup();
 
     paste('{"format":"oquants-cells/1"}');
@@ -105,18 +127,15 @@ describe("Import", () => {
   });
 
   it("fetches the imported trades' stock prices, and says how it went", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(json(preview))
-      .mockResolvedValueOnce(json({ imported: 1, backupFile: null, importedIds: ["id-1"] }))
-      .mockResolvedValueOnce(
-        json({
-          filled: 1,
-          missing: [{ tradeId: "id-1", underlying: "XYZ", side: "exit", reason: "no_bars" }],
-          unavailable: null,
-        }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetch(
+      json(preview),
+      json({ imported: 1, backupFile: null, importedIds: ["id-1"] }),
+      json({
+        filled: 1,
+        missing: [{ tradeId: "id-1", underlying: "XYZ", side: "exit", reason: "no_bars" }],
+        unavailable: null,
+      }),
+    );
     setup();
 
     paste('{"format":"oquants-cells/1"}');
@@ -126,7 +145,7 @@ describe("Import", () => {
     expect(
       await screen.findByText("Filled 1 of 2 stock prices. 1 missing, see the Iron flies tab."),
     ).toBeTruthy();
-    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/api/moves/fill");
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ tradeIds: ["id-1"] });
+    expect(String(requests(fetchMock)[2]?.[0])).toContain("/api/moves/fill");
+    expect(JSON.parse(String(requests(fetchMock)[2]?.[1]?.body))).toEqual({ tradeIds: ["id-1"] });
   });
 });

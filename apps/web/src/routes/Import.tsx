@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../api.js";
 import { Money, Panel } from "../components/ui.js";
 import { fillSummary, useFillMoves } from "../moves.js";
+import { IbkrCard } from "./IbkrCard.js";
 
 interface PreviewRow {
   status: "new" | "existing" | "skipped";
@@ -105,6 +106,7 @@ export function Import({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="flex flex-col gap-3">
+      <IbkrCard />
       <Panel title="Import / Sync — oQuants">
         <p className="mb-2 text-muted">
           On oQuants → Portfolio, open DevTools (F12) → Console, paste <code>scripts/oquants-extract.js</code>{" "}
