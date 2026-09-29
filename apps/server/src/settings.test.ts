@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { FlexCheck } from "@tj/importers";
 import type { AlpacaKeys, KeyCheck, QuoteSource } from "@tj/market-data";
 import { describe, expect, it } from "vitest";
 import type { createApp } from "./app.js";
@@ -17,13 +18,15 @@ interface Setup {
   keys?: AlpacaKeys | null;
   /** What secrets.json holds before the test; omitted means no file. */
   contents?: string;
+  ibkrCheck?: FlexCheck;
 }
 
-function setup({ check = "ok", keys = null, contents }: Setup = {}) {
+function setup({ check = "ok", keys = null, contents, ibkrCheck = "ok" }: Setup = {}) {
   const dir = mkdtempSync(join(tmpdir(), "tj-settings-"));
   const secretsFile = join(dir, "secrets.json");
   if (contents !== undefined) writeFileSync(secretsFile, contents);
   const checked: AlpacaKeys[] = [];
+  const ibkrChecked: [string, string][] = [];
   // Knows a price for every symbol, so a working key is easy to see through /api/quotes.
   const quotes: QuoteSource = { latest: async (symbols) => new Map(symbols.map((symbol) => [symbol, M])) };
   const market = createMarketData(keys, { build: () => fakeSources({ quotes }), log: () => {} });
@@ -36,9 +39,13 @@ function setup({ check = "ok", keys = null, contents }: Setup = {}) {
         checked.push(tried);
         return check;
       },
+      checkIbkr: async (token, queryId) => {
+        ibkrChecked.push([token, queryId]);
+        return ibkrCheck;
+      },
     },
   });
-  return { app, market, dir, secretsFile, checked };
+  return { app, market, dir, secretsFile, checked, ibkrChecked };
 }
 
 const put = (
@@ -54,6 +61,7 @@ describe("GET /api/settings", () => {
     expect(await res.json()).toEqual({
       dataDir: dir,
       marketData: { state: "off", message: null, keyIdHint: null },
+      ibkr: { configured: false, tokenHint: null, activityQueryId: null, todayQueryId: null, since: null },
     });
   });
 
@@ -145,5 +153,84 @@ describe("DELETE /api/settings/market-data", () => {
     expect(await res.json()).toMatchObject({ marketData: { state: "off", keyIdHint: null } });
     expect(JSON.parse(readFileSync(secretsFile, "utf8"))).toEqual({ ibkr: { flexToken: "keep-me" } });
     expect(market.sources()).toBeNull();
+  });
+});
+
+describe("IBKR Flex settings", () => {
+  const TOKEN = "1234567890123456789012";
+  const body = (fields: Record<string, unknown>) =>
+    JSON.stringify({ activityQueryId: "1653145", todayQueryId: "1653147", since: "2026-09-28", ...fields });
+  const putIbkr = (app: ReturnType<typeof createApp>, json: string) =>
+    app.request("/api/settings/ibkr", { method: "PUT", headers: JSON_HEADERS, body: json });
+
+  it("tests both queries with the token, saves them, and shows only a hint of the token", async () => {
+    const { app, secretsFile, ibkrChecked } = setup();
+    const res = await putIbkr(app, body({ token: TOKEN }));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain(TOKEN);
+    expect(JSON.parse(text).ibkr).toEqual({
+      configured: true,
+      tokenHint: "12…9012",
+      activityQueryId: "1653145",
+      todayQueryId: "1653147",
+      since: "2026-09-28",
+    });
+    expect(ibkrChecked).toEqual([
+      [TOKEN, "1653145"],
+      [TOKEN, "1653147"],
+    ]);
+    expect(readSecrets(secretsFile).ibkr?.token).toBe(TOKEN);
+  });
+
+  it("keeps the saved token when a save leaves it out", async () => {
+    const { app, secretsFile } = setup();
+    await putIbkr(app, body({ token: TOKEN }));
+    // Any past start date: one after today in New York is refused.
+    expect((await putIbkr(app, body({ since: "2026-09-20" }))).status).toBe(200);
+    expect(readSecrets(secretsFile).ibkr).toMatchObject({ token: TOKEN, since: "2026-09-20" });
+  });
+
+  it.each([
+    [
+      "token_rejected",
+      400,
+      "IBKR rejected the token. Check it was copied in full, or generate a new one in Client Portal.",
+    ],
+    [
+      "query_not_found",
+      400,
+      "IBKR doesn't know the Activity query 1653145. Check its ID on the Flex Queries page.",
+    ],
+    ["unreachable", 503, "Couldn't reach IBKR to test the token. Try again in a moment."],
+  ] as const)("refuses to save when IBKR says %s", async (check, status, message) => {
+    const { app, secretsFile } = setup({ ibkrCheck: check });
+    const res = await putIbkr(app, body({ token: TOKEN }));
+    expect(res.status).toBe(status);
+    expect(await res.json()).toEqual({ error: check, message });
+    expect(existsSync(secretsFile)).toBe(false);
+  });
+
+  it("refuses letters in a query id, a start date in the future, and no token at all, without echoing them", async () => {
+    const { app } = setup();
+    for (const json of [
+      body({ token: TOKEN, activityQueryId: "abc" }),
+      body({ token: TOKEN, since: "2099-01-01" }),
+      body({}),
+    ]) {
+      const res = await putIbkr(app, json);
+      expect(res.status).toBe(400);
+      const answer = (await res.json()) as { message: string };
+      expect(answer.message).not.toContain("abc");
+    }
+  });
+
+  it("removes the IBKR block and keeps the Alpaca key", async () => {
+    const { app, secretsFile } = setup();
+    await put(app, JSON.stringify(KEYS));
+    await putIbkr(app, body({ token: TOKEN }));
+    const res = await app.request("/api/settings/ibkr", { method: "DELETE", headers: LOCAL });
+    expect(((await res.json()) as { ibkr: { configured: boolean } }).ibkr.configured).toBe(false);
+    expect(readSecrets(secretsFile)).toEqual({ alpaca: KEYS });
   });
 });

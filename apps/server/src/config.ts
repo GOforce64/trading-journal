@@ -31,8 +31,19 @@ export function dataPaths(dataDir: string): DataPaths {
   };
 }
 
+const ibkrSchema = z.object({
+  token: z.string().min(1),
+  activityQueryId: z.string().regex(/^\d+$/),
+  todayQueryId: z.string().regex(/^\d+$/),
+  since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/** The Flex Web Service token, the two queries, and the date the sync starts from (spec §5.6). */
+export type IbkrConfig = z.infer<typeof ibkrSchema>;
+
 const secretsSchema = z.object({
   alpaca: z.object({ keyId: z.string().min(1), secretKey: z.string().min(1) }).optional(),
+  ibkr: ibkrSchema.optional(),
 });
 
 export type Secrets = z.infer<typeof secretsSchema>;
@@ -73,18 +84,28 @@ export class SecretsFileBroken extends Error {
 }
 
 /**
- * Sets (or, with null, removes) the Alpaca key in secrets.json and keeps every other entry.
+ * Sets (or, with null, removes) one entry in secrets.json and keeps every other one.
  * The new file is written beside the old one, made readable by its owner only, then renamed
  * into place, so a crash never leaves half a file.
  */
-export function writeAlpacaKeys(file: string, keys: AlpacaKeys | null): void {
-  const { alpaca: _replaced, ...rest } = readSecretsObject(file);
-  const next = keys ? { ...rest, alpaca: { keyId: keys.keyId, secretKey: keys.secretKey } } : rest;
+function writeEntry(file: string, name: string, value: unknown): void {
+  const { [name]: _replaced, ...rest } = readSecretsObject(file);
+  const next = value == null ? rest : { ...rest, [name]: value };
   const temp = `${file}.tmp`;
   writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   // The mode above only applies to a new file; a temp file left by a crash keeps its old one.
   chmodSync(temp, 0o600);
   renameSync(temp, file);
+}
+
+/** Sets or removes the Alpaca key. */
+export function writeAlpacaKeys(file: string, keys: AlpacaKeys | null): void {
+  writeEntry(file, "alpaca", keys ? { keyId: keys.keyId, secretKey: keys.secretKey } : null);
+}
+
+/** Sets or removes the IBKR Flex block. */
+export function writeIbkrConfig(file: string, config: IbkrConfig | null): void {
+  writeEntry(file, "ibkr", config);
 }
 
 /** The file as a plain object, entries this app does not know included. No file is an empty object. */
