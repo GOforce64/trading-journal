@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
-import { api, type TradeView } from "../api.js";
+import { api, type TradeDetailView } from "../api.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
+import { ScalpTiles } from "./ScalpTiles.js";
 import { SettlePanel } from "./SettlePanel.js";
+import { SyncedBanner } from "./SyncedBanner.js";
 
 const GRADES = ["A", "B", "C", "D", "F"] as const;
 const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -46,7 +49,7 @@ export function TradeDetail({
 
   const { data: trade, isLoading } = useQuery({
     queryKey: ["trade", tradeId],
-    queryFn: async (): Promise<TradeView> => {
+    queryFn: async (): Promise<TradeDetailView> => {
       const res = await api.api.trades[":id"].$get({ param: { id: tradeId } });
       if (!res.ok) throw new Error(`load failed: ${res.status}`);
       return res.json();
@@ -115,33 +118,40 @@ export function TradeDetail({
           Edit
         </button>
       </header>
+      <SyncedBanner trade={trade} />
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-        <Tile label="Structure" testId="tile-structure">
-          {metrics ? `${detail?.putWingStrike} / ${detail?.bodyPutStrike} / ${detail?.callWingStrike}` : "—"}
-          <small className="mt-1 block text-[10px] text-muted">
-            put wing {metrics?.putWingWidth} · call wing {metrics?.callWingWidth}
-            {metrics?.isBrokenWing ? " · broken" : ""}
-          </small>
-        </Tile>
-        <Tile label="Max profit">{metrics ? usd(metrics.maxProfit) : "—"}</Tile>
-        <Tile label="Max loss" testId="tile-max-loss">
-          {metrics ? usd(metrics.maxLoss) : "—"}
-          <small className="mt-1 block text-[10px] text-muted">
+      {trade.strategy === "iron_fly" ? (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <Tile label="Structure" testId="tile-structure">
             {metrics
-              ? `${metrics.riskySide} side · other side ${usd(
-                  metrics.riskySide === "call" ? metrics.putSideRisk : metrics.callSideRisk,
-                )}`
-              : ""}
-          </small>
-        </Tile>
-        <Tile label="% kept" testId="tile-kept">
-          <Pct value={pctKept(trade)} />
-        </Tile>
-        <Tile label="Breakevens" testId="tile-breakevens">
-          {metrics ? `${metrics.breakevenLow} / ${metrics.breakevenHigh}` : "—"}
-        </Tile>
-      </div>
+              ? `${detail?.putWingStrike} / ${detail?.bodyPutStrike} / ${detail?.callWingStrike}`
+              : "—"}
+            <small className="mt-1 block text-[10px] text-muted">
+              put wing {metrics?.putWingWidth} · call wing {metrics?.callWingWidth}
+              {metrics?.isBrokenWing ? " · broken" : ""}
+            </small>
+          </Tile>
+          <Tile label="Max profit">{metrics ? usd(metrics.maxProfit) : "—"}</Tile>
+          <Tile label="Max loss" testId="tile-max-loss">
+            {metrics ? usd(metrics.maxLoss) : "—"}
+            <small className="mt-1 block text-[10px] text-muted">
+              {metrics
+                ? `${metrics.riskySide} side · other side ${usd(
+                    metrics.riskySide === "call" ? metrics.putSideRisk : metrics.callSideRisk,
+                  )}`
+                : ""}
+            </small>
+          </Tile>
+          <Tile label="% kept" testId="tile-kept">
+            <Pct value={pctKept(trade)} />
+          </Tile>
+          <Tile label="Breakevens" testId="tile-breakevens">
+            {metrics ? `${metrics.breakevenLow} / ${metrics.breakevenHigh}` : "—"}
+          </Tile>
+        </div>
+      ) : (
+        <ScalpTiles trade={trade} />
+      )}
 
       {trade.strategy === "iron_fly" && <MoveTiles trade={trade} />}
       {trade.strategy === "iron_fly" && estimate?.kind === "expired" && (
@@ -275,6 +285,7 @@ export function TradeDetail({
           {patch.error && <p className="mt-2 text-down">{String(patch.error)}</p>}
         </Panel>
       </div>
+      <FillsPanel fills={trade.fills ?? []} />
     </div>
   );
 }

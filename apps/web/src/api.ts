@@ -19,3 +19,21 @@ export async function refusal(
   const body = (await res.json().catch(() => ({}))) as { message?: string };
   return new Error(body.message ?? `${action} failed: ${res.status}`);
 }
+
+/** One fill on the trade page's Fills panel (spec §9.5). */
+export interface TradeFill {
+  id: string;
+  executedAt: number;
+  quantity: number;
+  price: number;
+  commission: number;
+  kind: string;
+  canceled: boolean;
+  openClose: string | null;
+  right: string;
+  strike: number;
+  expiry: string;
+}
+
+/** A trade as its own page loads it: with its fills. */
+export type TradeDetailView = TradeView & { fills: TradeFill[] };

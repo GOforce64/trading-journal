@@ -473,3 +473,190 @@ describe("TradeDetail move tiles", () => {
     expect(screen.getByTestId("tile-implied-move").textContent).toContain("7.3%");
   });
 });
+
+const NVDA_OPEN = Date.UTC(2026, 8, 28, 13, 31, 5);
+const NVDA_CLOSE = Date.UTC(2026, 8, 28, 13, 46, 12);
+
+/** This morning's NVDA scalp, synced from IBKR, with its four fills. */
+const nvda = {
+  ...trade,
+  id: "nvda",
+  strategy: "scalp",
+  book: "paper",
+  underlying: "NVDA",
+  underlyingName: null,
+  structureLabel: "Long call",
+  source: "ibkr_flex",
+  factsEditedAt: null,
+  openedAt: NVDA_OPEN,
+  closedAt: NVDA_CLOSE,
+  netPnl: 44.74,
+  fees: 2.26,
+  ironFly: null,
+  metrics: null,
+  legs: [
+    {
+      id: "l-nvda",
+      right: "C",
+      strike: 232.5,
+      expiry: "2026-09-28",
+      quantity: 2,
+      multiplier: 100,
+      openPrice: 1.06,
+      closePrice: 1.295,
+    },
+  ],
+  fills: [
+    {
+      id: "f1",
+      executedAt: NVDA_OPEN,
+      quantity: 1,
+      price: 1.06,
+      commission: 0.0833,
+      kind: "trade",
+      canceled: false,
+      openClose: "O",
+      right: "C",
+      strike: 232.5,
+      expiry: "2026-09-28",
+    },
+    {
+      id: "f2",
+      executedAt: NVDA_OPEN,
+      quantity: 1,
+      price: 1.06,
+      commission: 0.8453,
+      kind: "trade",
+      canceled: false,
+      openClose: "O",
+      right: "C",
+      strike: 232.5,
+      expiry: "2026-09-28",
+    },
+    {
+      id: "f3",
+      executedAt: Date.UTC(2026, 8, 28, 13, 31, 49),
+      quantity: -1,
+      price: 1.44,
+      commission: 0.7736,
+      kind: "trade",
+      canceled: false,
+      openClose: "C",
+      right: "C",
+      strike: 232.5,
+      expiry: "2026-09-28",
+    },
+    {
+      id: "f4",
+      executedAt: NVDA_CLOSE,
+      quantity: -1,
+      price: 1.15,
+      commission: 0.561,
+      kind: "trade",
+      canceled: false,
+      openClose: "C",
+      right: "C",
+      strike: 232.5,
+      expiry: "2026-09-28",
+    },
+  ],
+};
+
+/** Answers the trade, the IBKR status (with `keptEdits`), and a reset. */
+function stubSynced(
+  body: unknown,
+  keptEdits: { tradeId: string; ticker: string; netPnl: number | null }[] = [],
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const url = String(input);
+    const payload = url.includes("/api/ibkr/status")
+      ? {
+          configured: true,
+          since: "2026-09-28",
+          lastRunAt: 1,
+          lastStatus: "ok",
+          lastError: null,
+          lastSummary: { keptEdits },
+        }
+      : url.includes("/reset")
+        ? { status: "ok" }
+        : body;
+    return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("TradeDetail for a scalp", () => {
+  it("shows the scalp's own tiles", async () => {
+    stubSynced(nvda);
+    renderDetail();
+    expect((await screen.findByTestId("tile-contract")).textContent).toContain("NVDA 232.5C · exp Sep 28");
+    expect(screen.getByTestId("tile-size").textContent).toContain("2 contracts");
+    expect(screen.getByTestId("tile-entry-exit").textContent).toContain("1.06 → 1.295");
+    expect(screen.getByTestId("tile-held").textContent).toContain("15 min");
+    expect(screen.getByTestId("tile-fees").textContent).toContain("$2.26");
+    expect(screen.getByTestId("tile-return").textContent).toContain("+21.10%");
+    expect(screen.queryByTestId("tile-max-loss")).toBeNull();
+  });
+
+  it("lists every fill of a synced trade", async () => {
+    stubSynced(nvda);
+    renderDetail();
+    const rows = await screen.findAllByTestId(/^fill-row-/);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]?.textContent).toContain("Sep 28 09:31:05");
+    expect(rows[0]?.textContent).toContain("BUY");
+    expect(rows[3]?.textContent).toContain("SELL");
+    expect(rows[3]?.textContent).toContain("1.15");
+  });
+
+  it("labels expiries and canceled fills", async () => {
+    stubSynced({
+      ...nvda,
+      fills: [
+        { ...nvda.fills[0], id: "e", kind: "expiration", price: 0 },
+        { ...nvda.fills[1], id: "c", canceled: true },
+      ],
+    });
+    renderDetail();
+    expect((await screen.findByTestId("fill-row-e")).textContent).toContain("expired");
+    expect(screen.getByTestId("fill-row-c").textContent).toContain("canceled");
+  });
+
+  it("says the user's edits are kept, and hands the trade back to IBKR on request", async () => {
+    const fetchMock = stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [
+      { tradeId: "nvda", ticker: "NVDA", netPnl: 44.74 },
+    ]);
+    renderDetail();
+    expect(
+      await screen.findByText(
+        "Your edits are kept. Later syncs won't change this trade. IBKR now has +$44.74 net.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use IBKR's numbers" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/ibkr/trades/nvda/reset")),
+      ).toBe(true),
+    );
+  });
+
+  it("shows no banner, and asks nothing of IBKR, on a synced trade the user hasn't changed", async () => {
+    const fetchMock = stubSynced(nvda);
+    renderDetail();
+    await screen.findByTestId("tile-contract");
+    expect(screen.queryByRole("button", { name: "Use IBKR's numbers" })).toBeNull();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/ibkr/status"))).toBe(false);
+  });
+});
+
+describe("heldText", () => {
+  it("reads minutes, hours and days", async () => {
+    const { heldText } = await import("./ScalpTiles.js");
+    expect(heldText(15 * 60_000 + 7_000)).toBe("15 min");
+    expect(heldText(3 * 3_600_000 + 20 * 60_000)).toBe("3 h 20 min");
+    expect(heldText(2 * 3_600_000)).toBe("2 h");
+    expect(heldText(52 * 3_600_000)).toBe("2 d 4 h");
+  });
+});
