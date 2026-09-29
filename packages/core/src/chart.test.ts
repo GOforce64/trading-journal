@@ -1,7 +1,16 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { nyMinuteOfDay, nyWallClock } from "./calendar.js";
-import { aggregate, ema, nyClock, PREMARKET_OPEN, type PriceBar } from "./chart.js";
+import {
+  aggregate,
+  dailyFromMinutes,
+  ema,
+  nyClock,
+  PREMARKET_OPEN,
+  type PriceBar,
+  sessionLevels,
+  vwap,
+} from "./chart.js";
 import { nyDate } from "./marks.js";
 
 const DAY = "2026-09-28";
@@ -131,5 +140,72 @@ describe("ema", () => {
 
   it("follows the values exactly at length 1", () => {
     expect(ema([4, 5, 6], 1)).toEqual([null, null, 6]);
+  });
+});
+describe("vwap", () => {
+  const bars = [
+    bar(DAY, "09:29", 9, 9, 9, 9, 1_000),
+    bar(DAY, "09:30", 10, 11, 9, 10, 100), // typical price 10
+    bar(DAY, "09:31", 12, 13, 11, 12, 300), // typical price 12
+    bar("2026-09-29", "09:30", 20, 21, 19, 20, 50),
+  ];
+
+  it("weights the regular session's typical prices by volume, and ignores premarket", () => {
+    expect(vwap(bars, aggregate(bars, 1))).toEqual([null, 10, 11.5, 20]);
+  });
+
+  it("gives each candle the VWAP as of its last regular-session minute, restarting each day", () => {
+    // 3m: the 09:27 candle holds only 09:29 (premarket); the 09:30 candle holds 09:30 and 09:31.
+    expect(vwap(bars, aggregate(bars, 3))).toEqual([null, 11.5, 20]);
+  });
+});
+
+describe("sessionLevels", () => {
+  it("reads the premarket high and low of the day, and the prior session's regular high and low", () => {
+    const bars = [
+      bar("2026-09-25", "09:30", 100, 104, 99, 101),
+      bar("2026-09-25", "15:59", 101, 102, 98, 100),
+      bar("2026-09-25", "16:30", 100, 110, 90, 100), // after hours: not part of the prior day's range
+      bar(DAY, "04:00", 101, 103, 100.5, 102),
+      bar(DAY, "09:29", 102, 102.5, 99.5, 101),
+      bar(DAY, "09:30", 101, 105, 101, 104), // the day itself: not a level
+    ];
+    expect(sessionLevels(bars, DAY)).toEqual({ pmHigh: 103, pmLow: 99.5, pdHigh: 104, pdLow: 98 });
+  });
+
+  it("skips a holiday: the Tuesday after Labor Day takes Friday's range", () => {
+    const bars = [bar("2026-09-04", "10:00", 50, 52, 49, 51), bar("2026-09-08", "08:00", 51, 51.5, 50.5, 51)];
+    expect(sessionLevels(bars, "2026-09-08")).toMatchObject({ pdHigh: 52, pdLow: 49 });
+  });
+
+  it("takes a half day's range as it is", () => {
+    const bars = [
+      bar("2026-11-27", "09:30", 70, 71, 69, 70),
+      bar("2026-11-27", "12:59", 70, 73, 70, 72),
+      bar("2026-11-30", "09:00", 72, 72, 72, 72),
+    ];
+    expect(sessionLevels(bars, "2026-11-30")).toMatchObject({ pdHigh: 73, pdLow: 69 });
+  });
+
+  it("has no level without bars behind it", () => {
+    expect(sessionLevels([bar(DAY, "09:30", 1, 1, 1, 1)], DAY)).toEqual({
+      pmHigh: null,
+      pmLow: null,
+      pdHigh: null,
+      pdLow: null,
+    });
+  });
+});
+
+describe("dailyFromMinutes", () => {
+  it("builds a day's candle from its regular session, stamped at midnight as Alpaca stamps daily bars", () => {
+    const bars = [
+      bar(DAY, "08:00", 5, 9, 1, 5, 10),
+      bar(DAY, "09:30", 10, 11, 9.5, 10.5, 100),
+      bar(DAY, "15:59", 10.5, 12, 10, 11, 200),
+      bar(DAY, "16:01", 11, 13, 8, 12, 50),
+    ];
+    expect(dailyFromMinutes(bars, DAY)).toEqual({ t: at(DAY, "00:00"), o: 10, h: 12, l: 9.5, c: 11, v: 300 });
+    expect(dailyFromMinutes(bars, "2026-09-29")).toBeNull();
   });
 });

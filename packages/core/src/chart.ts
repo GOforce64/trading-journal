@@ -96,3 +96,86 @@ export function ema(values: readonly number[], length: number): (number | null)[
 
 /** Midnight in New York on `date`, as Alpaca stamps a daily bar. */
 export const nyMidnight = (date: string): number => nyWallClock(date, 0);
+
+/**
+ * Session VWAP (spec §7): the regular session only, 09:30–16:00 ET, restarting each day. Each 1-minute bar's
+ * typical price, (h + l + c) ÷ 3, is weighted by its volume. Each candle gets the VWAP as of its last
+ * regular-session minute, and null with none. `candles` must be built from the same bars.
+ */
+export function vwap(bars: readonly PriceBar[], candles: readonly Candle[]): (number | null)[] {
+  const out: (number | null)[] = candles.map(() => null);
+  let date = "";
+  let weighted = 0;
+  let volume = 0;
+  let index = 0;
+  for (const bar of bars) {
+    const clock = nyClock(bar.t);
+    if (clock.date !== date) {
+      date = clock.date;
+      weighted = 0;
+      volume = 0;
+    }
+    if (clock.minute < REGULAR_OPEN || clock.minute >= REGULAR_CLOSE) continue;
+    weighted += ((bar.h + bar.l + bar.c) / 3) * bar.v;
+    volume += bar.v;
+    while (index + 1 < candles.length && (candles[index + 1]?.t ?? Number.POSITIVE_INFINITY) <= bar.t)
+      index++;
+    const candle = candles[index];
+    if (candle && candle.t <= bar.t && volume > 0) out[index] = weighted / volume;
+  }
+  return out;
+}
+
+export interface SessionLevels {
+  pmHigh: number | null;
+  pmLow: number | null;
+  pdHigh: number | null;
+  pdLow: number | null;
+}
+
+/**
+ * The day's premarket high and low (04:00–09:29 ET), and the regular-session high and low of the last earlier
+ * day that traded (spec §7): a holiday is skipped, and a half day's range is taken as it is.
+ */
+export function sessionLevels(bars: readonly PriceBar[], date: string): SessionLevels {
+  let pmHigh: number | null = null;
+  let pmLow: number | null = null;
+  const regular = new Map<string, { h: number; l: number }>();
+  for (const bar of bars) {
+    const clock = nyClock(bar.t);
+    if (clock.date === date && clock.minute >= PREMARKET_OPEN && clock.minute < REGULAR_OPEN) {
+      pmHigh = pmHigh === null ? bar.h : Math.max(pmHigh, bar.h);
+      pmLow = pmLow === null ? bar.l : Math.min(pmLow, bar.l);
+    } else if (clock.date < date && clock.minute >= REGULAR_OPEN && clock.minute < REGULAR_CLOSE) {
+      const day = regular.get(clock.date);
+      regular.set(
+        clock.date,
+        day ? { h: Math.max(day.h, bar.h), l: Math.min(day.l, bar.l) } : { h: bar.h, l: bar.l },
+      );
+    }
+  }
+  const prior = [...regular.keys()].sort().at(-1);
+  const range = prior ? regular.get(prior) : undefined;
+  return { pmHigh, pmLow, pdHigh: range?.h ?? null, pdLow: range?.l ?? null };
+}
+
+/**
+ * A day's daily candle from its regular-session minute bars, stamped at New York midnight as Alpaca stamps daily
+ * bars. The daily chart uses it for today, which Alpaca only has once the day is over. Null without bars.
+ */
+export function dailyFromMinutes(bars: readonly PriceBar[], date: string): PriceBar | null {
+  let day: PriceBar | null = null;
+  for (const bar of bars) {
+    const clock = nyClock(bar.t);
+    if (clock.date !== date || clock.minute < REGULAR_OPEN || clock.minute >= REGULAR_CLOSE) continue;
+    if (!day) {
+      day = { t: nyMidnight(date), o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v };
+      continue;
+    }
+    day.h = Math.max(day.h, bar.h);
+    day.l = Math.min(day.l, bar.l);
+    day.c = bar.c;
+    day.v += bar.v;
+  }
+  return day;
+}
