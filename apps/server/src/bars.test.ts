@@ -1,4 +1,4 @@
-import { nyWallClock, type PriceBar } from "@tj/core";
+import { addDays, isTradingDay, nyWallClock, type PriceBar } from "@tj/core";
 import { AlpacaError, type BarHistory } from "@tj/market-data";
 import { describe, expect, it, vi } from "vitest";
 import { createMarketData } from "./marketData.js";
@@ -145,22 +145,34 @@ describe("GET /api/bars/:symbol", () => {
 });
 
 describe("GET /api/bars/:symbol/daily", () => {
-  it("fetches two years of daily bars up to yesterday once, never today", async () => {
+  it("fetches three years of daily bars up to yesterday once, never today", async () => {
     const daily = bar("2026-09-25", 0, 771.35);
     const { dailyBars, get } = setup({ dailyBars: async () => [daily] });
     expect((await get("/api/bars/SPY/daily?to=2026-09-29")).body).toMatchObject({
       bars: [daily],
       unavailable: null,
     });
-    expect(dailyBars).toHaveBeenCalledWith("SPY", "2024-09-28", "2026-09-28");
+    expect(dailyBars).toHaveBeenCalledWith("SPY", "2023-09-29", "2026-09-28");
 
     await get("/api/bars/SPY/daily?to=2026-09-29");
     expect(dailyBars).toHaveBeenCalledTimes(1);
   });
 
+  it("asks for enough trading days to draw the 167 EMA across the six months the chart opens on", async () => {
+    const { dailyBars, get } = setup();
+    await get("/api/bars/SPY/daily?to=2026-09-29");
+    const [, from = "", to = ""] = dailyBars.mock.calls[0] ?? [];
+    let tradingDays = 0;
+    for (let date = from; date <= to; date = addDays(date, 1)) {
+      if (isTradingDay(date)) tradingDays++;
+    }
+    // EMA 167 draws from its 3 × 167th close, and the daily chart opens on the last 126.
+    expect(tradingDays).toBeGreaterThanOrEqual(3 * 167 - 1 + 126);
+  });
+
   it("ends at the trade's last day when that's in the past", async () => {
     const { dailyBars, get } = setup();
     await get("/api/bars/SPY/daily?to=2026-07-17");
-    expect(dailyBars).toHaveBeenCalledWith("SPY", "2024-07-17", "2026-07-17");
+    expect(dailyBars).toHaveBeenCalledWith("SPY", "2023-07-18", "2026-07-17");
   });
 });

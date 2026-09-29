@@ -107,7 +107,7 @@ describe("intradayModel", () => {
       [8],
     );
     expect(late.markers.map((marker) => marker.t)).toEqual([nyWallClock(DAY, 1197)]);
-    expect(late.window).toEqual({ from: 299, to: 319 });
+    expect(late.window).toEqual({ from: 299, to: 339 });
   });
 
   it("draws an EMA only where it has enough history", () => {

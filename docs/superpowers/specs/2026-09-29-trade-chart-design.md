@@ -109,7 +109,7 @@ core/chart: aggregate, ema, vwap, sessionLevels (pure, tested)
 - **Intraday:** `GET /api/bars/:symbol?from=YYYY-MM-DD&to=YYYY-MM-DD` answers `{ symbol, bars: Bar[], partial: boolean, unavailable: { reason, message } | null }`.
   - `Bar` is `{ t, o, h, l, c, v }`: 1-minute, 04:00–20:00 ET, oldest first.
 - **The trade page's range:** from **7 calendar days before** the trade's first day, which gives 3 to 5 prior sessions of warm-up, through the trade's last day. For an open trade, the last day is today.
-- **The daily range:** `GET /api/bars/:symbol/daily?to=YYYY-MM-DD` answers the same shape with daily bars, for the 730 days up to `to` (the trade's last day), and never later than yesterday. The 167 daily EMA needs that much. Alpaca's daily bar for a day exists only once the day is over, so **the daily chart builds the candle for today (and any later trade day it lacks) from that day's regular-session minute bars**.
+- **The daily range:** `GET /api/bars/:symbol/daily?to=YYYY-MM-DD` answers the same shape with daily bars, for the 1,095 days (three years, about 750 trading days) up to `to` (the trade's last day), and never later than yesterday. The 167 daily EMA draws from its 501st close, and the chart opens on the last 126. Alpaca's daily bar for a day exists only once the day is over, so **the daily chart builds the candle for today (and any later trade day it lacks) from that day's regular-session minute bars**.
 - **The bar service, per request:**
   1. List the days in the range. Days found in `bar_days` are read from `bars`.
   2. Fetch the missing finished days from Alpaca in **one** paged request, from the first missing day to the last.

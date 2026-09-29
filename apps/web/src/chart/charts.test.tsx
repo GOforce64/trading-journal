@@ -91,6 +91,15 @@ describe("IntradayChart", () => {
     expect(library.charts).toBe(1);
   });
 
+  it("keeps the reader's zoom while a live session's candles arrive", () => {
+    const live = (until: number) =>
+      intradayModel(minutesOf(DAY, 240, until, 229), TRADE, 3, DEFAULT_PREFS.emaLengths);
+    const { rerender } = render(<IntradayChart model={live(605)} show={DEFAULT_PREFS.show} fitKey={0} />);
+    const opened = library.ranges.length;
+    rerender(<IntradayChart model={live(620)} show={DEFAULT_PREFS.show} fitKey={0} />);
+    expect(library.ranges.length).toBe(opened);
+  });
+
   it("hides what's toggled off", () => {
     render(
       <IntradayChart model={MODEL} show={{ ...DEFAULT_PREFS.show, vwap: false, pd: false }} fitKey={0} />,

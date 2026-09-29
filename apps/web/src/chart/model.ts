@@ -137,13 +137,16 @@ const drawable = (candles: readonly { t: number }[], values: readonly (number | 
     return value === null || !candle ? [] : [{ t: candle.t, value }];
   });
 
-/** The opening view (spec §8): WINDOW_PAD candles before the first mark to as many after the last. */
+/**
+ * The opening view (spec §8): WINDOW_PAD candles before the first mark to as many after the last. The end may lie past
+ * the last candle, as empty space, so a live session's new candles don't move the view and undo the reader's zoom.
+ */
 function openingWindow(candles: readonly { t: number }[], marks: readonly Marker[]): ViewWindow | null {
   if (candles.length === 0 || marks.length === 0) return null;
   const times = marks.map((mark) => mark.t);
   const first = Math.max(0, candleAt(candles, Math.min(...times)));
   const last = Math.max(first, candleAt(candles, Math.max(...times)));
-  return { from: Math.max(0, first - WINDOW_PAD), to: Math.min(candles.length - 1, last + WINDOW_PAD) };
+  return { from: Math.max(0, first - WINDOW_PAD), to: last + WINDOW_PAD };
 }
 
 /** Everything the intraday chart draws, from 1-minute bars (spec §7–8). */

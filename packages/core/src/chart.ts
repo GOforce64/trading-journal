@@ -23,6 +23,8 @@ export const REGULAR_CLOSE = 16 * 60;
 export const SESSION_END = 20 * 60;
 /** An EMA is drawn once it has this many times its length of values behind it (spec §7). */
 export const EMA_WARMUP = 3;
+/** The longest intraday range the server serves: a trade held a few weeks, plus its warm-up week. */
+export const MAX_BAR_DAYS = 45;
 
 const HOUR = 3_600_000;
 const DAY_MS = 86_400_000;

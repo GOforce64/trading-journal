@@ -5,8 +5,11 @@ import type { MarketData } from "./marketData.js";
 
 /** Alpaca's free plan withholds the last 15 minutes; a minute more keeps clear of the edge. */
 const RECENT_MS = 16 * 60_000;
-/** Enough daily bars for a 167 EMA (spec §6). */
-const DAILY_DAYS = 730;
+/**
+ * Three years of daily bars, about 750 trading days: EMA 167 draws from its 501st close, and the daily chart opens
+ * on the last 126 (spec §6).
+ */
+const DAILY_DAYS = 1_095;
 
 export interface BarAnswer {
   bars: PriceBar[];

@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { nyWallClock, type PriceBar } from "@tj/core";
+import { addDays, nyWallClock, type PriceBar } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { todayNy } from "../market.js";
 import { TradeCharts } from "./TradeCharts.js";
 import { resetLibrary } from "./testing.js";
 
@@ -42,7 +43,7 @@ function stub(minute: Response[], daily = answer({ ...OK, bars: [] })) {
   return fetchMock;
 }
 
-function renderCharts(trade = TRADE) {
+function renderCharts(trade: Parameters<typeof TradeCharts>[0]["trade"] = TRADE) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
@@ -66,6 +67,37 @@ describe("TradeCharts", () => {
     expect(urls).toContainEqual(expect.stringContaining("/api/bars/NVDA?from=2026-09-21&to=2026-09-28"));
     expect(urls).toContainEqual(expect.stringContaining("/api/bars/NVDA/daily?to=2026-09-28"));
     expect(screen.getByRole("button", { name: "3m" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("says an EMA needs more history when the daily chart can't draw it", async () => {
+    // Two hours of 3m candles draw EMA 8 on the intraday chart; two daily bars and the trade's day can't.
+    const morning = Array.from(
+      { length: 120 },
+      (_, index) => ({ ...BARS[0], t: nyWallClock(DAY, 570 + index) }) as PriceBar,
+    );
+    const daily = [nyWallClock("2026-09-24", 0), nyWallClock("2026-09-25", 0)].map((t) => ({
+      t,
+      o: 1,
+      h: 1,
+      l: 1,
+      c: 1,
+      v: 1,
+    }));
+    stub([answer({ ...OK, bars: morning })], answer({ ...OK, bars: daily }));
+    renderCharts();
+    await screen.findByTestId("daily-chart");
+    expect(screen.getByRole("button", { name: "EMA 8" }).getAttribute("title")).toBe("needs more history");
+  });
+
+  it("charts the last 45 days of a trade held longer, as much as the server serves", async () => {
+    const fetchMock = stub([answer(OK)]);
+    const today = todayNy();
+    renderCharts({ ...TRADE, openedAt: nyWallClock(addDays(today, -90), 600), closedAt: null });
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls).toContainEqual(
+      expect.stringContaining(`/api/bars/NVDA?from=${addDays(today, -45)}&to=${today}`),
+    );
   });
 
   it("says why there's no chart without a key, or for a symbol Alpaca doesn't carry", async () => {

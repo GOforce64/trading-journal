@@ -1,4 +1,4 @@
-import { addDays, nyDate, nyMinuteOfDay, type PriceBar, SESSION_END } from "@tj/core";
+import { addDays, MAX_BAR_DAYS, nyDate, nyMinuteOfDay, type PriceBar, SESSION_END } from "@tj/core";
 import { useMemo, useState } from "react";
 import { Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
@@ -32,7 +32,10 @@ export function TradeCharts({
   const firstDay = nyDate(trade.openedAt);
   const lastDay = trade.closedAt != null ? nyDate(trade.closedAt) : todayNy();
   const live = lastDay === todayNy() && nyMinuteOfDay(Date.now()) < LIVE_UNTIL;
-  const minute = useMinuteBars(symbol, addDays(firstDay, -7), lastDay, live);
+  // The warm-up week before the trade, but no more than the server serves: a trade held for months shows its last weeks.
+  const weekBefore = addDays(firstDay, -7);
+  const earliest = addDays(lastDay, -MAX_BAR_DAYS);
+  const minute = useMinuteBars(symbol, weekBefore > earliest ? weekBefore : earliest, lastDay, live);
   const daily = useDailyBars(symbol, lastDay);
 
   const fills = trade.fills ?? NO_FILLS;
@@ -79,7 +82,12 @@ export function TradeCharts({
   if (minute.isPending) return message("Loading the chart…");
   if (bars.length === 0) return message(minute.data?.unavailable?.message ?? `No stock bars for ${symbol}.`);
 
-  const hiddenEmas = intraday.emas.flatMap((line, index) => (line.points.length === 0 ? [index] : []));
+  // An EMA needs more history when either chart has nothing of it to draw.
+  const hiddenEmas = intraday.emas.flatMap((line, index) =>
+    line.points.length === 0 || (dayChart.candles.length > 0 && dayChart.emas[index]?.points.length === 0)
+      ? [index]
+      : [],
+  );
   return (
     <section
       className="flex flex-col gap-1.5 rounded-sm border border-line bg-panel p-2"
