@@ -2,9 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Db } from "@tj/db";
+import { type FlexClient, ibkrFlex } from "@tj/importers";
 import { Hono } from "hono";
+import type { IbkrConfig } from "./config.js";
+import { createIbkrSync } from "./ibkr/sync.js";
 import type { MarketData } from "./marketData.js";
 import { createMoveFiller } from "./moves.js";
+import { ibkrRoutes } from "./routes/ibkr.js";
 import { importRoutes } from "./routes/import.js";
 import { marketRoutes } from "./routes/market.js";
 import { moveRoutes } from "./routes/moves.js";
@@ -24,6 +28,10 @@ export interface AppDeps {
   market?: MarketData;
   /** Where Settings saves the key, and how it tests one first. Omitted in tests that don't need it. */
   settings?: SettingsDeps;
+  /** IBKR Flex credentials, read on every sync so a save in Settings applies at once. Omitted: not set up. */
+  ibkrConfig?: () => IbkrConfig | null;
+  /** Builds the Flex client for a token; tests pass a fake. */
+  flexClient?: (token: string) => FlexClient;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -51,6 +59,17 @@ export function createApp(deps: AppDeps) {
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
     .route("/api/moves", moveRoutes(createMoveFiller({ db: deps.db, market: deps.market, now: deps.now })))
+    .route(
+      "/api/ibkr",
+      ibkrRoutes(
+        createIbkrSync({
+          db: deps.db,
+          config: deps.ibkrConfig ?? (() => null),
+          client: deps.flexClient ?? ((token) => ibkrFlex(token)),
+          now: deps.now,
+        }),
+      ),
+    )
     .route("/api/quotes", quoteRoutes(deps.market))
     .route("/api/settings", settingsRoutes(deps.market, deps.settings))
     .route("/api", marketRoutes(deps.market));

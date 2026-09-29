@@ -2,7 +2,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDatabase, runMigrations } from "@tj/db";
+import { createIbkrRepo, type Db, openDatabase, runMigrations } from "@tj/db";
+import { parseOquants } from "@tj/importers";
 import { fixturePayload, fixtureTrade, OQUANTS_HEADERS } from "@tj/importers/testing";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { createApp } from "./app.js";
@@ -20,13 +21,15 @@ const readJson = async <T>(res: Response): Promise<T> => (await res.json()) as T
 
 describe("oQuants import", () => {
   let app: ReturnType<typeof createApp>;
+  let db: Db;
   let backup: Mock<() => string>;
 
   beforeEach(() => {
     const file = join(mkdtempSync(join(tmpdir(), "tj-import-")), "journal.db");
     runMigrations(file, { migrationsFolder: MIGRATIONS });
     backup = vi.fn(() => "journal-backup.db");
-    app = createApp({ db: openDatabase(file), backup });
+    db = openDatabase(file);
+    app = createApp({ db, backup });
   });
 
   const send = (step: "preview" | "commit", body: unknown) =>
@@ -89,5 +92,30 @@ describe("oQuants import", () => {
     const res = await send("preview", fixturePayload([fixtureTrade()], { headers }));
     expect(res.status).toBe(422);
     expect((await readJson<{ error: string }>(res)).error).toContain('"Cost"');
+  });
+
+  it("counts a fly already synced from IBKR as in the journal, and never imports it twice", async () => {
+    const row = parseOquants(payload).rows.find((each) => each.kind === "trade");
+    if (row?.kind !== "trade") throw new Error("the fixture has no trade");
+    const ibkr = createIbkrRepo(db);
+    ibkr.ensureAccount({ id: "acct", externalId: "DU1234567", kind: "paper" });
+    // The same fly, synced from IBKR first: apply() stores it as an IBKR trade under its own id.
+    ibkr.apply(
+      {
+        id: "synced-xyz",
+        trade: row.trade,
+        legIds: row.trade.legs.map((_, index) => `synced-xyz-${index}`),
+      },
+      "acct",
+    );
+
+    const preview = await readJson<PreviewBody>(await send("preview", payload));
+    expect(preview.counts).toEqual({ new: 0, existing: 1, skipped: 1 });
+    expect(preview.rows[0]).toMatchObject({ status: "existing", reason: "already synced from IBKR" });
+    expect(await readJson(await send("commit", payload))).toEqual({
+      imported: 0,
+      backupFile: null,
+      importedIds: [],
+    });
   });
 });

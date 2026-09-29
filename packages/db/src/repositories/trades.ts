@@ -40,7 +40,10 @@ const sameMoment = (a: number | null, b: number | null) =>
   a === b || (a != null && b != null && sessionMoment(a) === sessionMoment(b));
 
 /** The stored stock prices an edit makes stale: a new ticker, or a time moved to another minute. */
-function stalePrices(existing: TradeRow, patch: TradePatch) {
+export function stalePrices(
+  existing: TradeRow,
+  patch: Pick<TradePatch, "underlying" | "openedAt" | "closedAt">,
+) {
   const cleared: { underlyingPriceEntry?: null; underlyingPriceExit?: null } = {};
   const newTicker = patch.underlying !== undefined && patch.underlying !== existing.underlying;
   if (newTicker || (patch.openedAt !== undefined && !sameMoment(patch.openedAt, existing.openedAt))) {
@@ -50,6 +53,72 @@ function stalePrices(existing: TradeRow, patch: TradePatch) {
     cleared.underlyingPriceExit = null;
   }
   return cleared;
+}
+
+const SYNC_SCALARS = [
+  "strategy",
+  "book",
+  "underlying",
+  "structureLabel",
+  "netPnl",
+  "fees",
+  "feesOpen",
+  "feesClose",
+] as const;
+const FLY_STRUCTURE = [
+  "bodyPutStrike",
+  "bodyCallStrike",
+  "putWingStrike",
+  "callWingStrike",
+  "contracts",
+  "creditPerShare",
+  "netCost",
+] as const;
+
+/** The edit forms keep minutes, not seconds, so a time only changes when its minute does. */
+const minuteOf = (at: number | null | undefined) => (at == null ? null : Math.floor(at / 60_000));
+
+const legKey = (leg: {
+  right: string;
+  strike: number;
+  expiry: string;
+  quantity: number;
+  multiplier: number;
+  openPrice: number;
+  closePrice: number | null;
+}) =>
+  JSON.stringify([
+    leg.right,
+    leg.strike,
+    leg.expiry,
+    leg.quantity,
+    leg.multiplier,
+    leg.openPrice,
+    leg.closePrice,
+  ]);
+
+/**
+ * Whether a patch changes a broker fact: a leg, a price, a size, a time (to the minute), fees, P&L or a fly's
+ * structure (spec §5.3). The forms send every fact on each save, so values are compared, not just keys.
+ */
+export function changesFacts(existing: TradeRecord, patch: TradePatch): boolean {
+  for (const key of SYNC_SCALARS) {
+    if (patch[key] !== undefined && patch[key] !== existing[key]) return true;
+  }
+  if (patch.openedAt !== undefined && minuteOf(patch.openedAt) !== minuteOf(existing.openedAt)) return true;
+  if (patch.closedAt !== undefined && minuteOf(patch.closedAt) !== minuteOf(existing.closedAt)) return true;
+  if (patch.legs !== undefined) {
+    const before = existing.legs.map(legKey).sort();
+    const after = patch.legs.map(legKey).sort();
+    if (before.length !== after.length || before.some((key, index) => key !== after[index])) return true;
+  }
+  if (patch.ironFly !== undefined) {
+    if (!patch.ironFly || !existing.ironFly) return Boolean(patch.ironFly) !== Boolean(existing.ironFly);
+    for (const key of FLY_STRUCTURE) {
+      if (patch.ironFly[key] !== existing.ironFly[key]) return true;
+    }
+  }
+  return false;
 }
 
 /** The transaction handle drizzle hands to a callback, which supports the same query builders. */
@@ -231,9 +300,15 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       // Drop keys the caller never sent, so a patch only touches what it names.
       const columns = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined));
 
+      const factsEdited = changesFacts(hydrate(db, existing), patch);
       return db.transaction((tx) => {
         tx.update(trades)
-          .set({ ...columns, updatedAt: timestamp, editedAt: timestamp })
+          .set({
+            ...columns,
+            updatedAt: timestamp,
+            editedAt: timestamp,
+            ...(factsEdited ? { factsEditedAt: timestamp } : {}),
+          })
           .where(eq(trades.id, id))
           .run();
         writeChildren(tx, id, patch, timestamp);
@@ -251,6 +326,16 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         .update(trades)
         .set({ deletedAt: timestamp, updatedAt: timestamp })
         .where(and(eq(trades.id, id), isNull(trades.deletedAt)))
+        .run();
+      return result.changes > 0;
+    },
+
+    /** "Use IBKR's numbers": the next sync may write this trade again. Only IBKR trades carry the mark. */
+    clearFactsEdited(id: string): boolean {
+      const result = db
+        .update(trades)
+        .set({ factsEditedAt: null, updatedAt: now() })
+        .where(and(eq(trades.id, id), eq(trades.source, "ibkr_flex"), isNull(trades.deletedAt)))
         .run();
       return result.changes > 0;
     },

@@ -9,6 +9,7 @@ import {
 import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
+import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { Dashboard } from "./routes/Dashboard.js";
 import { EditTrade } from "./routes/EditTrade.js";
@@ -16,13 +17,17 @@ import { Import } from "./routes/Import.js";
 import { IronFlies } from "./routes/IronFlies.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
+import { NewScalp } from "./routes/NewScalp.js";
+import { Scalps } from "./routes/Scalps.js";
 import { Settings } from "./routes/Settings.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
 
 function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  useAutoSync();
+  const syncing = useIbkrSyncing();
   return (
-    <Shell activePath={pathname}>
+    <Shell activePath={pathname} syncing={syncing}>
       <Outlet />
     </Shell>
   );
@@ -70,6 +75,20 @@ const ironFliesRoute = createRoute({
   component: () => (
     <IronFlies onOpenTrade={openTrade} onNewTrade={() => router.navigate({ to: "/iron-flies/new" })} />
   ),
+});
+
+const scalpsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scalps",
+  component: () => (
+    <Scalps onOpenTrade={openTrade} onNewScalp={() => router.navigate({ to: "/scalps/new" })} />
+  ),
+});
+
+const newScalpRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scalps/new",
+  component: () => <NewScalp onCreated={openTrade} />,
 });
 
 const newIronFlyRoute = createRoute({
@@ -154,6 +173,8 @@ export const router = createRouter({
     analyticsRoute,
     ironFliesRoute,
     newIronFlyRoute,
+    scalpsRoute,
+    newScalpRoute,
     tradeDetailRoute,
     editTradeRoute,
     importRoute,

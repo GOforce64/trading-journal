@@ -151,9 +151,11 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
   - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees` (round trip), `fees_open`, `fees_close`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
   - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`
   - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants has none, so its trades are identified by the UUIDv5 of a natural key instead, see §7.2b)
-  - merge: `edited_at` (last *user* edit; see §12). Set at creation for manual and imported trades, which are user-authored. Null for IBKR-synced trades until the user first edits one.
+  - merge: `edited_at` (last *user* edit; see §12). Set at creation for manual and imported trades, which are user-authored. Null for IBKR-synced trades until the user first edits one. `facts_edited_at`: when the user last changed a broker fact on a synced trade (a leg, a price, a time, fees, P&L); from then on the sync leaves the trade alone.
 - **legs**: `trade_id`, `right` (C/P), `strike`, `expiry`, `multiplier`, `side` (long/short), `quantity`, `avg_open_price`, `avg_close_price`, `broker_conid`.
 - **fills**: `trade_id`, `leg_id`, `executed_at`, `side`, `quantity`, `price`, `commission`, `broker_exec_id`, `raw` (JSON of the source row, for audit). Fills are immutable facts.
+
+  IBKR sync is detailed in [2026-09-29-ibkr-flex-sync-design.md](2026-09-29-ibkr-flex-sync-design.md), which adds `broker_trade_id`, `conid`, the contract, `open_close`, `kind`, `origin` and `canceled` to `fills`, and `facts_edited_at` to `trades`. `sync_state` is keyed by source and keeps the last summary. `scalp_details` comes with R.
 - **scalp_details** (1:1 with trade):
   - context: `direction` (long/short underlying; calls are long, puts short), `underlying_entry_price`, `underlying_exit_price`
   - plan: `stop_level`, `target_level`
@@ -175,7 +177,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **attachments**: `trade_id`, `sha256`, `ext`, `mime`, `bytes`, `caption`.
 - Imports tag their trades with `import_batch_id` (one id per run); there is no batches table. A backup taken before every import is the undo.
 - **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `ts`, `o`, `h`, `l`, `c`, `v`, `source`. Primary key `(symbol, timeframe, ts)`. Not built yet: move data stores its two prices per trade instead.
-- **sync_state**: `account_id`, `last_run_at`, `last_status`, `last_error`.
+- **sync_state**: `source` (the key, `ibkr`), `account_id`, `last_run_at`, `last_status`, `last_error`, `last_summary`.
 - **settings**: key/value, per machine.
 
 Derived values that are expensive or need market data (`r_multiple`, IV and greeks for scalps, MAE/MFE) are **stored** and recomputed when their inputs change. Cheap derivations (wing width, max loss, return on risk) are computed on read in `core`.
@@ -231,6 +233,8 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 ### 8.1 IBKR sync
 
 - Settings, per account (live and paper): a Flex Web Service token and a Flex Query ID, stored in `secrets.json`.
+- Paper accounts support the Flex Web Service, with their own token. Each account has an Activity query and a Trade Confirmation query, because Activity statements stop at the previous business day.
+- A start date bounds the sync; nothing before it is stored.
 - **Sync** button flow:
   1. `SendRequest` returns a reference code.
   2. Poll `GetStatement` with backoff while the statement is still generating.
@@ -242,10 +246,11 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
   - leg `id` = UUIDv5(`{tradeId}:{conid}`)
 
   Both machines therefore produce **identical records** for the same fills, which the merge in §12 relies on.
-- **Grouping:** per (account, contract), a running position going from 0 to non-zero and back to 0 is one trade. Scaling in and out and partial fills are supported. A position that is still open is kept as `status=open` and completes on a later sync.
-- **Scope:** single-leg option executions become `scalp` trades (re-classifiable). Executions that belong to multi-leg orders are skipped, with a notice in the sync summary. A multi-leg order is detected when one order ID has fills across more than one contract. Stock executions are ignored.
+- **Grouping** is by position episode, per ticker and expiry, flat to flat: IBKR sends every fly leg as its own order, so one order id never spans contracts. Scaling in and out and partial fills are supported. A position that is still open stays open and completes on a later sync.
+- **Scope:** episodes that only buy are scalps, one per contract round trip. Iron flies (one short call, one short put, one or two wings) are imported as iron fly trades. Other structures are skipped with a reason. Stock executions are ignored.
+- **Duplicates:** two guards skip trades already in the journal: from oQuants, or typed by hand, in both directions.
 - **No resurrection:** a sync never revives a soft-deleted trade. Its fills are stored, but the trade stays deleted.
-- **Review queue:** synced scalps with no stop level, setup or grade appear under **To review**, with a badge count in the nav.
+- **Review queue:** moves to the scalp-review step, with stops, setups and grades (§13, Phase 2 item 3).
 
 ### 8.2 Market data and the generated chart
 
@@ -388,6 +393,7 @@ Detailed for iron flies in [2026-09-27-analytics-and-dashboard-design.md](2026-0
   - **Fills:** set union by ID. They are immutable broker facts, and IDs are deterministic (§8.1). Legs and P&L are recomputed from the merged fills.
   - **User-editable fields** (stop, target, setup, tags, grade, emotion, notes, excluded, details for manual/imported trades): **last writer wins by `edited_at`**. A trade that was only synced and never edited has `edited_at = null`, so it never overwrites someone's annotations.
   - **Deletes:** a tombstone (`deleted_at`) beats an edit only if it is newer.
+  - **`facts_edited_at`:** once the user edits a synced trade's facts, syncs leave it alone until they choose **Use IBKR's numbers**.
   - **Other syncable tables** (accounts, setups, tags): the record with the newer `updated_at` wins.
   - **Attachments:** files missing locally are copied by sha256.
 - **Summary** after merge: counts of added, updated from the bundle, kept local, deleted, and fills added.
@@ -414,7 +420,7 @@ Each phase ends usable, and each gets its own implementation plan.
 9. Export bundle and merge import.
 
 **Phase 2: Scalps**
-1. IBKR Flex sync (live + paper), deterministic IDs, fill grouping, review queue.
+1. IBKR Flex sync (live + paper), deterministic IDs, fill grouping, review queue (done for paper: plus the scalp form, the Scalps page and the scalp trade page; the review queue moves to item 3).
 2. Market data module (Massive), bar cache, trade chart with markers, stop/target lines, indicators and levels.
 3. Black-Scholes and IV risk engine, R-multiples, MAE/MFE, time-of-day analytics.
 4. Screenshots.
@@ -466,10 +472,7 @@ Each phase ends usable, and each gets its own implementation plan.
 These are facts to confirm at the start of the relevant phase. None of them blocks the design.
 
 1. **oQuants extraction (Phase 1):** resolved. Markup for a full page and a parent row with its leg rows was captured, and the totals reconcile. The table paginates with MUI TablePagination, and displayed times are in the viewer's timezone. One unknown remains, confirmed on the first live run: how an open trade's Close Date is shown. See the oQuants importer spec.
-2. **IBKR Flex (Phase 2):**
-   - whether paper accounts support the Flex Web Service (fallback: upload a Flex file);
-   - which query type includes same-day executions;
-   - the exact field names for execution ID, order ID and conid.
+2. **IBKR Flex (Phase 2):** resolved 2026-09-29 by the IBKR Flex sync spec, §3. Paper accounts support the Flex Web Service, a Trade Confirmation query includes same-day executions, and the field names are recorded there. What remains is in that spec's §13.
 3. **Alpaca:** resolved 2026-09-26 by the option chains spec, §3. Still open: how fresh indicative quotes are during a session (that spec, §14).
 4. **Massive free tier (Phase 2):** when a session's minute bars become available, whether extended hours are included, and the current rate limits.
 5. **Lightweight Charts:** resolved 2026-09-27. The TradingView attribution logo stays on (the library's default).

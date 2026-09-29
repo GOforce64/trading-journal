@@ -1,20 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "../api.js";
+import { api, refusal } from "../api.js";
 import { Panel } from "../components/ui.js";
+import { IbkrSettings, type IbkrView } from "./IbkrSettings.js";
 
 /** Everything that shows market data, refetched once a key changes. */
 const MARKET_QUERIES = ["settings", "quotes", "option-quotes", "chain", "company", "close"];
 
+const NOT_SET: IbkrView = {
+  configured: false,
+  tokenHint: null,
+  activityQueryId: null,
+  todayQueryId: null,
+  since: null,
+};
+
 const FIELD = "flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider";
 const INPUT =
   "num rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[13px] text-fg normal-case tracking-normal outline-none focus:border-accent";
-
-/** The server explains a refusal in `message`; fall back to the status. */
-async function refusal(res: { status: number; json(): Promise<unknown> }, action: string): Promise<Error> {
-  const body = (await res.json().catch(() => ({}))) as { message?: string };
-  return new Error(body.message ?? `${action} failed: ${res.status}`);
-}
 
 export function Settings({
   confirm = (text: string) => window.confirm(text),
@@ -134,6 +137,14 @@ export function Settings({
           or an export. It powers live prices, option chains and marks.
         </p>
       </Panel>
+      {data && (
+        // Keyed by what's saved, so the fields start from it once it loads and after each save.
+        <IbkrSettings
+          key={`${data.ibkr?.tokenHint}-${data.ibkr?.activityQueryId}-${data.ibkr?.since}`}
+          ibkr={data.ibkr ?? NOT_SET}
+          confirm={confirm}
+        />
+      )}
       <Panel title="Data">
         <p className="text-muted">
           Data directory <span className="num text-fg">{data?.dataDir}</span>

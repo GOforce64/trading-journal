@@ -6,6 +6,7 @@ import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
 import { settleProposal } from "../settle.js";
 import { IronFlyForm, type IronFlyFormValues, type LegFields, type OverrideKey } from "./IronFlyForm.js";
+import { ScalpForm, type ScalpFormValues } from "./ScalpForm.js";
 
 /** datetime-local wants local wall-clock text, not an ISO instant. */
 function toLocalInput(epochMs: number | null): string {
@@ -55,6 +56,29 @@ export function toFormValues(trade: TradeView): Partial<IronFlyFormValues> {
     },
   };
 }
+
+/** A scalp as the scalp form edits it. */
+export function toScalpFormValues(trade: TradeView): Partial<ScalpFormValues> {
+  const leg = trade.legs[0];
+  return {
+    underlying: trade.underlying,
+    underlyingName: trade.underlyingName ?? "",
+    right: leg?.right === "P" ? "P" : "C",
+    expiry: leg?.expiry ?? "",
+    strike: asText(leg?.strike),
+    size: asText(leg ? Math.abs(leg.quantity) : null),
+    entry: asText(leg?.openPrice),
+    exit: asText(leg?.closePrice),
+    openedAt: toLocalInput(trade.openedAt),
+    closedAt: toLocalInput(trade.closedAt),
+    feesOpen: asText(trade.feesOpen ?? trade.fees),
+    feesClose: asText(trade.feesClose ?? 0),
+    book: trade.book === "live" ? "live" : "paper",
+    notes: trade.notes ?? "",
+  };
+}
+
+const SYNCED_NOTICE = "Synced from IBKR. Changes you make here are kept: later syncs won't overwrite them.";
 
 /** The computed moves, as the override fields' placeholders: what a blank field stands for. */
 export function movePlaceholders(trade: TradeView): Record<OverrideKey, string> {
@@ -134,16 +158,31 @@ export function EditTrade({
         feesClose: proposal.feesClose,
       })
     : toFormValues(trade);
+  const notice =
+    trade.source === "ibkr_flex" ? <p className="mb-2 text-[11px] text-muted">{SYNCED_NOTICE}</p> : null;
+  if (trade.strategy === "scalp") {
+    return (
+      <ScalpForm
+        initial={toScalpFormValues(trade)}
+        submitLabel="Save changes"
+        busy={save.isPending}
+        error={save.error ? String(save.error) : null}
+        notice={notice}
+        onSubmit={(payload) => save.mutate(payload)}
+      />
+    );
+  }
   if (trade.strategy !== "iron_fly") {
     return (
       <Panel title="Edit">
-        <p className="text-muted">Only iron flies can be edited here for now.</p>
+        <p className="text-muted">This kind of trade can't be edited here yet.</p>
       </Panel>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
+      {notice}
       {proposal && (
         <p className="text-[11px] text-muted">
           Exits proposed at intrinsic value from {trade.underlying}'s {usd(proposal.close)} close on{" "}

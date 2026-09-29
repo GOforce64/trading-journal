@@ -7,6 +7,7 @@ const DESTINATIONS = [
   "Journal",
   "Analytics",
   "Iron Flies",
+  "Scalps",
   "Missed",
   "Playbook",
   "Import / Sync",
@@ -34,5 +35,20 @@ describe("Shell", () => {
     );
     expect(screen.getByText("Journal").getAttribute("aria-current")).toBe("page");
     expect(screen.getByText("Settings").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("shows a spinner beside Import / Sync while IBKR syncs", () => {
+    const { rerender } = render(
+      <Shell activePath="/" syncing>
+        <p>content</p>
+      </Shell>,
+    );
+    expect(screen.getByRole("status", { name: "Syncing with IBKR" })).toBeTruthy();
+    rerender(
+      <Shell activePath="/">
+        <p>content</p>
+      </Shell>,
+    );
+    expect(screen.queryByRole("status", { name: "Syncing with IBKR" })).toBeNull();
   });
 });

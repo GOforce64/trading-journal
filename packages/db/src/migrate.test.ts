@@ -65,4 +65,25 @@ describe("runMigrations", () => {
     runMigrations(file, { migrationsFolder: MIGRATIONS, backupDir, keepBackups: 2 });
     expect(readdirSync(backupDir).filter((name) => name.endsWith(".db"))).toHaveLength(2);
   });
+
+  it("adds the fills and sync_state tables, and the facts_edited_at column", () => {
+    const file = join(tempDir(), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const db = openDatabase(file);
+    const columns = (table: string) =>
+      db.all<{ name: string }>(sql.raw(`pragma table_info(${table})`)).map((column) => column.name);
+    expect(columns("fills")).toEqual(
+      expect.arrayContaining([
+        "broker_exec_key",
+        "broker_trade_id",
+        "open_close",
+        "kind",
+        "origin",
+        "canceled",
+        "raw",
+      ]),
+    );
+    expect(columns("sync_state")).toEqual(expect.arrayContaining(["source", "account_id", "last_summary"]));
+    expect(columns("trades")).toContain("facts_edited_at");
+  });
 });

@@ -2,7 +2,14 @@ import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { dataPaths, readSecrets, resolveDataDir, SecretsFileBroken, writeAlpacaKeys } from "./config.js";
+import {
+  dataPaths,
+  readSecrets,
+  resolveDataDir,
+  SecretsFileBroken,
+  writeAlpacaKeys,
+  writeIbkrConfig,
+} from "./config.js";
 
 describe("resolveDataDir", () => {
   it("prefers TJ_DATA_DIR", () => {
@@ -126,5 +133,22 @@ describe("writeAlpacaKeys", () => {
     const { dir, file } = place();
     writeAlpacaKeys(file, KEYS);
     expect(readdirSync(dir)).toEqual(["secrets.json"]);
+  });
+});
+
+describe("writeIbkrConfig", () => {
+  it("adds the IBKR block beside the Alpaca key, and removes it again", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-config-")), "secrets.json");
+    writeFileSync(file, JSON.stringify({ alpaca: { keyId: "PK1", secretKey: "s" } }));
+    const ibkr = {
+      token: "1234567890123456789012",
+      activityQueryId: "1653145",
+      todayQueryId: "1653147",
+      since: "2026-09-28",
+    };
+    writeIbkrConfig(file, ibkr);
+    expect(readSecrets(file)).toEqual({ alpaca: { keyId: "PK1", secretKey: "s" }, ibkr });
+    writeIbkrConfig(file, null);
+    expect(readSecrets(file)).toEqual({ alpaca: { keyId: "PK1", secretKey: "s" } });
   });
 });

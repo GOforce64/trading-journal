@@ -7,7 +7,7 @@ import {
   newTradeSchema,
   tradePatchSchema,
 } from "@tj/core";
-import { createTradesRepo, type Db, type TradeRecord } from "@tj/db";
+import { createIbkrRepo, createTradesRepo, type Db, type FillRow, type TradeRecord } from "@tj/db";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -55,8 +55,24 @@ export function withMetrics(trade: TradeRecord): TradeView {
   return { ...trade, metrics: { ...metrics, ...outcome } };
 }
 
+/** What the trade page's Fills panel shows of a fill. */
+const fillView = (fill: FillRow) => ({
+  id: fill.id,
+  executedAt: fill.executedAt,
+  quantity: fill.quantity,
+  price: fill.price,
+  commission: fill.commission,
+  kind: fill.kind,
+  canceled: fill.canceled,
+  openClose: fill.openClose,
+  right: fill.right,
+  strike: fill.strike,
+  expiry: fill.expiry,
+});
+
 export function tradeRoutes(db: Db, now?: () => number) {
   const repo = createTradesRepo(db, now);
+  const ibkr = createIbkrRepo(db, now);
 
   return new Hono()
     .get("/", zValidator("query", listQuerySchema), (c) => {
@@ -78,7 +94,9 @@ export function tradeRoutes(db: Db, now?: () => number) {
     )
     .get("/:id", (c) => {
       const trade = repo.get(c.req.param("id"));
-      return trade ? c.json(withMetrics(trade)) : c.json({ error: "not found" }, 404);
+      return trade
+        ? c.json({ ...withMetrics(trade), fills: ibkr.fillsForTrade(trade.id).map(fillView) })
+        : c.json({ error: "not found" }, 404);
     })
     .patch("/:id", zValidator("json", tradePatchSchema), (c) => {
       const updated = repo.update(c.req.param("id"), c.req.valid("json"));
