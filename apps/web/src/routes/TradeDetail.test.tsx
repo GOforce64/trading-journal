@@ -250,6 +250,25 @@ describe("TradeDetail", () => {
     expect(await screen.findByText("Settle at expiry")).toBeTruthy();
   });
 
+  it("leaves a synced fly past its expiry for IBKR to settle, offering no Settle panel", async () => {
+    // Today's statement has no expiry bookings; the next Activity statement closes the wings at $0 or their mark.
+    stubTrade({
+      ...openTrade,
+      source: "ibkr_flex",
+      factsEditedAt: null,
+      fills: [],
+      legs: openTrade.legs.map((leg) => ({ ...leg, expiry: "2020-01-17" })),
+    });
+    renderDetail();
+    expect(await screen.findByText("EXPIRED · add exits")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "IBKR books the expiry overnight: the next sync closes this trade at its expiry values.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Settle at expiry")).toBeNull();
+  });
+
   it("shows no marks, and blames no quote, without a market data key", async () => {
     const fetchMock = stubTrade(openTrade, {}, false);
     renderDetail();

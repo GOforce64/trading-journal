@@ -154,9 +154,17 @@ export function TradeDetail({
       )}
 
       {trade.strategy === "iron_fly" && <MoveTiles trade={trade} />}
-      {trade.strategy === "iron_fly" && estimate?.kind === "expired" && (
-        <SettlePanel trade={trade} onEdit={onEdit} onEditSettled={onSettle} />
-      )}
+      {trade.strategy === "iron_fly" &&
+        estimate?.kind === "expired" &&
+        // A synced fly the user hasn't changed is settled by the sync, from the next Activity statement's expiry
+        // bookings; settling it here would freeze it at the close, not at when it really closed.
+        (trade.source === "ibkr_flex" && trade.factsEditedAt == null ? (
+          <p className="text-[11px] text-muted">
+            IBKR books the expiry overnight: the next sync closes this trade at its expiry values.
+          </p>
+        ) : (
+          <SettlePanel trade={trade} onEdit={onEdit} onEditSettled={onSettle} />
+        ))}
 
       <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
         <Panel title="Legs">
