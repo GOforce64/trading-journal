@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { createTradesRepo, type Db } from "@tj/db";
+import { createIbkrRepo, createTradesRepo, type Db } from "@tj/db";
 import {
   OquantsFormatError,
   type OquantsPayload,
@@ -28,11 +28,16 @@ const ORDER = { new: 0, existing: 1, skipped: 2 } as const;
  */
 export function importRoutes(db: Db, backup?: () => string, now?: () => number) {
   const repo = createTradesRepo(db, now);
+  const ibkr = createIbkrRepo(db, now);
 
   function plan(payload: OquantsPayload) {
     const { rows, warnings } = parseOquants(payload);
     const parsed = rows.filter((row): row is ParsedTrade => row.kind === "trade");
     const existing = repo.existingIds(parsed.map((row) => row.id));
+    // A fly already synced from IBKR is the same trade (spec §1): it must never come in twice.
+    const synced = new Set(
+      parsed.filter((row) => !existing.has(row.id) && ibkr.syncedFrom(row.trade)).map((row) => row.id),
+    );
     const preview: PreviewRow[] = rows
       .map((row): PreviewRow => {
         if (row.kind === "skip") {
@@ -48,15 +53,16 @@ export function importRoutes(db: Db, backup?: () => string, now?: () => number) 
           };
         }
         const already = existing.has(row.id);
+        const fromIbkr = synced.has(row.id);
         return {
-          status: already ? "existing" : "new",
+          status: already || fromIbkr ? "existing" : "new",
           ticker: row.trade.underlying,
           structure: row.trade.structureLabel ?? "",
           openedAt: row.trade.openedAt,
           closedAt: row.trade.closedAt,
           netPnl: row.trade.netPnl,
           flags: row.flags,
-          reason: already ? "already imported" : null,
+          reason: already ? "already imported" : fromIbkr ? "already synced from IBKR" : null,
         };
       })
       .sort((a, b) => ORDER[a.status] - ORDER[b.status]);
@@ -65,7 +71,12 @@ export function importRoutes(db: Db, backup?: () => string, now?: () => number) 
       existing: preview.filter((row) => row.status === "existing").length,
       skipped: preview.filter((row) => row.status === "skipped").length,
     };
-    return { warnings, counts, preview, fresh: parsed.filter((row) => !existing.has(row.id)) };
+    return {
+      warnings,
+      counts,
+      preview,
+      fresh: parsed.filter((row) => !existing.has(row.id) && !synced.has(row.id)),
+    };
   }
 
   return new Hono()
