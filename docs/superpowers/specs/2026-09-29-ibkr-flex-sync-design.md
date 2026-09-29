@@ -513,6 +513,7 @@ No failure leaves half a sync behind: every database write happens in one transa
    - a fill's execution id is identical in `TJ Today` and in the next day's `TJ Activity`;
    - Activity's final commissions replace Today's;
    - an assigned leg's `markPrice` equals its intrinsic value at the close.
+   - what `TJ Today` answers on a day with no trades and on a weekend. The parser handles an empty `<TradeConfirms/>`. A `count="0"` statement with no account would stop the run ("names no account"), and so would IBKR's code 1003, which reads as a query error.
 
    The design relies on the first. If it fails, the fallback key is `tradeID`, which both statements carry.
 
