@@ -3250,3 +3250,25 @@ git commit -m "docs: point the parent spec and README at the trade chart, with i
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+---
+
+## After execution: deferred minors (final review, 2026-09-29)
+
+The final review found no Critical issues. Its two Important findings were fixed in f7eebea, along with one Minor finding upgraded because it hit same-day reviews: the daily EMA 167, trades held over 38 days, and a live chart's zoom. These Minor findings are left for later:
+
+1. **The daily chart hides its own states.** While daily bars load, or after a daily 502 or `no_key`, it shows a one-candle chart built from minute bars, with no message and no Retry.
+2. **A failed live refetch blanks the chart.** It replaces a drawn chart with the error panel, and the chart remounts with its view reset. Show the error only when there's no data.
+3. **Half days** (Black Friday, Dec 24, Jul 3). After-hours bars from 13:00 to 16:00 count as regular session for the PD levels, VWAP, today's daily candle and the extended-hours tint.
+4. **Open trades refetch outside market hours.** On weekends, holidays and before 04:00 they refetch every minute and show "Alpaca's free data runs 15 minutes behind". Base `live` on `isTradingDay`. A partial answer can also be kept for up to 5 minutes after 20:16 (`staleTime: Infinity`).
+5. **00:00–00:16 ET.** The finished-days request ends within 15 minutes of now, and Alpaca's 403 becomes a 502. It heals itself; clamp that request's end too.
+6. **Daily axis ticks read full dates.** `tickMarkFormatter` should return `null` for business-day times.
+7. **Duplicate EMA lengths** give duplicate React keys in the legend. Key by index.
+8. **Backups include the bar cache.** `VACUUM INTO`, with 10 kept, copies about 0.5 MB per symbol-week. Consider a separate cache database.
+9. **Splits.** Three years of raw daily bars put splits inside the daily EMAs' window. Record this as a known limitation.
+10. **Test gaps:**
+    - chart cleanup on unmount;
+    - a page-2 failure in `history.test.ts`;
+    - `aggregate` across the November clock change;
+    - a live refetch in TradeCharts.
+11. **README:** the Scalps bullet has one line far longer than its neighbours.
