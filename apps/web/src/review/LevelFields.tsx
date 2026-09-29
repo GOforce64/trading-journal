@@ -63,6 +63,14 @@ function LevelRow({ kind, levels }: { kind: LevelKind; levels: Levels }) {
   useEffect(() => {
     if (opened) field.current?.focus();
   }, [opened]);
+  // A place or drag on the chart wins over what was typed before it. The field keeps its focus through a press
+  // on the chart, so its old text would otherwise be saved over the chart's when it loses focus.
+  const chartEdits = levels.chartEdits[kind];
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the chart's edit count is the trigger, not a value read
+  useEffect(() => {
+    setText(null);
+    setProblem(null);
+  }, [chartEdits]);
   // Placing ended, by a click on the chart or Esc: a field left empty closes.
   useEffect(() => {
     if (armed) return;

@@ -183,15 +183,17 @@ export function IntradayChart({
       const edit = current.current.editing;
       if (!edit || event.button !== 0) return;
       const { x, y } = pointOf(event);
-      if (!inPane(x, y, chart.paneSize())) return;
+      const onPlot = inPane(x, y, chart.paneSize());
       if (edit.placing) {
-        const price = priceAt(y, toPrice);
-        if (price == null) return;
+        // While placing, every press is the review's: the typed field keeps its focus, and a press on an axis is
+        // ignored, with placing going on (spec §8.2).
         event.preventDefault();
         event.stopPropagation();
-        edit.onPlace(edit.placing, price);
+        const price = onPlot ? priceAt(y, toPrice) : null;
+        if (price != null) edit.onPlace(edit.placing, price);
         return;
       }
+      if (!onPlot) return;
       const kind = nearestLine(grabbable(), y, toY);
       const index = current.current.lines.findIndex((each) => each.id === kind);
       const line = parts.current?.priceLines[index];

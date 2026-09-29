@@ -32,6 +32,8 @@ export interface Levels {
   save(kind: LevelKind, price: number | null): void;
   switchBasis(next: LevelBasis): void;
   error: string | null;
+  /** How often the chart has placed or moved each level. A field drops what was typed in it when this changes. */
+  chartEdits: Record<LevelKind, number>;
   /** For the intraday chart: the stock-basis lines, and what placing and dragging them does. */
   chart: { lines: readonly PriceLine[]; editing: ChartEditing };
 }
@@ -45,6 +47,8 @@ export function useLevels(trade: TradeView): Levels {
   const [moved, setMoved] = useState<{ kind: LevelKind; price: number } | null>(null);
   // Bumped after a refused save, so the chart redraws its lines where they're saved (spec §12).
   const [redraw, setRedraw] = useState(0);
+  const [chartEdits, setChartEdits] = useState<Record<LevelKind, number>>({ stop: 0, target: 0 });
+  const edited = (kind: LevelKind) => setChartEdits((counts) => ({ ...counts, [kind]: counts[kind] + 1 }));
   const basis = trade.scalp?.levelBasis ?? defaultBasis;
   const stop = trade.scalp?.stopPrice ?? null;
   const target = trade.scalp?.targetPrice ?? null;
@@ -85,6 +89,7 @@ export function useLevels(trade: TradeView): Levels {
       write({ levelBasis: next });
     },
     error: mutation.error?.message ?? null,
+    chartEdits,
     chart: {
       lines,
       editing: {
@@ -92,11 +97,16 @@ export function useLevels(trade: TradeView): Levels {
         placing: basis === "stock" ? placing : null,
         onPlace: (kind, price) => {
           setPlacing(null);
+          edited(kind);
           setMoved({ kind, price });
           save(kind, price);
         },
-        onDrag: (kind, price) => setMoved({ kind, price }),
+        onDrag: (kind, price) => {
+          edited(kind);
+          setMoved({ kind, price });
+        },
         onDrop: (kind, price) => {
+          edited(kind);
           setMoved({ kind, price });
           save(kind, price);
         },
