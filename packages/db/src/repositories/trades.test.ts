@@ -6,7 +6,8 @@ import type { IronFlyDetailsInput, NewTrade } from "@tj/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
-import { createTradesRepo } from "./trades.js";
+import { createTaxonomyRepo } from "./taxonomy.js";
+import { createTradesRepo, ReviewRuleError } from "./trades.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../migrations", import.meta.url));
 
@@ -427,5 +428,125 @@ describe("facts the user edited", () => {
     expect(factsEditedAt(id)).toBeNull();
     const typed = created();
     expect(repo().clearFactsEdited(typed)).toBe(false);
+  });
+});
+
+describe("the scalp review", () => {
+  /** The Sep 28 NVDA 232.5C scalp, closed. */
+  const nvda: NewTrade = {
+    ...sampleFly,
+    strategy: "scalp",
+    book: "paper",
+    underlying: "NVDA",
+    underlyingName: null,
+    structureLabel: "Long call",
+    netPnl: 44.74,
+    fees: 2.26,
+    feesOpen: 0.93,
+    feesClose: 1.33,
+    notes: null,
+    legs: [
+      {
+        right: "C",
+        strike: 232.5,
+        expiry: "2026-09-28",
+        quantity: 2,
+        multiplier: 100,
+        openPrice: 1.06,
+        closePrice: 1.295,
+      },
+    ],
+    ironFly: null,
+  };
+  let db: Db;
+  let clock = 1_000;
+  const repo = () => createTradesRepo(db, () => clock);
+
+  beforeEach(() => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-repo-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    db = openDatabase(file);
+    clock = 1_000;
+  });
+
+  it("stores a scalp's first level with its basis, to the cent", () => {
+    const id = repo().create(nvda).id;
+    expect(repo().get(id)?.scalp).toBeNull();
+    repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231.804 } });
+    expect(repo().get(id)?.scalp).toEqual({
+      tradeId: id,
+      levelBasis: "stock",
+      stopPrice: 231.8,
+      targetPrice: null,
+    });
+  });
+
+  it("merges a partial patch, keeping the other level", () => {
+    const id = repo().create(nvda).id;
+    repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231.8 } });
+    repo().update(id, { scalp: { targetPrice: 234.5 } });
+    expect(repo().get(id)?.scalp).toMatchObject({ stopPrice: 231.8, targetPrice: 234.5 });
+    repo().update(id, { scalp: { stopPrice: null } });
+    expect(repo().get(id)?.scalp).toMatchObject({ stopPrice: null, targetPrice: 234.5 });
+  });
+
+  it("needs a basis for the first level, and writes nothing without one", () => {
+    const id = repo().create(nvda).id;
+    expect(() => repo().update(id, { scalp: { stopPrice: 231.8 }, grade: "A" })).toThrow(ReviewRuleError);
+    expect(repo().get(id)).toMatchObject({ scalp: null, grade: null });
+  });
+
+  it("clears both levels when the basis changes, unless the patch sets them", () => {
+    const id = repo().create(nvda).id;
+    repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 } });
+    repo().update(id, { scalp: { levelBasis: "premium" } });
+    expect(repo().get(id)?.scalp).toMatchObject({
+      levelBasis: "premium",
+      stopPrice: null,
+      targetPrice: null,
+    });
+    repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231 } });
+    expect(repo().get(id)?.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231, targetPrice: null });
+  });
+
+  it("refuses 0 on the stock basis, and takes it on premium", () => {
+    const id = repo().create(nvda).id;
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 0 } })).toThrow(
+      "A stock price must be above 0",
+    );
+    repo().update(id, { scalp: { levelBasis: "premium", stopPrice: 0 } });
+    expect(repo().get(id)?.scalp?.stopPrice).toBe(0);
+  });
+
+  it("gives only a scalp a stop and target", () => {
+    const id = repo().create(sampleFly).id;
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 50 } })).toThrow(
+      "Only a scalp has a stop and target",
+    );
+  });
+
+  it("stamps Done reviewing with the clock and clears it, as a review edit and not a fact edit", () => {
+    const id = repo().create({ ...nvda, source: "ibkr_flex" }).id;
+    clock = 2_000;
+    const done = repo().update(id, { reviewed: true, scalp: { levelBasis: "stock", stopPrice: 231.8 } });
+    expect(done).toMatchObject({ reviewedAt: 2_000, editedAt: 2_000, factsEditedAt: null });
+    expect(repo().update(id, { reviewed: false })?.reviewedAt).toBeNull();
+  });
+
+  it("allows one emotion at most, with any number of mistakes", () => {
+    const taxonomy = createTaxonomyRepo(db);
+    const calm = taxonomy.createTag({ name: "Calm", kind: "emotion" }).id;
+    const rushed = taxonomy.createTag({ name: "Rushed", kind: "emotion" }).id;
+    const fomo = taxonomy.createTag({ name: "FOMO entry", kind: "mistake" }).id;
+    const early = taxonomy.createTag({ name: "Exited early", kind: "mistake" }).id;
+    const id = repo().create(nvda).id;
+    const both = [calm, fomo, early].sort();
+    expect(
+      repo()
+        .update(id, { tagIds: [calm, fomo, early] })
+        ?.tagIds.sort(),
+    ).toEqual(both);
+    expect(() => repo().update(id, { tagIds: [calm, rushed] })).toThrow("A trade has at most one emotion");
+    expect(repo().get(id)?.tagIds.sort()).toEqual(both);
   });
 });

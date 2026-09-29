@@ -1,15 +1,18 @@
-import { type NewTrade, sessionMoment, type TradePatch } from "@tj/core";
+import { type NewTrade, round2, sessionMoment, type TradePatch } from "@tj/core";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { Db } from "../client.js";
-import { ironFlyDetails, legs, trades, tradeTags } from "../schema.js";
+import { ironFlyDetails, legs, scalpDetails, tags, trades, tradeTags } from "../schema.js";
 
 export type TradeRow = typeof trades.$inferSelect;
 export type LegRow = typeof legs.$inferSelect;
 export type IronFlyRow = typeof ironFlyDetails.$inferSelect;
+export type ScalpRow = typeof scalpDetails.$inferSelect;
 
 export interface TradeRecord extends TradeRow {
   legs: LegRow[];
   ironFly: IronFlyRow | null;
+  /** The scalp's stop and target (scalp-review spec §5); null until the first is set. */
+  scalp: ScalpRow | null;
   tagIds: string[];
 }
 
@@ -125,6 +128,35 @@ export function changesFacts(existing: TradeRecord, patch: TradePatch): boolean 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type DbLike = Db | Tx;
 
+/** A patch the review rules refuse (scalp-review spec §6.2). The route answers 400 with the message. */
+export class ReviewRuleError extends Error {}
+
+/**
+ * A scalp's levels after a patch (scalp-review spec §6.2). The first write needs a basis. A new basis clears both
+ * prices unless the patch sets them, because a stock level means nothing as a premium. Prices round to the cent.
+ */
+export function mergeLevels(
+  tradeId: string,
+  existing: ScalpRow | null,
+  patch: NonNullable<TradePatch["scalp"]>,
+): ScalpRow {
+  const levelBasis = patch.levelBasis ?? existing?.levelBasis;
+  if (!levelBasis) throw new ReviewRuleError("A scalp's first level needs a basis");
+  const kept = existing?.levelBasis === levelBasis ? existing : null;
+  const price = (sent: number | null | undefined, stored: number | null) => {
+    const value = sent === undefined ? stored : sent;
+    if (value == null) return null;
+    if (levelBasis === "stock" && value <= 0) throw new ReviewRuleError("A stock price must be above 0");
+    return round2(value);
+  };
+  return {
+    tradeId,
+    levelBasis,
+    stopPrice: price(patch.stopPrice, kept?.stopPrice ?? null),
+    targetPrice: price(patch.targetPrice, kept?.targetPrice ?? null),
+  };
+}
+
 export function createTradesRepo(db: Db, now: () => number = Date.now) {
   function hydrate(conn: DbLike, row: TradeRow): TradeRecord {
     return {
@@ -135,6 +167,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         .where(and(eq(legs.tradeId, row.id), isNull(legs.deletedAt)))
         .all(),
       ironFly: conn.select().from(ironFlyDetails).where(eq(ironFlyDetails.tradeId, row.id)).get() ?? null,
+      scalp: conn.select().from(scalpDetails).where(eq(scalpDetails.tradeId, row.id)).get() ?? null,
       tagIds: conn
         .select({ tagId: tradeTags.tagId })
         .from(tradeTags)
@@ -148,6 +181,17 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
     const row = conn.select().from(trades).where(eq(trades.id, id)).get();
     if (!row) throw new Error(`trade ${id} vanished mid-write`);
     return hydrate(conn, row);
+  }
+
+  /** At most one emotion tag per trade (scalp-review spec §6.2). */
+  function checkOneEmotion(tagIds: readonly string[]): void {
+    if (tagIds.length < 2) return;
+    const emotions = db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(inArray(tags.id, [...tagIds]), eq(tags.kind, "emotion")))
+      .all();
+    if (emotions.length > 1) throw new ReviewRuleError("A trade has at most one emotion");
   }
 
   /** Children are replaced wholesale, and only when the input mentions them. */
@@ -296,15 +340,28 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       if (!existing) return null;
 
       const timestamp = now();
-      const { legs: _legs, ironFly: _ironFly, tagIds: _tagIds, ...rest } = patch;
+      const { legs: _legs, ironFly: _ironFly, tagIds: _tagIds, scalp, reviewed, ...rest } = patch;
       // Drop keys the caller never sent, so a patch only touches what it names.
       const columns = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined));
+      // The review rules (scalp-review spec §6.2) are checked before anything is written.
+      if (scalp && (patch.strategy ?? existing.strategy) !== "scalp") {
+        throw new ReviewRuleError("Only a scalp has a stop and target");
+      }
+      const levels = scalp
+        ? mergeLevels(
+            id,
+            db.select().from(scalpDetails).where(eq(scalpDetails.tradeId, id)).get() ?? null,
+            scalp,
+          )
+        : null;
+      if (patch.tagIds) checkOneEmotion(patch.tagIds);
 
       const factsEdited = changesFacts(hydrate(db, existing), patch);
       return db.transaction((tx) => {
         tx.update(trades)
           .set({
             ...columns,
+            ...(reviewed === undefined ? {} : { reviewedAt: reviewed ? timestamp : null }),
             updatedAt: timestamp,
             editedAt: timestamp,
             ...(factsEdited ? { factsEditedAt: timestamp } : {}),
@@ -312,6 +369,12 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           .where(eq(trades.id, id))
           .run();
         writeChildren(tx, id, patch, timestamp);
+        if (levels) {
+          tx.insert(scalpDetails)
+            .values(levels)
+            .onConflictDoUpdate({ target: scalpDetails.tradeId, set: levels })
+            .run();
+        }
         const cleared = stalePrices(existing, patch);
         if (Object.keys(cleared).length > 0) {
           tx.update(ironFlyDetails).set(cleared).where(eq(ironFlyDetails.tradeId, id)).run();

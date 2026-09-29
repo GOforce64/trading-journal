@@ -58,6 +58,8 @@ export const trades = sqliteTable(
     editedAt: integer("edited_at"),
     /** The user changed a broker fact on this trade, so the sync stops writing it (spec §5.3). */
     factsEditedAt: integer("facts_edited_at"),
+    /** When the user clicked Done reviewing (scalp-review spec §5); null otherwise. */
+    reviewedAt: integer("reviewed_at"),
     ...syncColumns,
   },
   (table) => [
@@ -111,6 +113,18 @@ export const ironFlyDetails = sqliteTable("iron_fly_details", {
   underlyingPriceEntry: real("underlying_price_entry"),
   underlyingPriceExit: real("underlying_price_exit"),
   sourceNotes: text("source_notes"),
+});
+
+/** A scalp's stop and target (scalp-review spec §5): one row per scalp, from its first level or basis. */
+export const scalpDetails = sqliteTable("scalp_details", {
+  tradeId: text("trade_id")
+    .primaryKey()
+    .references(() => trades.id),
+  /** What both prices are measured on. */
+  levelBasis: text("level_basis", { enum: ["stock", "premium"] }).notNull(),
+  /** A stock price, or an option price per share. */
+  stopPrice: real("stop_price"),
+  targetPrice: real("target_price"),
 });
 
 export const tags = sqliteTable(
