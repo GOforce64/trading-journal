@@ -10,6 +10,7 @@ import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.j
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
+import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { Dashboard } from "./routes/Dashboard.js";
 import { EditTrade } from "./routes/EditTrade.js";
@@ -26,8 +27,9 @@ function RootLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   useAutoSync();
   const syncing = useIbkrSyncing();
+  const toReview = usePendingReviews().data?.length ?? 0;
   return (
-    <Shell activePath={pathname} syncing={syncing}>
+    <Shell activePath={pathname} syncing={syncing} toReview={toReview}>
       <Outlet />
     </Shell>
   );

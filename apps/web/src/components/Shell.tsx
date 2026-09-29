@@ -15,10 +15,13 @@ const NAV = [
 export function Shell({
   activePath,
   syncing = false,
+  toReview = 0,
   children,
 }: {
   activePath: string;
   syncing?: boolean;
+  /** Scalps waiting in the To review queue (scalp-review spec §9.2). */
+  toReview?: number;
   children: ReactNode;
 }) {
   return (
@@ -46,6 +49,15 @@ export function Shell({
                     className="ml-1 inline-block animate-spin text-accent"
                   >
                     ↻
+                  </span>
+                )}
+                {item.path === "/scalps" && toReview > 0 && (
+                  <span
+                    role="status"
+                    aria-label={`${toReview} to review`}
+                    className="num ml-1.5 rounded-[2px] bg-accent px-1 text-[10px] text-white"
+                  >
+                    {toReview}
                   </span>
                 )}
               </a>

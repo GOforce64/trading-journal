@@ -83,10 +83,15 @@ export function tradeRow(spec: RowSpec) {
   };
 }
 
-/** Answers the trade list with `trades`, and option quotes with none (a key is set up). */
-export function stubTrades(trades: unknown[]) {
+/** Answers the trade list with `trades`, the review queue with `pending`, and option quotes with none (a key is set up). */
+export function stubTrades(trades: unknown[], pending: unknown[] = []) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-    const body = String(input).includes("/api/option-quotes") ? { quotes: {}, available: true } : trades;
+    const url = String(input);
+    const body = url.includes("/api/option-quotes")
+      ? { quotes: {}, available: true }
+      : url.includes("review=pending")
+        ? pending
+        : trades;
     return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetchMock);

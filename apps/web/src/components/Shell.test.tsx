@@ -51,4 +51,19 @@ describe("Shell", () => {
     );
     expect(screen.queryByRole("status", { name: "Syncing with IBKR" })).toBeNull();
   });
+
+  it("counts the scalps waiting for review beside Scalps", () => {
+    const { rerender } = render(
+      <Shell activePath="/" toReview={5}>
+        <p>content</p>
+      </Shell>,
+    );
+    expect(screen.getByLabelText("5 to review").textContent).toBe("5");
+    rerender(
+      <Shell activePath="/">
+        <p>content</p>
+      </Shell>,
+    );
+    expect(screen.queryByLabelText(/to review/)).toBeNull();
+  });
 });

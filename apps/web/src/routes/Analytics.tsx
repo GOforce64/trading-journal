@@ -8,6 +8,7 @@ import {
   presetRange,
   toFilter,
 } from "../analytics/search.js";
+import { TabButton } from "../components/ui.js";
 import { todayNy } from "../market.js";
 import { FliesTab } from "./FliesTab.js";
 import { OverviewTab } from "./OverviewTab.js";
@@ -52,27 +53,6 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
         <OverviewTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
       )}
     </div>
-  );
-}
-
-export function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`-mb-px border-b-2 px-0.5 py-1 ${active ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
-    >
-      {children}
-    </button>
   );
 }
 

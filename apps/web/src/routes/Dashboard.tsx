@@ -26,6 +26,8 @@ import {
 import { EstimatedPnl } from "../components/Estimate.js";
 import { Money } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { usePendingReviews } from "../review/data.js";
+import { contractText, missingList } from "../review/text.js";
 
 const PERIODS: { id: Period; label: string }[] = [
   { id: "week", label: "Week" },
@@ -39,6 +41,14 @@ const ET_DAY = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short",
   day: "numeric",
+});
+const ET_TIME = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
 });
 const MONTH_TITLE = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -177,6 +187,7 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
         </Section>
 
         <div className="flex flex-col gap-3">
+          <ToReview onOpenTrade={onOpenTrade} />
           <Section title="Open">
             {open.length === 0 ? (
               <p className="text-muted">No open trades.</p>
@@ -251,5 +262,45 @@ function DayTrades({
     <div className="mt-2">
       <TradeList trades={trades} label={`Trades closed ${date}`} onOpenTrade={onOpenTrade} />
     </div>
+  );
+}
+
+/** The scalps waiting for review, oldest first (scalp-review spec §9.4). Hidden when none wait. */
+function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
+  const { data: pending = [] } = usePendingReviews();
+  const first = pending[0];
+  if (!first) return null;
+  return (
+    <Section
+      title={`To review · ${pending.length}`}
+      right={
+        <button
+          type="button"
+          onClick={() => onOpenTrade?.(first.id)}
+          className="text-accent normal-case tracking-normal hover:underline"
+        >
+          Start reviewing →
+        </button>
+      }
+    >
+      <ul aria-label="Scalps to review" className="flex flex-col">
+        {pending.slice(0, 5).map((trade) => (
+          <li key={trade.id} className="flex items-center gap-3 border-line border-t py-1">
+            <span className="num text-muted">{ET_TIME.format(new Date(trade.openedAt))}</span>
+            <button
+              type="button"
+              onClick={() => onOpenTrade?.(trade.id)}
+              className="text-fg hover:text-accent"
+            >
+              {contractText(trade)}
+            </button>
+            <span className="text-muted">{missingList(trade.review?.missing ?? [])}</span>
+            <span className="ml-auto">
+              <Money value={trade.netPnl} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }
