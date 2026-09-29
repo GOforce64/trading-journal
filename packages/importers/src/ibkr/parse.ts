@@ -35,6 +35,8 @@ export interface CancelRef {
   tradeId: string;
   quantity: number;
   price: number;
+  /** YYYY-MM-DD, New York: a cancel before the start date names a fill that was never stored. */
+  tradeDate: string;
 }
 
 export interface FlexStatementData {
@@ -178,9 +180,15 @@ function confirmFill(row: Row) {
 function cancelOf(row: Row): CancelRef | null {
   const quantity = -Number(row.quantity);
   const price = Number(row.tradePrice);
-  if (!row.origTradeID || !Number.isFinite(quantity) || quantity === 0 || !Number.isFinite(price))
+  if (
+    !row.origTradeID ||
+    !Number.isFinite(quantity) ||
+    quantity === 0 ||
+    !Number.isFinite(price) ||
+    !/^\d{8}$/.test(row.tradeDate ?? "")
+  )
     return null;
-  return { tradeId: row.origTradeID, quantity, price };
+  return { tradeId: row.origTradeID, quantity, price, tradeDate: ymd(row.tradeDate ?? "") };
 }
 
 /** One Flex statement, Activity or Trade Confirmation, as fills (spec §6.2). */

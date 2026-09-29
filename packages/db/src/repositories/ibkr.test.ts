@@ -206,6 +206,21 @@ describe("storing fills", () => {
     ).toEqual(["a.01.02"]);
   });
 
+  it("keeps a correction with the same size and price standing, however often the cancel is seen again", () => {
+    // Every sync re-reads a year of Activity, so the same cancel arrives on every run.
+    const original = fillInput({ brokerExecKey: "b.01.01", brokerTradeId: "77", quantity: 2, price: 0.73 });
+    const correction = fillInput({ brokerExecKey: "b.01.02", brokerTradeId: "77", quantity: 2, price: 0.73 });
+    ibkr().storeFills(ACCOUNT.id, [original, correction], "activity");
+    const cancel = { brokerTradeId: "77", quantity: 2, price: 0.73 };
+    expect(ibkr().markCanceled(ACCOUNT.id, [cancel])).toBe(1);
+    expect(ibkr().markCanceled(ACCOUNT.id, [cancel])).toBe(0);
+    expect(
+      ibkr()
+        .fillsSince(ACCOUNT.id, "2026-09-28")
+        .map((fill) => fill.brokerExecKey),
+    ).toEqual(["b.01.02"]);
+  });
+
   it("leaves fills before the start date out of what's regrouped", () => {
     ibkr().storeFills(ACCOUNT.id, [fillInput({ tradeDate: "2026-09-25" }), fillInput()], "activity");
     expect(ibkr().fillsSince(ACCOUNT.id, "2026-09-28")).toHaveLength(1);

@@ -148,6 +148,39 @@ describe("POST /api/ibkr/sync", () => {
     expect(await app.sync()).toMatchObject({ status: "ok", added: 2, activityFailed: true });
   });
 
+  it("ignores a cancel from before the start date, so a correction booked under its trade id stands", async () => {
+    // CZR's 2-lot is canceled and re-booked under the same trade id. Here the original and its cancel fall before the
+    // start date, and the correction (made the same size) after it.
+    const once = (xml: string, from: string, to: string) => {
+      if (xml.split(from).length !== 2) throw new Error(`expected one ${from}`);
+      return xml.replace(from, to);
+    };
+    let activity = once(
+      ACTIVITY_XML,
+      'tradeDate="20260717" transactionType="ExchTrade" quantity="2" tradePrice="0.73"',
+      'tradeDate="20260716" transactionType="ExchTrade" quantity="2" tradePrice="0.73"',
+    );
+    activity = once(
+      activity,
+      'tradeDate="20260717" transactionType="TradeCancel"',
+      'tradeDate="20260716" transactionType="TradeCancel"',
+    );
+    activity = once(
+      activity,
+      'tradeDate="20260717" transactionType="ExchTrade" quantity="1" tradePrice="0.73" ibCommission="0.3333"',
+      'tradeDate="20260717" transactionType="ExchTrade" quantity="2" tradePrice="0.73" ibCommission="0.3333"',
+    );
+    const app = setup({ ...CONFIG, since: "2026-07-17" }, { activity });
+    await app.sync();
+    const trades = (await (await app.app.request("/api/trades", { headers: LOCAL })).json()) as {
+      underlying: string;
+      legs: { right: string; quantity: number }[];
+    }[];
+    const call = trades.find((trade) => trade.underlying === "CZR" && trade.legs[0]?.right === "C");
+    // The correction's 2 and the later 1-lot.
+    expect(call?.legs[0]?.quantity).toBe(3);
+  });
+
   it("records a clean run on a day with no trades", async () => {
     const empty = TODAY_XML.replace(/<TradeConfirms>[\s\S]*<\/TradeConfirms>/, "<TradeConfirms />");
     const app = setup(CONFIG, { today: empty });

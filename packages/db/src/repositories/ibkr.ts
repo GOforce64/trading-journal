@@ -299,9 +299,19 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
 
     /** Each cancel marks the first matching fill by trade id, size and price; a correction under the same id stands. */
     markCanceled(accountId: string, cancels: CancelInput[]): number {
-      let marked = 0;
+      // A statement repeats its cancels on every sync, so this must be idempotent: each trade id, size and price
+      // cancels as many fills as it has cancel rows, the earliest by key. IBKR re-books a correction under a later
+      // key, and it stays standing however often the same cancel is seen.
+      const counts = new Map<string, { cancel: CancelInput; count: number }>();
       for (const cancel of cancels) {
-        const hit = db
+        const key = JSON.stringify([cancel.brokerTradeId, cancel.quantity, cancel.price]);
+        const entry = counts.get(key);
+        if (entry) entry.count++;
+        else counts.set(key, { cancel, count: 1 });
+      }
+      let marked = 0;
+      for (const { cancel, count } of counts.values()) {
+        const hits = db
           .select()
           .from(fills)
           .where(
@@ -309,15 +319,17 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
               eq(fills.accountId, accountId),
               eq(fills.brokerTradeId, cancel.brokerTradeId),
               eq(fills.quantity, cancel.quantity),
-              eq(fills.canceled, false),
             ),
           )
           .orderBy(asc(fills.brokerExecKey))
           .all()
-          .find((fill) => Math.abs(fill.price - cancel.price) < 1e-9);
-        if (!hit) continue;
-        db.update(fills).set({ canceled: true, updatedAt: now() }).where(eq(fills.id, hit.id)).run();
-        marked++;
+          .filter((fill) => Math.abs(fill.price - cancel.price) < 1e-9)
+          .slice(0, count);
+        for (const hit of hits) {
+          if (hit.canceled) continue;
+          db.update(fills).set({ canceled: true, updatedAt: now() }).where(eq(fills.id, hit.id)).run();
+          marked++;
+        }
       }
       return marked;
     },

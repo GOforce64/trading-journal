@@ -217,11 +217,15 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
           );
           repo.markCanceled(
             account.id,
-            statement.cancels.map((cancel) => ({
-              brokerTradeId: cancel.tradeId,
-              quantity: cancel.quantity,
-              price: cancel.price,
-            })),
+            // A cancel from before the start date names a fill that was never stored; applied, it would fall on
+            // a later correction booked under the same trade id.
+            statement.cancels
+              .filter((cancel) => cancel.tradeDate >= settings.since)
+              .map((cancel) => ({
+                brokerTradeId: cancel.tradeId,
+                quantity: cancel.quantity,
+                price: cancel.price,
+              })),
           );
         }
 

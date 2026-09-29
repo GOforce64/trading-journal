@@ -77,7 +77,9 @@ describe("parseFlex on an Activity statement", () => {
   });
 
   it("returns a cancel by trade id, size and price, and keeps the correction booked under the same id", () => {
-    expect(activity.cancels).toEqual([{ tradeId: "1786699376", quantity: 2, price: 0.73 }]);
+    expect(activity.cancels).toEqual([
+      { tradeId: "1786699376", quantity: 2, price: 0.73, tradeDate: "2026-07-17" },
+    ]);
     const booked = activity.fills.filter((each) => each.tradeId === "1786699376").map((each) => each.key);
     expect(booked).toEqual(["0001938c.6a59af42.01.01", "0001938c.6a59af42.01.02"]);
   });
