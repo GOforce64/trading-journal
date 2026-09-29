@@ -232,6 +232,8 @@ core/chart: aggregate, ema, vwap, sessionLevels (pure, tested)
 
 ## 12. For the scalp review
 
+Designed and built in [2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md).
+
 Decided with the user on 2026-09-29, and designed in the next spec:
 - **Stops and targets** are on the stock price for now, with the option premium supported too: each has a basis (stock | premium), stock by default and switchable per trade. They are drawn on these charts through the `lines` input.
 - **The To review queue:** a scalp leaves it once it has a setup, a grade and a stop, or when the user clicks **Done reviewing**.

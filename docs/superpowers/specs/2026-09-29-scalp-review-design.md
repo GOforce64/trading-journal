@@ -1,7 +1,7 @@
 # Scalp Review — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Approved by the user on 2026-09-29. Plan: [2026-09-29-scalp-review.md](../plans/2026-09-29-scalp-review.md).
+- **Status:** Approved; implemented on feat/scalp-review. Plan: [2026-09-29-scalp-review.md](../plans/2026-09-29-scalp-review.md), whose deviations are folded in.
 - **Scope:** reviewing scalps on their trade page. A scalp gets a **stop** and a **target**, drawn as lines you drag on the intraday chart, plus a **setup**, **mistake** and **emotion** tags, a **grade** and notes. A **To review** queue holds the scalps not yet reviewed. The **Playbook** page manages setups and tags.
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §6, §8.3 and §9. This is the review half of Phase 2, step 3 (§13); R, the risk engine and MAE/MFE are the other half and come next.
 - **Builds on:** the trade chart ([2026-09-29-trade-chart-design.md](2026-09-29-trade-chart-design.md)), whose `IntradayChart` takes extra price lines, and the IBKR sync ([2026-09-29-ibkr-flex-sync-design.md](2026-09-29-ibkr-flex-sync-design.md)), which fills the queue.
@@ -376,3 +376,17 @@ The seeded placeholders are ordinary rows, renamed or archived like any other. P
    - **History starts in 2024:** a Mar 2024 SPY contract returns bars, and a Mar 2023 one returns none.
    - **About 70 minutes behind, not 15:** a request ending within roughly the last 65–75 minutes is refused outright (403, "OPRA agreement is not signed"), even for an older contract. The client must end its requests before that.
 2. **Bulk review:** if the sync's start date is moved back months, the queue could hold hundreds of old scalps. A "Mark all before a date as reviewed" action can come if that happens.
+
+### Live check (2026-09-29)
+
+On a copy of the real journal, with the user's Alpaca key, and two copies of the Sep 28 NVDA 232.5C scalp added by hand:
+- **The queue:** both scalps came back pending, oldest first, each missing a setup, a grade and a stop.
+- **In headless Firefox, on the real chart:**
+  - **+ Stop**, then a click 60% of the way down the intraday chart, saved a stop of 226.33.
+  - Dragging that line 40 px down saved 224.48. The candles didn't move during the drag, so the chart's own panning stayed off.
+- **Screenshots at 1280 and 1024 px:**
+  - The queue bar read "TO REVIEW · 1 of 2 · needs a setup, a grade and a stop". After the stop it read "needs a setup and a grade", and after Done reviewing it read "REVIEWED ✓ · 1 left · Next →", with the button reading "Back to queue".
+  - The strip sits under the charts, the red dashed STOP line carries its price on the axis, and the Stop field shows the same price.
+  - The nav badge counted down from 2 to 1. The Scalps page has the All and To review (1) tabs, the Setup column, and a dot on the scalp still waiting.
+  - The Dashboard shows "To review · 1" with "setup, grade, stop". The Playbook lists the seeded setups and tags with their trade counts.
+  - At 1024 px the strip's columns still fit, with the mistakes wrapping.
