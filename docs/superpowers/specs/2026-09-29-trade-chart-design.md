@@ -1,7 +1,7 @@
 # Trade Chart — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Draft, awaiting review.
+- **Status:** Approved 2026-09-29. Plan: [2026-09-29-trade-chart.md](../plans/2026-09-29-trade-chart.md), whose deviations are folded in below.
 - **Scope:** every trade page gets two charts:
   - a **3-minute intraday chart** of the underlying, with the trade's fills marked on it;
   - a **daily chart** beside it.
@@ -79,12 +79,12 @@ core/chart: aggregate, ema, vwap, sessionLevels (pure, tested)
 ```
 
 **Units:**
-- **`packages/core/src/chart/`**, pure:
+- **`packages/core/src/chart.ts`**, pure (one file: `core` is a flat package):
   - `aggregate(bars1m, minutes)`: build candles of any length;
   - `ema(closes, length)`: the moving average, with its warm-up;
   - `vwap(bars1m)`: per regular session;
   - `sessionLevels(bars1m, date)`: PM high/low and PD high/low.
-- **`packages/market-data`:** `minuteBars(symbol, from, to)` and `dailyBars(symbol, from, to)` on the existing Alpaca client, paged.
+- **`packages/market-data`:** a new `BarHistory` source (`alpacaHistory`) with `minuteBars(symbol, start, end)` and `dailyBars(symbol, from, to)`, paged. It's a market source of its own (`history`), beside move data's `bars`.
 - **`packages/db`:** the `bars` and `bar_days` tables, and a `createBarsRepo` for the cache.
 - **`apps/server`:** a bar service with the caching rules (§6), and the two routes.
 - **`apps/web`:**
@@ -106,21 +106,22 @@ core/chart: aggregate, ema, vwap, sessionLevels (pure, tested)
 
 ## 6. Fetching and caching
 
-- **Intraday:** `GET /api/bars/:symbol?from=YYYY-MM-DD&to=YYYY-MM-DD` answers `{ bars: Bar[], partialFrom: number | null, unavailable: { reason, message } | null }`.
+- **Intraday:** `GET /api/bars/:symbol?from=YYYY-MM-DD&to=YYYY-MM-DD` answers `{ symbol, bars: Bar[], partial: boolean, unavailable: { reason, message } | null }`.
   - `Bar` is `{ t, o, h, l, c, v }`: 1-minute, 04:00–20:00 ET, oldest first.
 - **The trade page's range:** from **7 calendar days before** the trade's first day, which gives 3 to 5 prior sessions of warm-up, through the trade's last day. For an open trade, the last day is today.
-- **The daily range:** `GET /api/bars/:symbol/daily?to=YYYY-MM-DD` answers the same shape with daily bars, for about 2 years up to and including `to`, the trade's last day. The 167 daily EMA needs that much.
+- **The daily range:** `GET /api/bars/:symbol/daily?to=YYYY-MM-DD` answers the same shape with daily bars, for the 730 days up to `to` (the trade's last day), and never later than yesterday. The 167 daily EMA needs that much. Alpaca's daily bar for a day exists only once the day is over, so **the daily chart builds the candle for today (and any later trade day it lacks) from that day's regular-session minute bars**.
 - **The bar service, per request:**
   1. List the days in the range. Days found in `bar_days` are read from `bars`.
-  2. Fetch the rest from Alpaca in **one** paged request, from the first missing day to the last.
-     - Today's end is clamped to 16 minutes ago, or 20:00 if earlier, because of the 15-minute limit. `partialFrom` then says where the missing tail starts.
+  2. Fetch the missing finished days from Alpaca in **one** paged request, from the first missing day to the last.
+     - Today is fetched in a request of its own, ending 16 minutes ago or at 20:00 ET if that's earlier, because of the 15-minute limit. It's never combined with finished days: otherwise a refusal of the recent minutes could be cached as empty days.
+     - `partial: true` says today's tail is missing.
   3. Store bars and `bar_days` rows only for **finished** days: those before today in New York.
      - A finished day with no bars is stored with `count = 0`.
      - Today is never cached.
 - **Today's trades:** the page refetches every 60 s while the trade's last day is today and the time is before 20:16 ET.
 - **Unavailable, answered with 200 and an empty `bars`:**
-  - no Alpaca key: `no_key`;
-  - a symbol Alpaca rejects: `no_symbol`.
+  - no Alpaca key, with days still to fetch: `no_key`;
+  - no bars at all in the range: `no_bars` ("No stock bars for SPX."). Alpaca answers a symbol it doesn't carry with no bars, the same as a symbol with none in the period, so the two can't be told apart.
 - **Alpaca failing** (network, 5xx, 429 after its retries) answers 502 with `{ error, message }`. Days already cached are still served when they cover the whole range. Otherwise the page shows the message and a **Retry** button.
 
 ---
@@ -182,7 +183,7 @@ core/chart: aggregate, ema, vwap, sessionLevels (pure, tested)
 | Situation | Behaviour |
 |---|---|
 | No Alpaca key | The chart area reads "Add your Alpaca key in Settings to see the chart." The page is otherwise unchanged. |
-| A symbol Alpaca doesn't carry (SPX, NDX, RUT) | "No stock bars for SPX." |
+| A symbol Alpaca doesn't carry (SPX, NDX, RUT), or no bars in the range | "No stock bars for SPX." (`no_bars`). The empty days are cached like any others. |
 | Alpaca unreachable or failing | The message, and **Retry**. |
 | Part of a range cached, the rest failing | The error, and **Retry**; nothing partial is drawn. |
 | Today, within 15 minutes of now | Bars up to 15 minutes ago, noted "Alpaca's free data runs 15 minutes behind". It refreshes every 60 s. |
