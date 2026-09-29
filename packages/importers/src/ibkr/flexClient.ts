@@ -92,7 +92,7 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
     };
   }
 
-  async function sendRequest(queryId: string): Promise<{ reference: string; url: string }> {
+  async function sendRequest(queryId: string): Promise<string> {
     const wait = backoff();
     for (;;) {
       const body = await get(
@@ -102,7 +102,9 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
         const reference = tag(body, "ReferenceCode");
         if (!reference)
           throw new FlexError("failed", "IBKR accepted the request but sent no reference code.");
-        return { reference, url: tag(body, "Url") ?? `${FLEX_BASE}/GetStatement` };
+        // The reply also names a GetStatement URL, but its host varies and can be one that doesn't resolve
+        // (gdcdyn.interactivebrokers.com, 2026-09-29). The host that took the request serves the reference.
+        return reference;
       }
       const code = tag(body, "ErrorCode") ?? "";
       if (!RETRY.has(code)) throw refusal(code, tag(body, "ErrorMessage") ?? "no reason given", queryId);
@@ -112,13 +114,13 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
 
   return {
     async statement(queryId) {
-      const { reference, url } = await sendRequest(queryId);
+      const reference = await sendRequest(queryId);
       const wait = backoff();
       for (;;) {
         // IBKR needs a moment before the first GetStatement.
         await wait();
         const body = await get(
-          `${url}?t=${encodeURIComponent(token)}&q=${encodeURIComponent(reference)}&v=3`,
+          `${FLEX_BASE}/GetStatement?t=${encodeURIComponent(token)}&q=${encodeURIComponent(reference)}&v=3`,
         );
         if (body.includes("<FlexQueryResponse")) return body;
         const code = tag(body, "ErrorCode") ?? "";

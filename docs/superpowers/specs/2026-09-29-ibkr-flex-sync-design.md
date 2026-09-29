@@ -189,7 +189,7 @@ Both machines need the same `since` to produce identical trades, and the Setting
 `ibkrFlex({ token, fetch?, sleep? })` exposes `statement(queryId): Promise<string>`, the XML.
 
 - **Request:** `GET https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?t={token}&q={queryId}&v=3`, with a `User-Agent` header. It returns a `ReferenceCode` and a `Url`.
-- **Polling:** `GET {Url}?t={token}&q={ReferenceCode}&v=3`, until the body is a `<FlexQueryResponse>`.
+- **Polling:** `GET https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement?t={token}&q={ReferenceCode}&v=3`, until the body is a `<FlexQueryResponse>`. The reply's `Url` is ignored. On 2026-09-29 it named `gdcdyn.interactivebrokers.com`, which has no DNS record, and every sync failed with "Couldn't reach IBKR." The host that took the request serves the same reference.
   - `ErrorCode` 1019 (still generating) and 1018 (too many requests) mean wait and retry.
   - Waits are 2, 4, 8, 16 and then 20 s, stopping after about 120 s in total.
 - **Errors** are `FlexError(kind, message)`:
@@ -517,7 +517,9 @@ No failure leaves half a sync behind: every database write happens in one transa
 
    The design relies on the first. If it fails, the fallback key is `tradeID`, which both statements carry.
 
-   **Still open after the live check.** The check ran at 23:25 New York time on 2026-09-28, when Activity still ended at Friday 2026-09-25. So all seven NVDA and TSLA fills came in through `TJ Today` (`origin = confirm`), with exactly the fixture's execution ids. It settles on the first sync after Activity includes 2026-09-28: the seven rows should turn `origin = activity` with the same keys, and no second NVDA or TSLA trade should appear.
+   **Settled 2026-09-29 for the first two.** Activity, generated at 07:24 New York time, covers through 2026-09-28. All seven NVDA and TSLA fills are there under the same execution ids as in 2026-09-28's `TJ Today`, with the same prices. Their commissions are identical too, so Activity's version replaces Today's in place. Assignments (the third check) stay open until one happens.
+   - **A no-trade weekday** is fine: that morning's `TJ Today` was an empty `<TradeConfirms>` that still names the account, and it parses to zero fills.
+   - **A weekend** is still unchecked.
 2. **Token expiry.** The paper token's lifetime isn't recorded. The error message covers expiry, and Settings could show the token's date if IBKR exposes it.
 3. **IV-after cutoff (from move data, spec §13 item 5).** Still the user's call. It's unrelated to this spec.
 4. **Closing `BookTrade` rows with no notes.** The real Activity statement has 76 of them: option positions closed at $0 on 2026-07-25 and 2026-08-06, weeks before expiry, most likely paper-account adjustments. They're counted as `other` and ignored. All are before the start date, so nothing is affected today. One after the start date would leave its position open, so a later trade in that contract would join the same episode.

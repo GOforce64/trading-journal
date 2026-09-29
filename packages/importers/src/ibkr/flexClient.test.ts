@@ -58,6 +58,16 @@ describe("ibkrFlex.statement", () => {
     expect(sleeps).toEqual([2_000, 4_000, 8_000]);
   });
 
+  it("collects the statement from its own host, whatever host IBKR's reply names", async () => {
+    // IBKR has answered with gdcdyn.interactivebrokers.com, which doesn't resolve; ndcdyn serves the same reference.
+    const elsewhere = xml(
+      `<FlexStatementResponse timestamp="29 September, 2026 07:23 AM EDT"><Status>Success</Status><ReferenceCode>5555</ReferenceCode><Url>https://gdcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement</Url></FlexStatementResponse>`,
+    );
+    const { client, calls } = fake(elsewhere, xml(STATEMENT));
+    expect(await client.statement(QUERY)).toBe(STATEMENT);
+    expect(calls[1]?.url).toBe(`${FLEX_BASE}/GetStatement?t=${TOKEN}&q=5555&v=3`);
+  });
+
   it("gives up as slow after about two minutes of 'still generating'", async () => {
     const replies = [
       accepted(),
