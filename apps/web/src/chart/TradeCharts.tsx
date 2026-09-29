@@ -5,7 +5,8 @@ import { TICKER, todayNy } from "../market.js";
 import { useDailyBars, useMinuteBars } from "./bars.js";
 import { ChartToolbar } from "./ChartToolbar.js";
 import { DailyChart } from "./DailyChart.js";
-import { IntradayChart } from "./IntradayChart.js";
+import type { ChartEditing } from "./drag.js";
+import { IntradayChart, type PriceLine } from "./IntradayChart.js";
 import { type ChartFill, type ChartTrade, dailyModel, intradayModel } from "./model.js";
 import { useChartPrefs } from "./prefs.js";
 
@@ -17,6 +18,7 @@ const LIVE_UNTIL = SESSION_END + 16;
 /** The trade page's charts (trade-chart spec §8): the intraday chart, with the daily chart beside it. */
 export function TradeCharts({
   trade,
+  levels,
 }: {
   trade: {
     underlying: string;
@@ -25,6 +27,8 @@ export function TradeCharts({
     fills?: readonly ChartFill[];
     legs: ChartTrade["legs"];
   };
+  /** A scalp's stop and target, and what placing and dragging them does (scalp-review spec §8). */
+  levels?: { lines: readonly PriceLine[]; editing: ChartEditing };
 }) {
   const [prefs, setPrefs] = useChartPrefs();
   const [fitKey, setFitKey] = useState(0);
@@ -103,7 +107,13 @@ export function TradeCharts({
         <p className="text-[10px] text-muted">Alpaca's free data runs 15 minutes behind.</p>
       )}
       <div className="grid gap-2 min-[1100px]:grid-cols-[2fr_1fr]">
-        <IntradayChart model={intraday} show={prefs.show} fitKey={fitKey} />
+        <IntradayChart
+          model={intraday}
+          show={prefs.show}
+          fitKey={fitKey}
+          lines={levels?.lines}
+          editing={levels?.editing}
+        />
         {dayChart.candles.length > 0 ? (
           <DailyChart model={dayChart} show={prefs.show} fitKey={fitKey} />
         ) : (

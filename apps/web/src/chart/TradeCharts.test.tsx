@@ -4,7 +4,7 @@ import { addDays, nyWallClock, type PriceBar } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { todayNy } from "../market.js";
 import { TradeCharts } from "./TradeCharts.js";
-import { resetLibrary } from "./testing.js";
+import { resetLibrary, seriesOf } from "./testing.js";
 
 vi.mock("lightweight-charts", async (importOriginal) => {
   const { fakeLibrary } = await import("./testing.js");
@@ -59,6 +59,31 @@ afterEach(() => {
 });
 
 describe("TradeCharts", () => {
+  it("hands the review's lines and editing to the intraday chart", async () => {
+    stub([answer(OK)]);
+    const levels = {
+      lines: [{ id: "stop" as const, price: 229, color: "#ef5350", dashed: true, label: "STOP" }],
+      editing: {
+        placing: "target" as const,
+        onPlace: vi.fn(),
+        onDrag: vi.fn(),
+        onDrop: vi.fn(),
+        onCancel: vi.fn(),
+      },
+    };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TradeCharts trade={TRADE} levels={levels} />
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("intraday-chart");
+    expect(seriesOf("Candlestick")[0]?.priceLines).toEqual([
+      expect.objectContaining({ price: 229, title: "STOP" }),
+    ]);
+    expect(screen.getByTestId("placing-hint").textContent).toContain("place the target");
+  });
+
   it("asks for the week before the trade through its last day, and the daily bars up to that day", async () => {
     const fetchMock = stub([answer(OK)]);
     renderCharts();

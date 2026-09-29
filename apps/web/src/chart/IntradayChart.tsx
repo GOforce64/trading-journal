@@ -13,12 +13,14 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { type ChartEditing, inPane, type LevelKind, nearestLine, priceAt } from "./drag.js";
 import type { IntradayModel, LevelLine, Marker, Point } from "./model.js";
 import type { Toggle } from "./prefs.js";
 import { COLORS, chartOptions, EMA_COLORS, nyTimeText, seconds } from "./style.js";
 
-/** An extra horizontal line, such as the scalp review's stop or target. */
+/** An extra horizontal line, such as the scalp review's stop or target. A line with an `id` can be dragged. */
 export interface PriceLine {
+  id?: LevelKind;
   price: number;
   color: string;
   dashed: boolean;
@@ -37,6 +39,14 @@ interface Parts {
   levels: Map<LevelLine["label"], ISeriesApi<"Line">>;
   markers: ISeriesMarkersPluginApi<Time>;
   priceLines: IPriceLine[];
+}
+
+/** A line being dragged: where it started, and where it is now (scalp-review spec §8.3). */
+interface Drag {
+  kind: LevelKind;
+  line: IPriceLine;
+  from: number;
+  price: number;
 }
 
 const line = (point: Point) => ({ time: seconds(point.t), value: point.value });
@@ -58,18 +68,28 @@ export function IntradayChart({
   show,
   fitKey,
   lines = NO_LINES,
+  editing,
   height = 420,
 }: {
   model: IntradayModel;
   show: Record<Toggle, boolean>;
   fitKey: number;
   lines?: readonly PriceLine[];
+  /** The scalp review's placing and dragging; without it the mouse only pans and zooms. */
+  editing?: ChartEditing;
   height?: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const parts = useRef<Parts | null>(null);
   const times = useRef<number[]>([]);
+  // The mouse handlers are attached once, so they read the latest lines and editing from here.
+  const current = useRef({ lines, editing });
   const [hovered, setHovered] = useState<number | null>(null);
+  const [grab, setGrab] = useState(false);
+
+  useEffect(() => {
+    current.current = { lines, editing };
+  });
 
   useEffect(() => {
     const element = container.current;
@@ -120,7 +140,94 @@ export function IntradayChart({
       setHovered(times.current.indexOf(param.time * 1000));
     });
     parts.current = { chart, candles, volume, emas, vwap, levels, markers, priceLines: [] };
+
+    // Placing and dragging the review's lines (scalp-review spec §8.2–8.3). Lightweight Charts listens to mouse
+    // events, so a press on a line is caught on its way down (capture) and kept from the chart, and the drag
+    // follows the window, so it goes on outside the chart.
+    let drag: Drag | null = null;
+    const toY = (price: number) => candles.priceToCoordinate(price);
+    const toPrice = (y: number) => candles.coordinateToPrice(y);
+    const pointOf = (event: MouseEvent) => {
+      const box = element.getBoundingClientRect();
+      return { x: event.clientX - box.left, y: event.clientY - box.top };
+    };
+    function grabbable() {
+      return current.current.lines.flatMap((each) => (each.id ? [{ id: each.id, price: each.price }] : []));
+    }
+    function follow(event: MouseEvent) {
+      if (!drag) return;
+      const price = priceAt(pointOf(event).y, toPrice);
+      if (price == null) return;
+      drag.price = price;
+      drag.line.applyOptions({ price });
+      current.current.editing?.onDrag(drag.kind, price);
+    }
+    function release() {
+      finish(true);
+    }
+    function finish(save: boolean) {
+      const done = drag;
+      if (!done) return;
+      drag = null;
+      window.removeEventListener("mousemove", follow);
+      window.removeEventListener("mouseup", release);
+      chart.applyOptions({ handleScroll: true, handleScale: true });
+      if (save && done.price !== done.from) {
+        current.current.editing?.onDrop(done.kind, done.price);
+        return;
+      }
+      done.line.applyOptions({ price: done.from });
+      if (!save) current.current.editing?.onCancel();
+    }
+    function press(event: MouseEvent) {
+      const edit = current.current.editing;
+      if (!edit || event.button !== 0) return;
+      const { x, y } = pointOf(event);
+      if (!inPane(x, y, chart.paneSize())) return;
+      if (edit.placing) {
+        const price = priceAt(y, toPrice);
+        if (price == null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        edit.onPlace(edit.placing, price);
+        return;
+      }
+      const kind = nearestLine(grabbable(), y, toY);
+      const index = current.current.lines.findIndex((each) => each.id === kind);
+      const line = parts.current?.priceLines[index];
+      const from = current.current.lines[index]?.price;
+      if (!kind || !line || from === undefined) return;
+      event.preventDefault();
+      event.stopPropagation();
+      chart.applyOptions({ handleScroll: false, handleScale: false });
+      drag = { kind, line, from, price: from };
+      window.addEventListener("mousemove", follow);
+      window.addEventListener("mouseup", release);
+    }
+    function hover(event: MouseEvent) {
+      if (drag) return;
+      const { x, y } = pointOf(event);
+      const over =
+        current.current.editing != null &&
+        inPane(x, y, chart.paneSize()) &&
+        nearestLine(grabbable(), y, toY) != null;
+      setGrab(over);
+    }
+    function onEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (drag) finish(false);
+      else if (current.current.editing?.placing) current.current.editing.onCancel();
+    }
+    element.addEventListener("mousedown", press, true);
+    element.addEventListener("mousemove", hover);
+    window.addEventListener("keydown", onEscape);
+
     return () => {
+      element.removeEventListener("mousedown", press, true);
+      element.removeEventListener("mousemove", hover);
+      window.removeEventListener("keydown", onEscape);
+      window.removeEventListener("mousemove", follow);
+      window.removeEventListener("mouseup", release);
       chart.remove();
       parts.current = null;
     };
@@ -222,7 +329,20 @@ export function IntradayChart({
 
   return (
     <div className="relative" style={{ height }}>
-      <div ref={container} className="absolute inset-0" data-testid="intraday-chart" />
+      <div
+        ref={container}
+        className="absolute inset-0"
+        data-testid="intraday-chart"
+        data-cursor={editing?.placing ? "crosshair" : grab ? "ns-resize" : undefined}
+      />
+      {editing?.placing && (
+        <div
+          data-testid="placing-hint"
+          className="pointer-events-none absolute top-6 left-1/2 z-10 -translate-x-1/2 rounded-sm border border-line bg-[#131722e6] px-2 py-0.5 text-[10px] text-fg"
+        >
+          Click the chart to place the {editing.placing} · Esc to cancel
+        </div>
+      )}
       {candle && (
         <div
           data-testid="chart-legend"
