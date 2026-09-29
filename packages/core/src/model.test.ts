@@ -99,3 +99,20 @@ describe("newTradeSchema", () => {
     expect(tradePatchSchema.safeParse({ grade: "S" }).success).toBe(false);
   });
 });
+
+describe("tradePatchSchema for the scalp review", () => {
+  it("takes part of a scalp's levels, and the Done reviewing flag", () => {
+    expect(tradePatchSchema.parse({ scalp: { stopPrice: 231.8 }, reviewed: true })).toEqual({
+      scalp: { stopPrice: 231.8 },
+      reviewed: true,
+    });
+    expect(
+      tradePatchSchema.parse({ scalp: { levelBasis: "premium", stopPrice: 0, targetPrice: null } }).scalp,
+    ).toEqual({ levelBasis: "premium", stopPrice: 0, targetPrice: null });
+  });
+
+  it("refuses a negative price and an unknown basis", () => {
+    expect(tradePatchSchema.safeParse({ scalp: { stopPrice: -1 } }).success).toBe(false);
+    expect(tradePatchSchema.safeParse({ scalp: { levelBasis: "delta" } }).success).toBe(false);
+  });
+});

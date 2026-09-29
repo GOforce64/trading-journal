@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEVEL_BASES } from "./review.js";
 
 export const STRATEGIES = ["scalp", "iron_fly"] as const;
 export const BOOKS = ["live", "paper", "missed"] as const;
@@ -114,8 +115,21 @@ export const newTradeSchema = newTradeShape
     path: ["ironFly"],
   });
 
+/** A scalp's stop and target (scalp-review spec §6.2). Merged into what's stored; the basis rules apply on write. */
+export const scalpLevelsPatchSchema = z
+  .object({
+    levelBasis: z.enum(LEVEL_BASES),
+    stopPrice: z.number().min(0).nullable(),
+    targetPrice: z.number().min(0).nullable(),
+  })
+  .partial();
+
 /** Every field optional, no defaults; `source` is provenance and is never patched. */
-export const tradePatchSchema = z.object(tradeFields).omit({ source: true }).partial();
+export const tradePatchSchema = z.object(tradeFields).omit({ source: true }).partial().extend({
+  scalp: scalpLevelsPatchSchema.optional(),
+  /** true stamps the trade reviewed with the server's clock; false puts it back in the queue. */
+  reviewed: z.boolean().optional(),
+});
 
 export type LegInput = z.infer<typeof legInputSchema>;
 export type IronFlyDetailsInput = z.infer<typeof ironFlyDetailsSchema>;
