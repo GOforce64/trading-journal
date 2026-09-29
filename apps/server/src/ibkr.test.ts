@@ -26,6 +26,7 @@ interface Summary {
   added: number;
   updated: number;
   unchanged: number;
+  orphaned: number;
   skipped: { reason: string; ticker: string }[];
   keptEdits: { tradeId: string; ticker: string; netPnl: number | null }[];
   ignored: { beforeStart: number; stock: number };
@@ -179,6 +180,37 @@ describe("POST /api/ibkr/sync", () => {
     const call = trades.find((trade) => trade.underlying === "CZR" && trade.legs[0]?.right === "C");
     // The correction's 2 and the later 1-lot.
     expect(call?.legs[0]?.quantity).toBe(3);
+  });
+
+  it("keeps a synced fly, notes and all, when a scalp joining its episode stops it being recognised", async () => {
+    const answers: Answers = {};
+    const app = setup({ ...CONFIG, since: "2026-07-01" }, answers);
+    await app.sync();
+    const fly = (await app.trades()).find((trade) => trade.underlying === "AA");
+    await app.app.request(`/api/trades/${fly?.id}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ notes: "crush paid" }),
+    });
+    // A 48C scalp while the fly's short body is still open: the episode is no longer a fly (spec §7's known edge).
+    const row = (dateTime: string, quantity: number, id: string) =>
+      `<Trade accountId="DU1234567" currency="USD" assetCategory="OPT" symbol="AA    260717C00048000" description="AA 17JUL26 48 C" conid="835947199" underlyingSymbol="AA" multiplier="100" strike="48" expiry="20260717" putCall="C" tradeID="${id}" dateTime="${dateTime}" tradeDate="20260716" transactionType="ExchTrade" quantity="${quantity}" tradePrice="0.9" ibCommission="-0.5" openCloseIndicator="${quantity > 0 ? "O" : "C"}" notes="" buySell="${quantity > 0 ? "BUY" : "SELL"}" ibOrderID="9${id}" transactionID="1${id}" ibExecID="0000e183.aaaa${id}.01.01" origTradeID="" levelOfDetail="EXECUTION" />\n`;
+    answers.activity = ACTIVITY_XML.replace(
+      "</Trades>",
+      `${row("20260716;150000", 1, "901")}${row("20260716;151000", -1, "902")}</Trades>`,
+    );
+
+    const second = await app.sync();
+    expect(second.orphaned).toBe(0);
+    expect(second.skipped).toContainEqual(expect.objectContaining({ reason: "unrecognised", ticker: "AA" }));
+    const kept = (await (await app.app.request(`/api/trades/${fly?.id}`, { headers: LOCAL })).json()) as {
+      notes: string | null;
+      fills: unknown[];
+    };
+    expect(kept.notes).toBe("crush paid");
+    // Its fills stay linked, so the next sync keeps it too.
+    expect(kept.fills.length).toBeGreaterThan(0);
+    expect((await app.sync()).orphaned).toBe(0);
   });
 
   it("records a clean run on a day with no trades", async () => {

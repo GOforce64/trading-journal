@@ -115,21 +115,46 @@ export function groupFills(fills: readonly FillForGrouping[], options: GroupOpti
     else buckets.set(key, [fill]);
   }
   for (const bucket of buckets.values()) {
-    let episode: FillForGrouping[] = [];
-    const position = new Map<string, number>();
+    const open: Episode[] = [];
     for (const fill of bucket) {
-      episode.push(fill);
-      position.set(fill.conid, (position.get(fill.conid) ?? 0) + fill.quantity);
-      if ([...position.values()].every((quantity) => quantity === 0)) {
-        settle(episode, out, options);
-        episode = [];
-        position.clear();
+      let episode = episodeFor(open, fill);
+      if (!episode) {
+        episode = { fills: [], position: new Map(), sold: false };
+        open.push(episode);
+      }
+      episode.fills.push(fill);
+      const quantity = (episode.position.get(fill.conid) ?? 0) + fill.quantity;
+      episode.position.set(fill.conid, quantity);
+      if (quantity < 0) episode.sold = true;
+      if ([...episode.position.values()].every((each) => each === 0)) {
+        settle(episode.fills, out, options);
+        open.splice(open.indexOf(episode), 1);
       }
     }
-    if (episode.length > 0) settle(episode, out, options);
+    for (const episode of open) settle(episode.fills, out, options);
   }
   out.candidates.sort((a, b) => a.trade.openedAt - b.trade.openedAt);
   return out;
+}
+
+/** A position being tracked from flat to flat. `sold`: some contract in it went short. */
+interface Episode {
+  fills: FillForGrouping[];
+  position: Map<string, number>;
+  sold: boolean;
+}
+
+/**
+ * The episode a fill belongs to: the one holding its contract, else the one still being built. A fly whose short
+ * legs have all been bought back is only waiting for its wings to expire, so it takes no new contracts: a scalp in
+ * the same expiry that morning is a trade of its own.
+ */
+function episodeFor(open: Episode[], fill: FillForGrouping): Episode | undefined {
+  const holding = open.find((episode) => (episode.position.get(fill.conid) ?? 0) !== 0);
+  if (holding) return holding;
+  const windingDown = (episode: Episode) =>
+    episode.sold && [...episode.position.values()].every((quantity) => quantity >= 0);
+  return open.find((episode) => !windingDown(episode));
 }
 
 function settle(episode: FillForGrouping[], out: Grouped, options: GroupOptions): void {

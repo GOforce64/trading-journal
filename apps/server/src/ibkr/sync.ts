@@ -229,10 +229,20 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
           );
         }
 
-        const grouped = groupFills(repo.fillsSince(account.id, settings.since).map(toGrouping), {
+        const stored = repo.fillsSince(account.id, settings.since);
+        const grouped = groupFills(stored.map(toGrouping), {
           account: externalId,
           book: account.kind,
         });
+        // A trade whose fills now sit in an episode grouping can't place is kept as it was, links and all, not
+        // orphaned: the skip says why, and the user's notes on it survive.
+        const unplaced = new Set(grouped.skipped.flatMap((skip) => skip.fillIds));
+        const held = new Map<string, { tradeId: string; legId: string }>();
+        for (const fill of stored) {
+          if (unplaced.has(fill.id) && fill.tradeId && fill.legId) {
+            held.set(fill.id, { tradeId: fill.tradeId, legId: fill.legId });
+          }
+        }
         for (const skip of grouped.skipped) {
           summary.skipped.push({ reason: skip.reason, ticker: skip.ticker, openedAt: skip.openedAt });
         }
@@ -255,12 +265,15 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
         }
         summary.orphaned = repo.softDeleteOrphans(
           account.id,
-          new Set(grouped.candidates.map((candidate) => candidate.id)),
+          new Set([
+            ...grouped.candidates.map((candidate) => candidate.id),
+            ...[...held.values()].map((link) => link.tradeId),
+          ]),
           settings.since,
         );
         repo.linkFills(
           account.id,
-          new Map([...grouped.links].filter(([, link]) => linked.has(link.tradeId))),
+          new Map([...[...grouped.links].filter(([, link]) => linked.has(link.tradeId)), ...held]),
         );
         repo.recordRun({ at, status: "ok", error: null, summary, accountId: account.id });
       });

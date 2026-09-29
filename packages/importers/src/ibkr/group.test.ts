@@ -185,6 +185,40 @@ describe("groupFills rules", () => {
     expect(candidates.map((each) => each.trade.netPnl)).toEqual([98, 48]);
   });
 
+  it("keeps a scalp traded after a fly's body was bought back out of the fly, whose wings are still to expire", () => {
+    const leg = (conid: string, right: "C" | "P", strike: number) => ({ conid, right, strike });
+    const [c50, p50, c55, p45, c52] = [
+      leg("c50", "C", 50),
+      leg("p50", "P", 50),
+      leg("c55", "C", 55),
+      leg("p45", "P", 45),
+      leg("c52", "C", 52),
+    ];
+    const { candidates, skipped } = groupFills(
+      [
+        fill({ ...c50, quantity: -1, price: 2 }),
+        fill({ ...p50, quantity: -1, price: 2 }),
+        fill({ ...c55, quantity: 1, price: 0.5 }),
+        fill({ ...p45, quantity: 1, price: 0.5 }),
+        // The body is bought back the next morning; the wings are left to expire.
+        fill({ ...c50, quantity: 1, price: 1 }),
+        fill({ ...p50, quantity: 1, price: 1 }),
+        // A 0DTE scalp in the same expiry.
+        fill({ ...c52, quantity: 1, price: 1 }),
+        fill({ ...c52, quantity: -1, price: 1.5 }),
+        // The wings expire at 16:20.
+        fill({ ...c55, quantity: -1, price: 0, kind: "expiration" }),
+        fill({ ...p45, quantity: -1, price: 0, kind: "expiration" }),
+      ],
+      OPTIONS,
+    );
+    expect(skipped).toEqual([]);
+    expect(candidates.map((each) => [each.trade.strategy, each.trade.legs.length])).toEqual([
+      ["iron_fly", 4],
+      ["scalp", 1],
+    ]);
+  });
+
   it("keeps a bought contract that hasn't been sold as an open scalp", () => {
     const { candidates } = groupFills([fill({ quantity: 3, price: 2 })], OPTIONS);
     expect(candidates[0]?.trade).toMatchObject({ closedAt: null, netPnl: null });

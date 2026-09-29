@@ -245,7 +245,9 @@ Both machines need the same `since` to produce identical trades, and the Setting
    - Labels are "Long call" or "Long put", and "Short Iron Butterfly".
 5. **Ids** are deterministic (§5.4). The same fills, in any order, give the same candidates.
 
-**Known edge:** a scalp in the **same ticker and expiry while a fly on it is open** joins the fly's episode. That episode then has five legs and is skipped as unrecognised, and the summary names it. It's rare, because earnings flies and 0DTE scalps seldom share an expiry.
+**A fly winding down takes no new contracts.** Once all of a fly's short legs are bought back, its episode is only waiting for the wings to expire at 16:20. A fill on any other contract starts its own episode, so a 0DTE scalp the morning after a 1-DTE earnings fly is a trade of its own, even though it shares the fly's expiry.
+
+**Known edge:** a scalp in the **same ticker and expiry while the fly's short legs are still open** joins the fly's episode. That episode then has five legs and is skipped as unrecognised, and the summary names it. A fly synced before that keeps its last synced state, with its notes (§8.1, orphans).
 
 ---
 
@@ -273,7 +275,10 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
      - Update the sync-owned columns of existing ones, only if they changed. A moved time or ticker clears the stale stock price, reusing the repo's `stalePrices`.
      - Replace the legs when they changed.
      - Update the fly's structure columns in place.
-   - **Orphans.** A synced trade of this account whose id no candidate produced is soft-deleted, unless it has `facts_edited_at`, or its first fill is before `since` (a start date that moved later).
+   - **Orphans.** A synced trade of this account whose id no candidate produced is soft-deleted, unless:
+     - it has `facts_edited_at`;
+     - its first fill is before `since` (a start date that moved later);
+     - or its fills now sit in an episode grouping skipped. It then keeps its last synced state and its fill links, and the skip is reported.
    - **Link** each fill to its trade and leg.
 6. **Record** the run in `sync_state`.
 
