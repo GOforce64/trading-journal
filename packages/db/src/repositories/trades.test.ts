@@ -162,7 +162,9 @@ describe("trades repository", () => {
     expect(repo().update(crypto.randomUUID(), { grade: "A" })).toBeNull();
   });
 
-  it("lists 500 trades by default, and every trade when the limit is null", () => {
+  // 501 separate write transactions to a file-backed database: about 3 s on CI's Windows runner, and more while
+  // other test files write too, so the default 5 s is too tight there.
+  it("lists 500 trades by default, and every trade when the limit is null", { timeout: 20_000 }, () => {
     const trades = repo();
     for (let index = 0; index < 501; index++) trades.create({ ...sampleFly, openedAt: 1000 + index });
     expect(trades.list()).toHaveLength(500);
