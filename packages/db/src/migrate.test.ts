@@ -86,4 +86,14 @@ describe("runMigrations", () => {
     expect(columns("sync_state")).toEqual(expect.arrayContaining(["source", "account_id", "last_summary"]));
     expect(columns("trades")).toContain("facts_edited_at");
   });
+
+  it("adds the bar cache tables", () => {
+    const file = join(tempDir(), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const db = openDatabase(file);
+    const columns = (table: string) =>
+      db.all<{ name: string }>(sql.raw(`pragma table_info(${table})`)).map((column) => column.name);
+    expect(columns("bars")).toEqual(["symbol", "timeframe", "t", "o", "h", "l", "c", "v"]);
+    expect(columns("bar_days")).toEqual(["symbol", "timeframe", "date", "count", "fetched_at"]);
+  });
 });

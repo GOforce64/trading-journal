@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /** Columns every syncable row carries, so machines can merge later (spec §12). */
 const syncColumns = {
@@ -199,3 +199,34 @@ export const syncState = sqliteTable("sync_state", {
   /** The run's summary, as JSON. */
   lastSummary: text("last_summary"),
 });
+
+/** Cached bars (trade-chart spec §5): finished days only, never exported. `t` is the bar's start. */
+export const bars = sqliteTable(
+  "bars",
+  {
+    symbol: text("symbol").notNull(),
+    /** '1m' | '1d' */
+    timeframe: text("timeframe").notNull(),
+    t: integer("t").notNull(),
+    o: real("o").notNull(),
+    h: real("h").notNull(),
+    l: real("l").notNull(),
+    c: real("c").notNull(),
+    v: real("v").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.symbol, table.timeframe, table.t] })],
+);
+
+/** The finished days a symbol's bars were fetched for, empty ones (weekends, holidays) included. */
+export const barDays = sqliteTable(
+  "bar_days",
+  {
+    symbol: text("symbol").notNull(),
+    timeframe: text("timeframe").notNull(),
+    /** YYYY-MM-DD, New York */
+    date: text("date").notNull(),
+    count: integer("count").notNull(),
+    fetchedAt: integer("fetched_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.symbol, table.timeframe, table.date] })],
+);
