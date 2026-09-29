@@ -4,8 +4,10 @@ import {
   alpacaBars,
   alpacaChains,
   alpacaCompanyNames,
+  alpacaHistory,
   alpacaOptionQuotes,
   alpacaQuotes,
+  type BarHistory,
   type BarSource,
   type ChainSource,
   type CompanyNames,
@@ -21,6 +23,7 @@ export interface MarketSources {
   chains: ChainSource;
   companies: CompanyNames;
   bars: BarSource;
+  history: BarHistory;
 }
 
 export interface MarketStatus {
@@ -94,5 +97,7 @@ function alpacaSources(keys: AlpacaKeys, report: (error: unknown) => void): Mark
     companies: alpacaCompanyNames(keys),
     // Each price is stored with its trade once fetched, so no cache.
     bars: alpacaBars(keys),
+    // The chart's bars; finished days are cached in the database, so no cache here.
+    history: alpacaHistory(keys),
   };
 }

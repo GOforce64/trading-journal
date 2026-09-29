@@ -3,6 +3,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TradeDetail } from "./TradeDetail.js";
 
+// The charts have their own tests; here they're a placeholder that shows where they go.
+vi.mock("../chart/TradeCharts.js", () => ({
+  TradeCharts: ({ trade }: { trade: { underlying: string } }) => (
+    <div data-testid="trade-charts">{trade.underlying}</div>
+  ),
+}));
+
 const trade = {
   id: "t1",
   strategy: "iron_fly",
@@ -324,6 +331,15 @@ describe("TradeDetail", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "B" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "B" }));
     await waitFor(() => expect(client.getQueryState(["trades", { all: true }])?.isInvalidated).toBe(true));
+  });
+
+  it("shows the charts under the header", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    expect((await screen.findByTestId("trade-charts")).textContent).toBe("XYZ");
   });
 });
 

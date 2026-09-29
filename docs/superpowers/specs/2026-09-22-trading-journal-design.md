@@ -176,7 +176,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **tags**: `name`, `kind` (`mistake` | `emotion`), `color`, `archived`. **trade_tags**: `trade_id`, `tag_id`.
 - **attachments**: `trade_id`, `sha256`, `ext`, `mime`, `bytes`, `caption`.
 - Imports tag their trades with `import_batch_id` (one id per run); there is no batches table. A backup taken before every import is the undo.
-- **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `ts`, `o`, `h`, `l`, `c`, `v`, `source`. Primary key `(symbol, timeframe, ts)`. Not built yet: move data stores its two prices per trade instead.
+- **bars** (cache, *not* exported): `symbol`, `timeframe` (`1m` | `1d`), `t`, `o`, `h`, `l`, `c`, `v`, keyed by (`symbol`, `timeframe`, `t`). **bar_days** records each finished day fetched, empty ones included. See [2026-09-29-trade-chart-design.md](2026-09-29-trade-chart-design.md).
 - **sync_state**: `source` (the key, `ibkr`), `account_id`, `last_run_at`, `last_status`, `last_error`, `last_summary`.
 - **settings**: key/value, per machine.
 
@@ -253,6 +253,8 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Review queue:** moves to the scalp-review step, with stops, setups and grades (§13, Phase 2 item 3).
 
 ### 8.2 Market data and the generated chart
+
+**Built as designed in [2026-09-29-trade-chart-design.md](2026-09-29-trade-chart-design.md), which changes this section.** Alpaca's free plan supplies the bars, not Massive. The timeframes are 1m, 2m, 3m, 5m, 10m, 15m, 30m and 1h, with a **daily chart beside** the intraday one. The chart shows extended hours, opens on 3m zoomed on the trade, and warms up on the week before. Index underlyings get an empty state.
 
 - The `MarketDataProvider` interface has `getMinuteBars(symbol, sessionDate)` (04:00–20:00 ET) and `getDailyBars(symbol, from, to)`.
 - **Massive** adapter (free tier):
@@ -474,6 +476,6 @@ These are facts to confirm at the start of the relevant phase. None of them bloc
 1. **oQuants extraction (Phase 1):** resolved. Markup for a full page and a parent row with its leg rows was captured, and the totals reconcile. The table paginates with MUI TablePagination, and displayed times are in the viewer's timezone. One unknown remains, confirmed on the first live run: how an open trade's Close Date is shown. See the oQuants importer spec.
 2. **IBKR Flex (Phase 2):** resolved 2026-09-29 by the IBKR Flex sync spec, §3. Paper accounts support the Flex Web Service, a Trade Confirmation query includes same-day executions, and the field names are recorded there. What remains is in that spec's §13.
 3. **Alpaca:** resolved 2026-09-26 by the option chains spec, §3. Still open: how fresh indicative quotes are during a session (that spec, §14).
-4. **Massive free tier (Phase 2):** when a session's minute bars become available, whether extended hours are included, and the current rate limits.
+4. **Massive free tier (Phase 2):** No longer needed: the trade chart uses Alpaca (see its spec).
 5. **Lightweight Charts:** resolved 2026-09-27. The TradingView attribution logo stays on (the library's default).
 6. **In-browser demo (Phase 3):** the spike in Phase 3, step 1 (§13) confirms that Hono and Drizzle/sql.js work in-page within a reasonable bundle size.

@@ -4,10 +4,12 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import type { Db } from "@tj/db";
 import { type FlexClient, ibkrFlex } from "@tj/importers";
 import { Hono } from "hono";
+import { createBarService } from "./bars.js";
 import type { IbkrConfig } from "./config.js";
 import { createIbkrSync } from "./ibkr/sync.js";
 import type { MarketData } from "./marketData.js";
 import { createMoveFiller } from "./moves.js";
+import { barRoutes } from "./routes/bars.js";
 import { ibkrRoutes } from "./routes/ibkr.js";
 import { importRoutes } from "./routes/import.js";
 import { marketRoutes } from "./routes/market.js";
@@ -72,6 +74,7 @@ export function createApp(deps: AppDeps) {
     )
     .route("/api/quotes", quoteRoutes(deps.market))
     .route("/api/settings", settingsRoutes(deps.market, deps.settings))
+    .route("/api/bars", barRoutes(createBarService({ db: deps.db, market: deps.market, now: deps.now })))
     .route("/api", marketRoutes(deps.market));
 
   if (deps.webDir) {

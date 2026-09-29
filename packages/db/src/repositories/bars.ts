@@ -1,0 +1,74 @@
+import type { PriceBar } from "@tj/core";
+import { and, asc, between, eq, inArray } from "drizzle-orm";
+import type { Db } from "../client.js";
+import { barDays, bars } from "../schema.js";
+
+export type BarTimeframe = "1m" | "1d";
+/** Rows per insert: a row per statement makes a week of minute bars take seconds. 500 rows is 4,000 parameters. */
+const INSERT_ROWS = 500;
+
+/** The chart's bar cache (trade-chart spec §5). Only finished days are stored, so nothing here goes stale. */
+export function createBarsRepo(db: Db) {
+  return {
+    /** Which of `dates` are cached, empty days included. */
+    knownDays(symbol: string, timeframe: BarTimeframe, dates: readonly string[]): Set<string> {
+      if (dates.length === 0) return new Set();
+      const rows = db
+        .select({ date: barDays.date })
+        .from(barDays)
+        .where(
+          and(
+            eq(barDays.symbol, symbol),
+            eq(barDays.timeframe, timeframe),
+            inArray(barDays.date, [...dates]),
+          ),
+        )
+        .all();
+      return new Set(rows.map((row) => row.date));
+    },
+
+    /** Cached bars that start between `from` and `to` (epoch ms, inclusive), oldest first. */
+    read(symbol: string, timeframe: BarTimeframe, from: number, to: number): PriceBar[] {
+      return db
+        .select({ t: bars.t, o: bars.o, h: bars.h, l: bars.l, c: bars.c, v: bars.v })
+        .from(bars)
+        .where(and(eq(bars.symbol, symbol), eq(bars.timeframe, timeframe), between(bars.t, from, to)))
+        .orderBy(asc(bars.t))
+        .all();
+    },
+
+    /** Stores finished days, each with its bars (possibly none), in one transaction. A stored day is kept as it was. */
+    store(
+      symbol: string,
+      timeframe: BarTimeframe,
+      days: readonly { date: string; bars: readonly PriceBar[] }[],
+      fetchedAt: number,
+    ): void {
+      db.transaction((tx) => {
+        for (const day of days) {
+          for (let start = 0; start < day.bars.length; start += INSERT_ROWS) {
+            tx.insert(bars)
+              .values(
+                day.bars.slice(start, start + INSERT_ROWS).map((bar) => ({
+                  symbol,
+                  timeframe,
+                  t: bar.t,
+                  o: bar.o,
+                  h: bar.h,
+                  l: bar.l,
+                  c: bar.c,
+                  v: bar.v,
+                })),
+              )
+              .onConflictDoNothing()
+              .run();
+          }
+          tx.insert(barDays)
+            .values({ symbol, timeframe, date: day.date, count: day.bars.length, fetchedAt })
+            .onConflictDoNothing()
+            .run();
+        }
+      });
+    },
+  };
+}
