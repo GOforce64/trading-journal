@@ -116,3 +116,30 @@ export function usePendingReviews() {
     },
   });
 }
+
+type SetupPatch = Parameters<(typeof api.api.setups)[":id"]["$patch"]>[0]["json"];
+type TagPatch = Parameters<(typeof api.api.tags)[":id"]["$patch"]>[0]["json"];
+
+export function useUpdateSetup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: SetupPatch }) => {
+      const res = await api.api.setups[":id"].$patch({ param: { id }, json: patch });
+      if (!res.ok) throw await refusal(res, "save the setup");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["setups"] }),
+  });
+}
+
+export function useUpdateTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: TagPatch }) => {
+      const res = await api.api.tags[":id"].$patch({ param: { id }, json: patch });
+      if (!res.ok) throw await refusal(res, "save the tag");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tags"] }),
+  });
+}

@@ -19,6 +19,7 @@ import { IronFlies } from "./routes/IronFlies.js";
 import { Journal } from "./routes/Journal.js";
 import { NewIronFly } from "./routes/NewIronFly.js";
 import { NewScalp } from "./routes/NewScalp.js";
+import { Playbook } from "./routes/Playbook.js";
 import { Scalps } from "./routes/Scalps.js";
 import { Settings } from "./routes/Settings.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
@@ -143,6 +144,12 @@ const settingsRoute = createRoute({
   component: () => <Settings />,
 });
 
+const playbookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/playbook",
+  component: () => <Playbook />,
+});
+
 /** Nav destinations whose features arrive in later plans; better than a dead link. */
 const PLACEHOLDERS = [
   {
@@ -150,12 +157,6 @@ const PLACEHOLDERS = [
     title: "Missed",
     phase: "Phase 2",
     blurb: "Setups you spotted but skipped, marked on the chart and scored in R.",
-  },
-  {
-    path: "/playbook",
-    title: "Playbook",
-    phase: "a later Phase 1 plan",
-    blurb: "Your named setups, each with its own win rate, average R and P&L.",
   },
 ];
 
@@ -184,6 +185,7 @@ export const router = createRouter({
     editTradeRoute,
     importRoute,
     settingsRoute,
+    playbookRoute,
     ...placeholderRoutes,
   ]),
 });

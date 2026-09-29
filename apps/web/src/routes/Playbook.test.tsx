@@ -1,0 +1,187 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Playbook } from "./Playbook.js";
+
+const SETUPS = [
+  {
+    id: "orb",
+    name: "ORB breakout",
+    description: "Break of the opening range",
+    strategy: "scalp",
+    archived: false,
+    tradeCount: 3,
+  },
+  {
+    id: "crush",
+    name: "Earnings IV crush",
+    description: null,
+    strategy: "iron_fly",
+    archived: false,
+    tradeCount: 12,
+  },
+  { id: "old", name: "Old setup", description: null, strategy: null, archived: true, tradeCount: 0 },
+];
+const TAGS = [
+  { id: "fomo", name: "FOMO entry", kind: "mistake", archived: false, tradeCount: 4 },
+  { id: "calm", name: "Calm", kind: "emotion", archived: false, tradeCount: 7 },
+  { id: "bored", name: "Bored", kind: "emotion", archived: true, tradeCount: 1 },
+];
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+/** Answers the lists; creations and changes succeed, or are refused with `refusal` (409). */
+function stubApi(refusal?: string) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = String(init?.method ?? "GET").toUpperCase();
+    if (method !== "GET") {
+      if (refusal) return json({ error: "duplicate", message: refusal }, 409);
+      return json({ id: "new", ...JSON.parse(String(init?.body)) }, method === "POST" ? 201 : 200);
+    }
+    return json(url.includes("/api/tags") ? TAGS : SETUPS);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+const sent = (fetchMock: ReturnType<typeof stubApi>, method: string) =>
+  fetchMock.mock.calls
+    .filter((call) => String(call[1]?.method).toUpperCase() === method)
+    .map((call) => [String(call[0]), JSON.parse(String(call[1]?.body))]);
+
+function renderPlaybook() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <Playbook />
+    </QueryClientProvider>,
+  );
+}
+
+const setupsPanel = () => screen.getByRole("region", { name: "Setups" });
+const tagsPanel = () => screen.getByRole("region", { name: "Tags" });
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("Playbook", () => {
+  it("lists the setups with their strategy, description and trade count, archived ones on request", async () => {
+    stubApi();
+    renderPlaybook();
+    const orb = await screen.findByTestId("setup-orb");
+    expect(orb.textContent).toContain("ORB breakout");
+    expect(orb.textContent).toContain("Scalps");
+    expect(orb.textContent).toContain("Break of the opening range");
+    expect(orb.textContent).toContain("3");
+    expect(screen.getByTestId("setup-crush").textContent).toContain("Iron flies");
+    expect(screen.queryByTestId("setup-old")).toBeNull();
+    fireEvent.click(within(setupsPanel()).getByLabelText("Show archived"));
+    expect(screen.getByTestId("setup-old").textContent).toContain("Both");
+  });
+
+  it("adds a setup from + New setup", async () => {
+    const fetchMock = stubApi();
+    renderPlaybook();
+    fireEvent.click(await screen.findByRole("button", { name: "+ New setup" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Setup name" }), {
+      target: { value: "Gap and go" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Strategy" }), { target: { value: "" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Setup name" }), { key: "Enter" });
+    await waitFor(() =>
+      expect(sent(fetchMock, "POST")).toEqual([
+        [expect.stringContaining("/api/setups"), { name: "Gap and go", strategy: null, description: null }],
+      ]),
+    );
+  });
+
+  it("edits a setup inline: Enter saves, Esc gives up", async () => {
+    const fetchMock = stubApi();
+    renderPlaybook();
+    fireEvent.click(within(await screen.findByTestId("setup-orb")).getByRole("button", { name: "Edit" }));
+    const name = screen.getByRole("textbox", { name: "Setup name" }) as HTMLInputElement;
+    expect(name.value).toBe("ORB breakout");
+    fireEvent.change(name, { target: { value: "Opening range break" } });
+    fireEvent.keyDown(name, { key: "Escape" });
+    expect(screen.queryByRole("textbox", { name: "Setup name" })).toBeNull();
+    expect(sent(fetchMock, "PATCH")).toEqual([]);
+    fireEvent.click(within(screen.getByTestId("setup-orb")).getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
+      target: { value: "First 5 minutes" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Description" }), { key: "Enter" });
+    await waitFor(() =>
+      expect(sent(fetchMock, "PATCH")).toEqual([
+        [
+          expect.stringContaining("/api/setups/orb"),
+          { name: "ORB breakout", strategy: "scalp", description: "First 5 minutes" },
+        ],
+      ]),
+    );
+  });
+
+  it("archives and restores a setup", async () => {
+    const fetchMock = stubApi();
+    renderPlaybook();
+    fireEvent.click(within(await screen.findByTestId("setup-orb")).getByRole("button", { name: "Archive" }));
+    fireEvent.click(within(setupsPanel()).getByLabelText("Show archived"));
+    fireEvent.click(within(screen.getByTestId("setup-old")).getByRole("button", { name: "Restore" }));
+    await waitFor(() =>
+      expect(sent(fetchMock, "PATCH")).toEqual([
+        [expect.stringContaining("/api/setups/orb"), { archived: true }],
+        [expect.stringContaining("/api/setups/old"), { archived: false }],
+      ]),
+    );
+  });
+
+  it("shows why a name was refused beside the row, keeping the draft", async () => {
+    stubApi("A setup with that name exists");
+    renderPlaybook();
+    fireEvent.click(await screen.findByRole("button", { name: "+ New setup" }));
+    const name = screen.getByRole("textbox", { name: "Setup name" }) as HTMLInputElement;
+    fireEvent.change(name, { target: { value: "orb breakout" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+    expect(await screen.findByText("A setup with that name exists")).toBeTruthy();
+    expect(name.value).toBe("orb breakout");
+  });
+
+  it("lists mistakes and emotions side by side, and adds, renames and archives a tag", async () => {
+    const fetchMock = stubApi();
+    renderPlaybook();
+    const mistakes = await screen.findByRole("list", { name: "Mistakes" });
+    await waitFor(() => expect(mistakes.textContent).toContain("FOMO entry"));
+    expect(mistakes.textContent).toContain("4");
+    const emotions = screen.getByRole("list", { name: "Emotions" });
+    expect(emotions.textContent).toContain("Calm");
+    expect(emotions.textContent).not.toContain("Bored");
+    fireEvent.click(within(tagsPanel()).getByLabelText("Show archived"));
+    expect(screen.getByRole("list", { name: "Emotions" }).textContent).toContain("Bored");
+
+    fireEvent.click(within(tagsPanel()).getAllByRole("button", { name: "+ New" })[0] as HTMLElement);
+    const added = screen.getByRole("textbox", { name: "New mistake tag" });
+    fireEvent.change(added, { target: { value: "Chased" } });
+    fireEvent.keyDown(added, { key: "Enter" });
+    await waitFor(() =>
+      expect(sent(fetchMock, "POST")).toEqual([
+        [expect.stringContaining("/api/tags"), { name: "Chased", kind: "mistake" }],
+      ]),
+    );
+
+    const fomo = within(mistakes).getByText("FOMO entry").closest("li") as HTMLElement;
+    fireEvent.click(within(fomo).getByRole("button", { name: "Rename" }));
+    const renamed = screen.getByRole("textbox", { name: "Rename FOMO entry" });
+    fireEvent.change(renamed, { target: { value: "FOMO" } });
+    fireEvent.keyDown(renamed, { key: "Enter" });
+    await waitFor(() => expect(sent(fetchMock, "PATCH")).toHaveLength(1));
+    fireEvent.click(within(fomo).getByRole("button", { name: "Archive" }));
+    await waitFor(() =>
+      expect(sent(fetchMock, "PATCH")).toEqual([
+        [expect.stringContaining("/api/tags/fomo"), { name: "FOMO" }],
+        [expect.stringContaining("/api/tags/fomo"), { archived: true }],
+      ]),
+    );
+  });
+});
