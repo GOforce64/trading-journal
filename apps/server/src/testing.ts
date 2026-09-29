@@ -19,6 +19,7 @@ export function fakeSources(overrides: Partial<MarketSources> = {}): MarketSourc
     chains: { listed: async () => [] },
     companies: { name: async () => null },
     bars: { priceAt: async () => null, closeOn: async () => null },
+    history: { minuteBars: async () => [], dailyBars: async () => [] },
     ...overrides,
   };
 }
