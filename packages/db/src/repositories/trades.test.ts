@@ -341,3 +341,89 @@ describe("stock prices for the move data", () => {
     expect(repo().missingPrices([])).toEqual([]);
   });
 });
+
+describe("facts the user edited", () => {
+  // As a sync stores them: to the second.
+  const OPEN = Date.UTC(2026, 8, 9, 19, 54, 37);
+  const CLOSE = Date.UTC(2026, 8, 10, 19, 44, 12);
+  const minute = (at: number) => Math.floor(at / 60_000) * 60_000;
+  const details = sampleFly.ironFly as IronFlyDetailsInput;
+  let db: Db;
+  let clock = 1_000;
+  const repo = () => createTradesRepo(db, () => clock);
+
+  beforeEach(() => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-repo-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    db = openDatabase(file);
+    clock = 1_000;
+  });
+
+  const created = () => repo().create({ ...sampleFly, openedAt: OPEN, closedAt: CLOSE }).id;
+  const factsEditedAt = (id: string) => repo().get(id)?.factsEditedAt;
+
+  it("marks a trade whose leg the user changed", () => {
+    const id = created();
+    clock = 2_000;
+    const legs = (sampleFly.legs ?? []).map((leg, index) =>
+      index === 0 ? { ...leg, closePrice: 0.9 } : leg,
+    );
+    repo().update(id, { legs });
+    expect(factsEditedAt(id)).toBe(2_000);
+  });
+
+  it("doesn't mark it for notes, exclude or a move override", () => {
+    const id = created();
+    repo().update(id, { notes: "held too long", excluded: true });
+    repo().update(id, { ironFly: { ...details, impliedMovePct: 7.3 } });
+    expect(factsEditedAt(id)).toBeNull();
+  });
+
+  it("doesn't mark it for a form save that sends the same facts back, with the seconds dropped", () => {
+    const id = created();
+    const stored = repo().get(id);
+    if (!stored) throw new Error("missing");
+    repo().update(id, {
+      strategy: "iron_fly",
+      book: stored.book as "live",
+      underlying: stored.underlying,
+      structureLabel: stored.structureLabel,
+      openedAt: minute(OPEN),
+      closedAt: minute(CLOSE),
+      netPnl: stored.netPnl,
+      fees: stored.fees,
+      feesOpen: stored.feesOpen,
+      feesClose: stored.feesClose,
+      // The form sends every leg, in its own order.
+      legs: [...stored.legs].reverse().map((leg) => ({
+        right: leg.right as "C" | "P",
+        strike: leg.strike,
+        expiry: leg.expiry,
+        quantity: leg.quantity,
+        multiplier: leg.multiplier,
+        openPrice: leg.openPrice,
+        closePrice: leg.closePrice,
+      })),
+      ironFly: { ...details, impliedMovePct: 6.8 },
+    });
+    expect(factsEditedAt(id)).toBeNull();
+  });
+
+  it("marks it when a time moves to another minute, or the P&L changes", () => {
+    const first = created();
+    repo().update(first, { closedAt: CLOSE + 60_000 });
+    expect(factsEditedAt(first)).toBeTypeOf("number");
+    const second = created();
+    repo().update(second, { netPnl: 400 });
+    expect(factsEditedAt(second)).toBeTypeOf("number");
+  });
+
+  it("clears the mark on an IBKR trade, and refuses any other", () => {
+    const id = repo().create({ ...sampleFly, source: "ibkr_flex" }).id;
+    repo().update(id, { netPnl: 400 });
+    expect(repo().clearFactsEdited(id)).toBe(true);
+    expect(factsEditedAt(id)).toBeNull();
+    const typed = created();
+    expect(repo().clearFactsEdited(typed)).toBe(false);
+  });
+});

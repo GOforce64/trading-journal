@@ -22,6 +22,13 @@
       "when": 1790632924102,
       "tag": "0002_underlying_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790642635386,
+      "tag": "0003_ibkr_sync",
+      "breakpoints": true
     }
   ]
 }

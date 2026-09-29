@@ -56,6 +56,8 @@ export const trades = sqliteTable(
     importBatchId: text("import_batch_id"),
     /** Last edit made by a person; null when only ever written by an importer or sync. */
     editedAt: integer("edited_at"),
+    /** The user changed a broker fact on this trade, so the sync stops writing it (spec §5.3). */
+    factsEditedAt: integer("facts_edited_at"),
     ...syncColumns,
   },
   (table) => [
@@ -136,3 +138,64 @@ export const tradeTags = sqliteTable(
   },
   (table) => [uniqueIndex("trade_tags_pk").on(table.tradeId, table.tagId)],
 );
+
+/** One IBKR execution, expiry, exercise or assignment: a fact only the sync writes (spec §5.1). */
+export const fills = sqliteTable(
+  "fills",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    /** The execution id, or `trade-{tradeID}` for a booking without one. */
+    brokerExecKey: text("broker_exec_key").notNull(),
+    brokerTradeId: text("broker_trade_id").notNull(),
+    brokerOrderId: text("broker_order_id"),
+    conid: text("conid").notNull(),
+    underlying: text("underlying").notNull(),
+    /** 'C' | 'P' */
+    right: text("right").notNull(),
+    strike: real("strike").notNull(),
+    /** YYYY-MM-DD */
+    expiry: text("expiry").notNull(),
+    multiplier: integer("multiplier").notNull(),
+    /** YYYY-MM-DD, New York */
+    tradeDate: text("trade_date").notNull(),
+    executedAt: integer("executed_at").notNull(),
+    /** Signed: + bought, − sold. */
+    quantity: integer("quantity").notNull(),
+    price: real("price").notNull(),
+    /** Positive dollars. */
+    commission: real("commission").notNull(),
+    /** 'O' | 'C' */
+    openClose: text("open_close"),
+    /** 'trade' | 'expiration' | 'exercise' | 'assignment' */
+    kind: text("kind").notNull(),
+    /** 'confirm' | 'activity': the statement that last wrote the row. */
+    origin: text("origin").notNull(),
+    canceled: integer("canceled", { mode: "boolean" }).notNull().default(false),
+    tradeId: text("trade_id").references(() => trades.id),
+    legId: text("leg_id"),
+    /** The source row as JSON, for audit. */
+    raw: text("raw").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("fills_account_time_idx").on(table.accountId, table.executedAt),
+    index("fills_trade_idx").on(table.tradeId),
+  ],
+);
+
+/** The last sync run of a source. Keyed by source: a run can fail before any account is known. */
+export const syncState = sqliteTable("sync_state", {
+  /** 'ibkr' */
+  source: text("source").primaryKey(),
+  accountId: text("account_id").references(() => accounts.id),
+  lastRunAt: integer("last_run_at").notNull(),
+  /** 'ok' | 'error' */
+  lastStatus: text("last_status").notNull(),
+  lastError: text("last_error"),
+  /** The run's summary, as JSON. */
+  lastSummary: text("last_summary"),
+});
