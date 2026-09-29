@@ -264,4 +264,65 @@ describe("EditTrade", () => {
     expect(body.closedAt).toBe(Date.UTC(2026, 8, 25, 20, 0));
     expect(body.netPnl).toBe(433);
   });
+
+  it("edits a scalp in the scalp form, and says a synced trade's edits are kept", async () => {
+    const scalp = {
+      ...trade,
+      strategy: "scalp",
+      underlying: "NVDA",
+      source: "ibkr_flex",
+      structureLabel: "Long call",
+      ironFly: null,
+      fees: 2.26,
+      feesOpen: 0.93,
+      feesClose: 1.33,
+      legs: [
+        {
+          id: "s1",
+          right: "C",
+          strike: 232.5,
+          expiry: "2026-09-28",
+          quantity: 2,
+          multiplier: 100,
+          openPrice: 1.06,
+          closePrice: 1.295,
+        },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(scalp), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    expect(
+      await screen.findByText(
+        "Synced from IBKR. Changes you make here are kept: later syncs won't overwrite them.",
+      ),
+    ).toBeTruthy();
+    expect((screen.getByLabelText("Strike") as HTMLInputElement).value).toBe("232.5");
+    fireEvent.change(screen.getByLabelText("Exit price"), { target: { value: "1.40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
+    expect(JSON.parse(String(patch?.[1]?.body)).legs[0]).toMatchObject({ closePrice: 1.4, quantity: 2 });
+  });
+
+  it("says a synced fly's edits are kept too", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ ...trade, source: "ibkr_flex" }), {
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    setup();
+    expect(
+      await screen.findByText(
+        "Synced from IBKR. Changes you make here are kept: later syncs won't overwrite them.",
+      ),
+    ).toBeTruthy();
+  });
 });
