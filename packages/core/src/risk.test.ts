@@ -169,6 +169,25 @@ describe("scalpRisk", () => {
     expect(risk?.rewardRisk).toBeCloseTo(3.07, 2);
   });
 
+  it("still counts the runner when nothing can be priced, at the farthest target by reach", () => {
+    // No stock price yet: no reward, but the untrimmed contract is still a runner, at T2 (234.50).
+    const unpricedRisk = scalpRisk(nvda({ legs: [leg({ quantity: 3 })], scalpPrices: null }));
+    expect(unpricedRisk).toMatchObject({ plannedReward: null, runner: { contracts: 1, atTarget: 2 } });
+    // Every target on the wrong side (below a call's entry): the same.
+    const below = scalpRisk(
+      nvda(
+        { legs: [leg({ quantity: 3 })] },
+        {
+          targets: [
+            { price: 229, contracts: 1 },
+            { price: 228, contracts: 1 },
+          ],
+        },
+      ),
+    );
+    expect(below).toMatchObject({ plannedReward: null, runner: { contracts: 1, atTarget: 1 } });
+  });
+
   it("puts the runner at the farthest target whatever the list's order, as while a line is dragged", () => {
     const risk = scalpRisk(
       nvda(

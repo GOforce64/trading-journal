@@ -244,11 +244,12 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
   // Targets trim only the contracts held, nearest first: a size edit can leave the saved ones trimming more (§8).
   const trimmed = new Array<number>(levels.length).fill(0);
   let left = leg.quantity;
-  for (const { index } of sortTargets(
+  const reach = sortTargets(
     levels.map((target, index) => ({ price: target.price, index })),
     basis,
     right,
-  )) {
+  );
+  for (const { index } of reach) {
     const contracts = Math.min(levels[index]?.contracts ?? 0, left);
     trimmed[index] = contracts;
     left -= contracts;
@@ -270,6 +271,10 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
       runner = { contracts: left, atTarget: last.index + 1 };
     }
     plannedReward = round2(reward);
+  } else if (left > 0 && reach.length > 0) {
+    // Nothing prices (no stock price yet, or every target on the wrong side), but the untrimmed contracts are still
+    // a runner, at the farthest target in reach order.
+    runner = { contracts: left, atTarget: (reach.at(-1)?.index ?? 0) + 1 };
   }
 
   const high = trade.scalpPrices?.holdHigh ?? null;
