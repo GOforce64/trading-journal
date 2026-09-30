@@ -94,6 +94,12 @@ describe("holdRange", () => {
     expect(holdRange(BARS.slice(0, 3), OPENED, CLOSED)).toBeNull();
   });
 
+  it("takes what a finished day has, when no bar reaches the exit minute", () => {
+    // A thin name after hours: no trade at or after the exit minute, ever. The day is complete, so the range stands.
+    expect(holdRange(BARS.slice(0, 3), OPENED, CLOSED, true)).toEqual({ high: 233.21, low: 230.71 });
+    expect(holdRange([], OPENED, CLOSED, true)).toBeNull();
+  });
+
   it("takes an exit minute without trades once a later bar shows it has passed", () => {
     expect(holdRange([ENTRY_BAR, bar(590, 232, 232.5, 231.9, 232)], OPENED, CLOSED)).toEqual({
       high: 232.11,

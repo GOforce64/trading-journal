@@ -200,6 +200,14 @@ describe("POST /api/risk/fill", () => {
     });
   });
 
+  it("takes a finished day's range even when no trade reaches the exit minute", async () => {
+    // A thin name: nothing trades at or after 09:46 on Sep 28, and the day is long over.
+    const app = setup({ minuteBars: async () => SEP_28.slice(0, 3) });
+    const id = await app.create();
+    expect((await app.fill([id])).body).toEqual({ filled: 1, missing: [], unavailable: null });
+    expect((await app.trade(id)).scalpPrices).toMatchObject({ holdHigh: 233.21, holdLow: 230.71 });
+  });
+
   it("answers no_key without a key", async () => {
     const app = setup(null);
     const id = await app.create();

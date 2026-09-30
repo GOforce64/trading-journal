@@ -31,9 +31,15 @@ export interface HoldRange {
 
 /**
  * The stock's highest high and lowest low from `from`'s minute through `to`'s (spec §7). Null until the bars reach
- * `to`'s minute: a range cut short by minutes not yet published would understate MAE and MFE.
+ * `to`'s minute: a range cut short by minutes not yet published would understate MAE and MFE. `complete` says the
+ * bars are a finished day's, all there will ever be, so a thin name with no trade at or after the exit still gets one.
  */
-export function holdRange(bars: readonly PriceBar[], from: number, to: number): HoldRange | null {
+export function holdRange(
+  bars: readonly PriceBar[],
+  from: number,
+  to: number,
+  complete = false,
+): HoldRange | null {
   const first = Math.floor(from / MINUTE) * MINUTE;
   const last = Math.floor(to / MINUTE) * MINUTE;
   let range: HoldRange | null = null;
@@ -45,7 +51,7 @@ export function holdRange(bars: readonly PriceBar[], from: number, to: number): 
       ? { high: Math.max(range.high, bar.h), low: Math.min(range.low, bar.l) }
       : { high: bar.h, low: bar.l };
   }
-  return reached ? range : null;
+  return reached || complete ? range : null;
 }
 
 /** Targets in the order the trade reaches them (spec §6.4): falling prices for a put on stock, rising otherwise. */

@@ -83,8 +83,11 @@ export function createScalpPriceFiller({
       const entryBar = answer.bars.find((each) => each.t === minuteOf(gap.openedAt));
       const entryPrice = entryBar ? stockAt(entryBar, gap.openedAt) : null;
       const closeOut = gap.closedAt != null && published(gap.closedAt);
+      // Once the close is published and the answer isn't cut short, these are all the bars there will be.
       const range =
-        gap.closedAt != null && closeOut ? holdRange(answer.bars, gap.openedAt, gap.closedAt) : null;
+        gap.closedAt != null && closeOut
+          ? holdRange(answer.bars, gap.openedAt, gap.closedAt, !answer.partial)
+          : null;
       if (!unchanged(gap)) continue;
 
       if (entryPrice != null || range != null) {
