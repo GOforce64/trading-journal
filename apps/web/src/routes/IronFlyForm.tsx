@@ -350,6 +350,8 @@ export function IronFlyForm({
       <input
         aria-label={label}
         type={type}
+        // Times to the second, as a synced fly's fills have them.
+        step={type === "datetime-local" ? 1 : undefined}
         value={value}
         placeholder={placeholder}
         onChange={onChange}

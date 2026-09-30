@@ -8,14 +8,18 @@ import { settleProposal } from "../settle.js";
 import { IronFlyForm, type IronFlyFormValues, type LegFields, type OverrideKey } from "./IronFlyForm.js";
 import { ScalpForm, type ScalpFormValues } from "./ScalpForm.js";
 
-/** datetime-local wants local wall-clock text, not an ISO instant. */
+/**
+ * datetime-local wants local wall-clock text, not an ISO instant. Seconds are kept when there are any: a synced
+ * scalp's fill at 09:31:05 prices R from 5 s into its minute, and a save must not move it to 09:31:00.
+ */
 function toLocalInput(epochMs: number | null): string {
   if (epochMs == null) return "";
   const date = new Date(epochMs);
   const pad = (value: number) => String(value).padStart(2, "0");
+  const seconds = date.getSeconds() === 0 ? "" : `:${pad(date.getSeconds())}`;
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
     date.getMinutes(),
-  )}`;
+  )}${seconds}`;
 }
 
 const asText = (value: number | null | undefined): string => (value == null ? "" : String(value));

@@ -145,7 +145,15 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   const input = (label: string, key: keyof ScalpFormValues, type = "text") => (
     <label className={FIELD}>
       {label}
-      <input aria-label={label} type={type} value={values[key]} onChange={set(key)} className={INPUT} />
+      <input
+        aria-label={label}
+        type={type}
+        // Times to the second, as a synced fill has them.
+        step={type === "datetime-local" ? 1 : undefined}
+        value={values[key]}
+        onChange={set(key)}
+        className={INPUT}
+      />
     </label>
   );
 

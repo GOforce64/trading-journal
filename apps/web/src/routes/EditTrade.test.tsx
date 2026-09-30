@@ -308,6 +308,37 @@ describe("EditTrade", () => {
     expect(JSON.parse(String(patch?.[1]?.body)).legs[0]).toMatchObject({ closePrice: 1.4, quantity: 2 });
   });
 
+  it("keeps a synced scalp's seconds when saving an edit", async () => {
+    // A fill at 09:31:05 prices R from 5 s into its minute bar; saving must not move it to 09:31:00.
+    const opened = Date.UTC(2026, 8, 28, 13, 31, 5);
+    const closed = Date.UTC(2026, 8, 28, 13, 46, 12);
+    const scalp = {
+      ...trade,
+      strategy: "scalp",
+      underlying: "NVDA",
+      structureLabel: "Long call",
+      openedAt: opened,
+      closedAt: closed,
+      ironFly: null,
+      legs: [
+        { ...trade.legs[0], right: "C", strike: 232.5, quantity: 2, openPrice: 1.06, closePrice: 1.295 },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(scalp), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    const openedField = (await screen.findByLabelText("Opened")) as HTMLInputElement;
+    expect(openedField.step).toBe("1");
+    fireEvent.change(screen.getByLabelText("Exit price"), { target: { value: "1.40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
+    expect(JSON.parse(String(patch?.[1]?.body))).toMatchObject({ openedAt: opened, closedAt: closed });
+  });
+
   it("says a synced fly's edits are kept too", async () => {
     vi.stubGlobal(
       "fetch",
