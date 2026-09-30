@@ -287,7 +287,7 @@ The Scalps nav item shows the pending count, "Scalps 5", while it's above zero.
 - Two lists side by side, **Mistakes** and **Emotions**, each with inline rename, archive and **+ New**.
 - **Show archived** works as it does for setups.
 
-The seeded placeholders are ordinary rows, renamed or archived like any other. Per-setup stat cards come with R.
+The seeded placeholders are ordinary rows, renamed or archived like any other. Per-setup stat cards sit above the Setups table, built in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-analytics-design.md).
 
 ---
 

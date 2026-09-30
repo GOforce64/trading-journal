@@ -1,5 +1,7 @@
 import { Fragment, type KeyboardEvent, useState } from "react";
+import { useAllTrades } from "../analytics/data.js";
 import { Section } from "../analytics/Section.js";
+import { SetupCards } from "../analytics/SetupCards.js";
 import {
   useCreateSetup,
   useCreateTag,
@@ -9,6 +11,8 @@ import {
   useUpdateTag,
 } from "../review/data.js";
 import { INPUT, NameField } from "../review/Pickers.js";
+import { useBackfillPrices } from "../review/prices.js";
+import { strategyLabel } from "../review/text.js";
 
 type Strategy = "scalp" | "iron_fly" | null;
 const STRATEGIES: { value: Strategy; label: string }[] = [
@@ -16,8 +20,6 @@ const STRATEGIES: { value: Strategy; label: string }[] = [
   { value: "iron_fly", label: "Iron flies" },
   { value: null, label: "Both" },
 ];
-const strategyLabel = (value: string | null) =>
-  STRATEGIES.find((each) => each.value === value)?.label ?? "Both";
 const BUTTON = "rounded-sm border border-line px-2 py-0.5 text-muted hover:border-accent hover:text-fg";
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -27,11 +29,22 @@ interface Draft {
   description: string;
 }
 
-/** Setups and tags (scalp-review spec §10). The per-setup stat cards come with R. */
-export function Playbook() {
+export interface PlaybookProps {
+  /** Opens Analytics filtered to a setup, on its tab. */
+  onOpenSetup?: (setupId: string, tab: "scalps" | "flies") => void;
+}
+
+/** Each setup's stats (scalp-analytics spec §7), then setups and tags to manage (scalp-review spec §10). */
+export function Playbook({ onOpenSetup }: PlaybookProps) {
+  // Shared by the cards and the Setups table.
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: trades } = useAllTrades();
+  const { data: setups = [] } = useSetups();
+  useBackfillPrices(trades);
   return (
     <div className="flex flex-col gap-3">
-      <SetupsPanel />
+      <SetupCards trades={trades} setups={setups} showArchived={showArchived} onOpenSetup={onOpenSetup} />
+      <SetupsPanel showArchived={showArchived} onShowArchived={setShowArchived} />
       <TagsPanel />
     </div>
   );
@@ -46,11 +59,16 @@ function ShowArchived({ checked, onChange }: { checked: boolean; onChange: (chec
   );
 }
 
-function SetupsPanel() {
+function SetupsPanel({
+  showArchived,
+  onShowArchived,
+}: {
+  showArchived: boolean;
+  onShowArchived: (checked: boolean) => void;
+}) {
   const { data: setups = [], isLoading } = useSetups();
   const create = useCreateSetup();
   const update = useUpdateSetup();
-  const [showArchived, setShowArchived] = useState(false);
   // The row being edited: a setup's id, "new" for + New setup, or none.
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({ name: "", strategy: "scalp", description: "" });
@@ -134,7 +152,7 @@ function SetupsPanel() {
       title="Setups"
       right={
         <span className="flex items-center gap-3">
-          <ShowArchived checked={showArchived} onChange={setShowArchived} />
+          <ShowArchived checked={showArchived} onChange={onShowArchived} />
           <button
             type="button"
             onClick={() => edit("new", { name: "", strategy: "scalp", description: "" })}

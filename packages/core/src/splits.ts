@@ -24,23 +24,39 @@ function row(label: string, trades: readonly ClosedTrade[]): SplitRow {
   };
 }
 
-/** Rows for the labels trades get: in `order` first, then others as met, "unknown" last; empty buckets left out. */
-function group(
-  trades: readonly ClosedTrade[],
-  labelOf: (trade: ClosedTrade) => string,
+/**
+ * Trades by label: labels in `order` first, then others as met, "unknown" last; empty labels left out.
+ * A trade with several labels counts under each of them once.
+ */
+export function groupTrades<T>(
+  trades: readonly T[],
+  labelsOf: (trade: T) => string | readonly string[],
   order: readonly string[] = [],
-): SplitRow[] {
-  const groups = new Map<string, ClosedTrade[]>();
+): [string, T[]][] {
+  const groups = new Map<string, T[]>();
   for (const trade of trades) {
-    const label = labelOf(trade);
-    groups.set(label, [...(groups.get(label) ?? []), trade]);
+    const labels = labelsOf(trade);
+    for (const label of new Set(typeof labels === "string" ? [labels] : labels)) {
+      const members = groups.get(label);
+      if (members) members.push(trade);
+      else groups.set(label, [trade]);
+    }
   }
   const labels = [
     ...order.filter((label) => label !== UNKNOWN && groups.has(label)),
     ...[...groups.keys()].filter((label) => !order.includes(label) && label !== UNKNOWN),
   ];
   if (groups.has(UNKNOWN)) labels.push(UNKNOWN);
-  return labels.map((label) => row(label, groups.get(label) ?? []));
+  return labels.map((label) => [label, groups.get(label) ?? []]);
+}
+
+/** Rows for the labels trades get, in `groupTrades`' order. */
+function group(
+  trades: readonly ClosedTrade[],
+  labelOf: (trade: ClosedTrade) => string,
+  order: readonly string[] = [],
+): SplitRow[] {
+  return groupTrades(trades, labelOf, order).map(([label, members]) => row(label, members));
 }
 
 export type EdgeKind = "usd" | "contracts";
@@ -165,16 +181,25 @@ export function monthSplit(trades: readonly ClosedTrade[]): SplitRow[] {
 
 const TICKER_ROWS = 10;
 
+/** Past 10 rows sorted best first: the best 5, one row for the rest (`others` builds it), and the worst 5. */
+export function foldMiddle<R extends { label: string }>(
+  rows: readonly R[],
+  others: (labels: ReadonlySet<string>) => R,
+): R[] {
+  if (rows.length <= TICKER_ROWS) return [...rows];
+  const middle = new Set(rows.slice(5, -5).map((split) => split.label));
+  return [...rows.slice(0, 5), others(middle), ...rows.slice(-5)];
+}
+
 /** Every ticker by net, best first. Past 10 tickers: the best 5, one row for the rest, and the worst 5. */
 export function tickerSplit(trades: readonly ClosedTrade[]): SplitRow[] {
   const rows = group(trades, (trade) => trade.underlying).sort((a, b) => b.net - a.net);
-  if (rows.length <= TICKER_ROWS) return rows;
-  const middle = new Set(rows.slice(5, -5).map((split) => split.label));
-  const others = row(
-    `${middle.size} others`,
-    trades.filter((trade) => middle.has(trade.underlying)),
+  return foldMiddle(rows, (middle) =>
+    row(
+      `${middle.size} others`,
+      trades.filter((trade) => middle.has(trade.underlying)),
+    ),
   );
-  return [...rows.slice(0, 5), others, ...rows.slice(-5)];
 }
 
 export function creditSplit(flies: readonly ClosedTrade[], edges: readonly number[]): SplitRow[] {

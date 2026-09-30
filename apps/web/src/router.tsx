@@ -147,7 +147,9 @@ const settingsRoute = createRoute({
 const playbookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/playbook",
-  component: () => <Playbook />,
+  component: () => (
+    <Playbook onOpenSetup={(setup, tab) => router.navigate({ to: "/analytics", search: { tab, setup } })} />
+  ),
 });
 
 /** Nav destinations whose features arrive in later plans; better than a dead link. */

@@ -19,6 +19,8 @@ export type Book = "live" | "paper";
 export interface TradeFilter {
   books: readonly Book[];
   ticker?: string;
+  /** A setup's id. */
+  setup?: string;
   /** YYYY-MM-DD, New York close date, inclusive. */
   from?: string;
   to?: string;
@@ -27,12 +29,19 @@ export interface TradeFilter {
 
 /** The trades a filter keeps. A date range applies to the New York close date, so it drops open trades. */
 export function filterTrades<
-  T extends { book: string; underlying: string; closedAt: number | null; excluded: boolean },
+  T extends {
+    book: string;
+    underlying: string;
+    setupId?: string | null;
+    closedAt: number | null;
+    excluded: boolean;
+  },
 >(trades: readonly T[], filter: TradeFilter): T[] {
   const books: readonly string[] = filter.books;
   return trades.filter((trade) => {
     if (!books.includes(trade.book)) return false;
     if (filter.ticker && trade.underlying !== filter.ticker) return false;
+    if (filter.setup && trade.setupId !== filter.setup) return false;
     if (trade.excluded && !filter.includeExcluded) return false;
     if (!filter.from && !filter.to) return true;
     if (trade.closedAt == null) return false;

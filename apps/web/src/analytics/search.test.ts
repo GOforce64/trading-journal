@@ -41,7 +41,7 @@ describe("parseAnalyticsSearch", () => {
   it("drops hand-edited or stale values instead of failing", () => {
     expect(
       parseAnalyticsSearch({
-        tab: "scalps",
+        tab: "missed",
         from: "2026-02-30",
         to: "yesterday",
         books: "missed",
@@ -49,8 +49,32 @@ describe("parseAnalyticsSearch", () => {
         excluded: "no",
         creditEdges: "abc",
         contractEdges: "1, 3",
+        setup: "orb breakout!",
+        by: "mistake",
+        metric: "avgR",
+        costEdges: "0",
       }),
     ).toEqual({});
+  });
+
+  it("keeps the Scalps tab's keys, leaving the defaults out", () => {
+    expect(
+      parseAnalyticsSearch({
+        tab: "scalps",
+        setup: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        by: "emotion",
+        metric: "r",
+        costEdges: "100,300",
+      }),
+    ).toEqual({
+      tab: "scalps",
+      setup: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      by: "emotion",
+      metric: "r",
+      costEdges: "100,300",
+    });
+    // By setup and by net P&L are the defaults, so they never reach the URL.
+    expect(parseAnalyticsSearch({ by: "setup", metric: "net" })).toEqual({});
   });
 
   it("keeps tickers written with a dash or a slash", () => {
@@ -69,9 +93,12 @@ describe("parseAnalyticsSearch", () => {
 describe("toFilter and applyPatch", () => {
   it("turns the search into a trade filter", () => {
     expect(toFilter({})).toEqual({ books: ["live", "paper"], includeExcluded: false });
-    expect(toFilter({ books: "paper", ticker: "M", excluded: true, from: "2026-09-01" })).toEqual({
+    expect(
+      toFilter({ books: "paper", ticker: "M", setup: "orb", excluded: true, from: "2026-09-01" }),
+    ).toEqual({
       books: ["paper"],
       ticker: "M",
+      setup: "orb",
       includeExcluded: true,
       from: "2026-09-01",
     });

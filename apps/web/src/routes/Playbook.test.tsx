@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Playbook } from "./Playbook.js";
+import { SCALP_ROWS } from "../analytics/scalps.fixture.js";
+import { tradeRow } from "../analytics/testing.js";
+import { Playbook, type PlaybookProps } from "./Playbook.js";
 
 const SETUPS = [
   {
@@ -31,11 +33,13 @@ const TAGS = [
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-/** Answers the lists; creations and changes succeed, or are refused with `refusal` (409). */
-function stubApi(refusal?: string) {
+/** Answers the lists and `trades`; creations and changes succeed, or are refused with `refusal` (409). */
+function stubApi(refusal?: string, trades: unknown[] = []) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = String(init?.method ?? "GET").toUpperCase();
+    if (url.includes("/api/trades")) return json(trades);
+    if (url.includes("/api/risk/fill")) return json({ filled: 0, missing: [], unavailable: null });
     if (method !== "GET") {
       if (refusal) return json({ error: "duplicate", message: refusal }, 409);
       return json({ id: "new", ...JSON.parse(String(init?.body)) }, method === "POST" ? 201 : 200);
@@ -51,13 +55,13 @@ const sent = (fetchMock: ReturnType<typeof stubApi>, method: string) =>
     .filter((call) => String(call[1]?.method).toUpperCase() === method)
     .map((call) => [String(call[0]), JSON.parse(String(call[1]?.body))]);
 
-function renderPlaybook() {
+function renderPlaybook(onOpenSetup?: PlaybookProps["onOpenSetup"]) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <Playbook />
+      <Playbook onOpenSetup={onOpenSetup} />
     </QueryClientProvider>,
   );
 }
@@ -181,6 +185,48 @@ describe("Playbook", () => {
       expect(sent(fetchMock, "PATCH")).toEqual([
         [expect.stringContaining("/api/tags/fomo"), { name: "FOMO" }],
         [expect.stringContaining("/api/tags/fomo"), { archived: true }],
+      ]),
+    );
+  });
+
+  it("shows a card per setup with trades above the table, archived ones on request", async () => {
+    const old = tradeRow({
+      id: "o1",
+      strategy: "scalp",
+      underlying: "AMD",
+      opened: "2026-09-21 09:40",
+      closed: "2026-09-21 09:45",
+      netPnl: 20,
+      setupId: "old",
+    });
+    stubApi(undefined, [...SCALP_ROWS, old]);
+    const onOpenSetup = vi.fn();
+    renderPlaybook(onOpenSetup);
+    const cards = await screen.findByRole("region", { name: "Setup stats · all time" });
+    await waitFor(() => expect(within(cards).getByRole("article", { name: "ORB breakout" })).toBeTruthy());
+    // VWAP reclaim isn't one of this page's setups, and Old setup is archived.
+    expect(within(cards).getAllByRole("article")).toHaveLength(1);
+    fireEvent.click(within(cards).getByRole("button", { name: "3 trades →" }));
+    expect(onOpenSetup).toHaveBeenCalledWith("orb", "scalps");
+    fireEvent.click(within(setupsPanel()).getByLabelText("Show archived"));
+    expect(within(cards).getByRole("article", { name: "Old setup" })).toBeTruthy();
+  });
+
+  it("fetches the stock prices the scalps lack, once", async () => {
+    const missing = tradeRow({
+      id: "m1",
+      strategy: "scalp",
+      underlying: "NVDA",
+      opened: "2026-09-21 09:40",
+      closed: "2026-09-21 09:45",
+      netPnl: 20,
+      scalpPrices: null,
+    });
+    const fetchMock = stubApi(undefined, [missing]);
+    renderPlaybook();
+    await waitFor(() =>
+      expect(sent(fetchMock, "POST")).toEqual([
+        [expect.stringContaining("/api/risk/fill"), { tradeIds: ["m1"] }],
       ]),
     );
   });

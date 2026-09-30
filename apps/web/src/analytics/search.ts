@@ -1,23 +1,33 @@
-import { addDays, parseEdges, WEEKDAYS, weekdayOfDate } from "@tj/core";
+import { addDays, BREAKDOWNS, type Breakdown, parseEdges, WEEKDAYS, weekdayOfDate } from "@tj/core";
 import type { Book, TradeFilter } from "./data.js";
 import { firstDay, lastDay, monthOf, shiftMonth } from "./dates.js";
 
 /** The Analytics page's URL state. Defaults are left out, so the URL stays short (spec §7.1). */
 export interface AnalyticsSearch {
-  tab?: "flies";
+  tab?: "scalps" | "flies";
   from?: string;
   to?: string;
   /** One book; absent means both. */
   books?: Book;
   ticker?: string;
+  /** A setup's id (scalp-analytics spec §5.2). */
+  setup?: string;
   excluded?: true;
+  /** The Scalps tab's breakdown; absent means by setup. */
+  by?: Exclude<Breakdown, "setup">;
+  /** What the Scalps tab's bars show; absent means net P&L. */
+  metric?: "r" | "win";
   creditEdges?: string;
   contractEdges?: string;
+  /** The Scalps tab's option-cost edges. */
+  costEdges?: string;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 /** A ticker such as M, BRK.B, BF-B or BRK/B. */
 const TICKER = /^[A-Z][A-Z0-9./-]{0,9}$/;
+/** A setup id: a UUID, or a seeded id like "orb". */
+const SETUP_ID = /^[A-Za-z0-9-]{1,64}$/;
 
 /** The router parses plain values as JSON, so "250" may arrive as a number. */
 const text = (value: unknown) =>
@@ -33,7 +43,7 @@ function isDate(value: string | undefined): value is string {
 /** Keeps what's valid and drops the rest, so an old or hand-edited link still opens. */
 export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSearch {
   const search: AnalyticsSearch = {};
-  if (raw.tab === "flies") search.tab = "flies";
+  if (raw.tab === "scalps" || raw.tab === "flies") search.tab = raw.tab;
   const from = text(raw.from);
   if (isDate(from)) search.from = from;
   const to = text(raw.to);
@@ -41,11 +51,18 @@ export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSea
   if (raw.books === "live" || raw.books === "paper") search.books = raw.books;
   const ticker = text(raw.ticker)?.toUpperCase();
   if (ticker && TICKER.test(ticker)) search.ticker = ticker;
+  const setup = text(raw.setup);
+  if (setup && SETUP_ID.test(setup)) search.setup = setup;
   if (raw.excluded === true || raw.excluded === "true") search.excluded = true;
+  const by = BREAKDOWNS.find((each) => each === raw.by);
+  if (by && by !== "setup") search.by = by;
+  if (raw.metric === "r" || raw.metric === "win") search.metric = raw.metric;
   const creditEdges = text(raw.creditEdges);
   if (creditEdges && parseEdges(creditEdges, "usd")) search.creditEdges = creditEdges;
   const contractEdges = text(raw.contractEdges);
   if (contractEdges && parseEdges(contractEdges, "contracts")) search.contractEdges = contractEdges;
+  const costEdges = text(raw.costEdges);
+  if (costEdges && parseEdges(costEdges, "usd")) search.costEdges = costEdges;
   return search;
 }
 
@@ -55,6 +72,7 @@ export function toFilter(search: AnalyticsSearch): TradeFilter {
     includeExcluded: search.excluded === true,
   };
   if (search.ticker) filter.ticker = search.ticker;
+  if (search.setup) filter.setup = search.setup;
   if (search.from) filter.from = search.from;
   if (search.to) filter.to = search.to;
   return filter;

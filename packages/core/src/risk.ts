@@ -313,13 +313,19 @@ export interface ReturnTrade {
   legs: readonly { quantity: number; multiplier: number; openPrice: number }[];
 }
 
+/** The premium paid for a single long option: contracts × multiplier × entry premium. Null for anything else. */
+export function premiumPaid(trade: Pick<ReturnTrade, "strategy" | "legs">): number | null {
+  const leg = trade.legs.length === 1 ? trade.legs[0] : undefined;
+  if (trade.strategy !== "scalp" || !leg || leg.quantity <= 0) return null;
+  const cost = leg.quantity * leg.multiplier * leg.openPrice;
+  return cost > 0 ? cost : null;
+}
+
 /**
  * A scalp's net P&L over the premium paid, contracts × multiplier × entry premium: 0.211 is +21.1%.
  * Null for an open trade, a fly, or anything but a single long option.
  */
 export function returnOnCost(trade: ReturnTrade): number | null {
-  const leg = trade.legs.length === 1 ? trade.legs[0] : undefined;
-  if (trade.strategy !== "scalp" || trade.netPnl == null || !leg || leg.quantity <= 0) return null;
-  const cost = leg.quantity * leg.multiplier * leg.openPrice;
-  return cost > 0 ? trade.netPnl / cost : null;
+  const cost = premiumPaid(trade);
+  return trade.netPnl == null || cost == null ? null : trade.netPnl / cost;
 }
