@@ -115,7 +115,8 @@ describe("POST /api/ibkr/sync", () => {
     const app = setup();
     await app.sync();
     app.advance(10 * 60_000);
-    expect(await app.sync(true)).toMatchObject({ ran: false, added: 2 });
+    // The last run's counts, but nothing changed now: no trade ids for the page to fetch prices for again.
+    expect(await app.sync(true)).toMatchObject({ ran: false, added: 2, changedTradeIds: [] });
     expect(app.asked).toHaveLength(2);
     app.advance(6 * 60_000);
     expect((await app.sync(true)).ran).toBe(true);
