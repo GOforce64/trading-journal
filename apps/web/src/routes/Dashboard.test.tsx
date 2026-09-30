@@ -100,6 +100,33 @@ describe("Dashboard", () => {
     expect(onOpenTrade).toHaveBeenCalledWith("a");
   });
 
+  it("steps the calendar a month at a time with its own arrows, leaving the period alone", async () => {
+    stubTrades(TRADES);
+    const onSearch = vi.fn();
+    renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={onSearch} />);
+    expect(await screen.findByText("Calendar · Sep 2026")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+    expect(screen.getByText("Calendar · Oct 2026")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous month" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous month" }));
+    expect(screen.getByText("Calendar · Aug 2026")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^2026-08-20:/ })).toBeTruthy();
+    expect(onSearch).not.toHaveBeenCalled();
+  });
+
+  it("drops a selected day when the calendar moves to another month or the period changes", async () => {
+    stubTrades(TRADES);
+    const { rerender } = renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^2026-09-03:/ }));
+    expect(screen.getByRole("list", { name: "Trades closed 2026-09-03" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+    expect(screen.queryByRole("list", { name: "Trades closed 2026-09-03" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Previous month" }));
+    fireEvent.click(screen.getByRole("button", { name: /^2026-09-03:/ }));
+    rerender(<Dashboard search={{ period: "year", at: "2026-09-15" }} onSearch={() => {}} />);
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Trades closed 2026-09-03" })).toBeNull());
+  });
+
   it("shows every open trade, flagging one past its expiry", async () => {
     stubTrades(TRADES);
     renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} />);
