@@ -25,6 +25,8 @@ export const SESSION_END = 20 * 60;
 export const EMA_WARMUP = 3;
 /** The longest intraday range the server serves: a trade held a few weeks, plus its warm-up week. */
 export const MAX_BAR_DAYS = 45;
+/** Alpaca's free plan shares SIP prices 15 minutes after the fact; a minute more allows for clock drift. */
+export const ALPACA_DELAY_MS = 16 * 60_000;
 
 const HOUR = 3_600_000;
 const DAY_MS = 86_400_000;

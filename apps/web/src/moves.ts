@@ -5,16 +5,13 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { isTradingDay, nyDate, sessionMoment } from "@tj/core";
+import { ALPACA_DELAY_MS, isTradingDay, nyDate, sessionMoment } from "@tj/core";
 import { api, type FillResult } from "./api.js";
 
 export type PriceSide = FillResult["missing"][number]["side"];
 export type MissingReason = FillResult["missing"][number]["reason"];
 
 export const FILL_KEY = ["fill-moves"];
-
-/** Alpaca's free plan shares SIP prices 15 minutes after the fact; the server waits a minute more. */
-const RECENT_MS = 16 * 60_000;
 
 export const MOVE_COPY = {
   noKey: "Add an Alpaca key in Settings to fetch stock prices.",
@@ -99,7 +96,7 @@ export function priceNote({ at, fetching, marketOn, lastReason: reason, now }: P
   if (fetching) return MOVE_COPY.fetching;
   const moment = sessionMoment(at);
   if (!isTradingDay(nyDate(moment))) return MOVE_COPY.no_session;
-  if (moment > now - RECENT_MS) return MOVE_COPY.too_recent;
+  if (moment > now - ALPACA_DELAY_MS) return MOVE_COPY.too_recent;
   if (!marketOn) return MOVE_COPY.noKey;
   return reason ? MOVE_COPY[reason] : MOVE_COPY.notFetched;
 }

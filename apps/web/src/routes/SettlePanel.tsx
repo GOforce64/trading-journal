@@ -1,12 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type LegInput, settleExpiry } from "@tj/core";
 import { api, type TradeView } from "../api.js";
-import { Money, Panel } from "../components/ui.js";
+import { Money, Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
 import { netWorking, settleProposal } from "../settle.js";
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const dayText = (date: string) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
     month: "short",

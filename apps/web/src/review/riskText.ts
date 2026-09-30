@@ -1,9 +1,9 @@
 import type { Excursion, ScalpRisk } from "@tj/core";
 import { rText } from "../analytics/format.js";
 import { signedUsd } from "../components/Estimate.js";
+import { usd } from "../components/ui.js";
 import { heldText } from "../routes/ScalpTiles.js";
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 /** Up to 4 decimals, trailing zeros dropped: 1.06, 1.295. */
 const premiumText = (value: number) => String(Number(value.toFixed(4)));
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

@@ -1,5 +1,5 @@
 import type { TradeFill } from "../api.js";
-import { Panel } from "../components/ui.js";
+import { Panel, usd } from "../components/ui.js";
 
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -15,7 +15,6 @@ function fillTime(at: number): string {
   const parts = Object.fromEntries(ET.formatToParts(new Date(at)).map((part) => [part.type, part.value]));
   return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const KIND_LABEL: Record<string, string> = {
   expiration: "expired",
   exercise: "exercised",

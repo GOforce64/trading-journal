@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type TradeView } from "../api.js";
+import { usd } from "../components/ui.js";
 import { useIbkrStatus } from "../ibkr.js";
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const ibkrNow = (netPnl: number | null) =>
   netPnl == null ? "IBKR has it still open." : `IBKR now has ${netPnl > 0 ? "+" : ""}${usd(netPnl)} net.`;
 

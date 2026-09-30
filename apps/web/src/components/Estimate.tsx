@@ -1,5 +1,5 @@
 import type { CloseEstimate } from "@tj/core";
-import { Chip } from "./ui.js";
+import { Chip, usd } from "./ui.js";
 
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -8,7 +8,6 @@ const ET = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
   minute: "2-digit",
 });
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Muted italics and no colour: an estimate must never look like a result. */
 export const ESTIMATE_STYLE = "num italic text-[#8a91a3]";

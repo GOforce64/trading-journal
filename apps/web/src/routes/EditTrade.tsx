@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type MoveValue, settleExpiry, tradeMoves } from "@tj/core";
 import { api, type TradeView } from "../api.js";
-import { Panel } from "../components/ui.js";
+import { Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
 import { settleProposal } from "../settle.js";
@@ -19,7 +19,6 @@ function toLocalInput(epochMs: number | null): string {
 }
 
 const asText = (value: number | null | undefined): string => (value == null ? "" : String(value));
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function legFields(legs: TradeView["legs"], right: "C" | "P", short: boolean): LegFields {
   const leg = legs.find((candidate) => candidate.right === right && candidate.quantity < 0 === short);

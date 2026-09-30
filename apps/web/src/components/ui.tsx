@@ -22,7 +22,8 @@ export function Panel({
   );
 }
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
+/** Dollars and cents: 104.05 → "$104.05", −3 → "-$3.00". */
+export const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Dollars, coloured by sign, always monospaced. */
 export function Money({ value, className = "" }: { value: number | null; className?: string }) {

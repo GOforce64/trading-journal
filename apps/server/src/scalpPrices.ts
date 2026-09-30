@@ -1,4 +1,4 @@
-import { holdRange, nyDate, stockAt } from "@tj/core";
+import { ALPACA_DELAY_MS, holdRange, nyDate, stockAt } from "@tj/core";
 import { createTradesRepo, type Db, type ScalpPriceGap } from "@tj/db";
 import { type BarAnswer, type BarService, BarsUnreachable } from "./bars.js";
 
@@ -15,8 +15,6 @@ export interface ScalpPriceFiller {
   fill(tradeIds?: readonly string[]): Promise<ScalpPriceResult>;
 }
 
-/** Alpaca's free plan shares SIP bars 15 minutes after the fact; a minute more allows for clock drift. */
-const RECENT_MS = 16 * 60_000;
 const MINUTE = 60_000;
 const minuteOf = (at: number) => Math.floor(at / MINUTE) * MINUTE;
 const sameMinute = (a: number | null, b: number | null) =>
@@ -48,7 +46,7 @@ export function createScalpPriceFiller({
   const repo = createTradesRepo(db, now);
   let queue: Promise<unknown> = Promise.resolve();
   // A minute's bar is out once the minute has closed and Alpaca's delay has passed.
-  const published = (at: number) => minuteOf(at) + MINUTE <= now() - RECENT_MS;
+  const published = (at: number) => minuteOf(at) + MINUTE <= now() - ALPACA_DELAY_MS;
 
   /** The user may have edited the trade while Alpaca answered; that edit deleted its prices, so these are dropped. */
   function unchanged(gap: ScalpPriceGap): boolean {

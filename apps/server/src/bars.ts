@@ -1,10 +1,8 @@
-import { addDays, nyClock, nyDate, nyWallClock, type PriceBar, SESSION_END } from "@tj/core";
+import { ALPACA_DELAY_MS, addDays, nyClock, nyDate, nyWallClock, type PriceBar, SESSION_END } from "@tj/core";
 import { type BarTimeframe, createBarsRepo, type Db } from "@tj/db";
 import { tooRecent } from "@tj/market-data";
 import type { MarketData } from "./marketData.js";
 
-/** Alpaca's free plan withholds the last 15 minutes; a minute more keeps clear of the edge. */
-const RECENT_MS = 16 * 60_000;
 /**
  * Three years of daily bars, about 750 trading days: EMA 167 draws from its 501st close, and the daily chart opens
  * on the last 126 (spec §6).
@@ -98,7 +96,7 @@ export function createBarService({
         if (sources && wantsToday) {
           const start = nyWallClock(today, 0);
           const close = nyWallClock(today, SESSION_END);
-          const end = Math.min(close, now() - RECENT_MS);
+          const end = Math.min(close, now() - ALPACA_DELAY_MS);
           partial = end < close;
           if (end > start) {
             todays = await sources.history.minuteBars(symbol, start, end).catch((error: unknown) => {

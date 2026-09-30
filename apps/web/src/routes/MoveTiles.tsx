@@ -1,7 +1,7 @@
 import { type MoveValue, sessionMoment, type TradeMoves, tradeMoves } from "@tj/core";
 import type { ReactNode } from "react";
 import type { TradeView } from "../api.js";
-import { Tile } from "../components/ui.js";
+import { Tile, usd } from "../components/ui.js";
 import {
   etMinute,
   ivPct,
@@ -14,8 +14,6 @@ import {
   useFillResults,
   useMarketOn,
 } from "../moves.js";
-
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 const IV_BLANK = {
   near_expiry: "left blank within 24 h of expiry",

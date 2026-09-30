@@ -10,7 +10,7 @@ import {
 } from "@tj/core";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ESTIMATE_STYLE, estimateTitle, signedUsd } from "../components/Estimate.js";
-import { Money, Panel } from "../components/ui.js";
+import { Money, Panel, usd } from "../components/ui.js";
 import {
   openContracts,
   TICKER,
@@ -95,7 +95,6 @@ const num = (value: string): number => (value.trim() === "" ? Number.NaN : Numbe
 const zeroIfBlank = (value: string): number => (Number.isNaN(num(value)) ? 0 : num(value));
 const nullIfBlank = (value: string): number | null => (Number.isNaN(num(value)) ? null : num(value));
 const millis = (value: string): number => (value ? new Date(value).getTime() : Number.NaN);
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 const isBlank = (fields: LegFields) => Object.values(fields).every((value) => value.trim() === "");
 

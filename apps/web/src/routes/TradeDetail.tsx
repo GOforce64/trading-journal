@@ -3,7 +3,7 @@ import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
-import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
+import { Chip, Money, Panel, Pct, Tile, usd } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
@@ -13,8 +13,6 @@ import { MoveTiles } from "./MoveTiles.js";
 import { ScalpTiles } from "./ScalpTiles.js";
 import { SettlePanel } from "./SettlePanel.js";
 import { SyncedBanner } from "./SyncedBanner.js";
-
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Cash paid (positive) or received (negative) to open a leg. */
 const legCost = (leg: { quantity: number; multiplier: number; openPrice: number }) =>
