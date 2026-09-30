@@ -3,7 +3,7 @@ import { closeEstimate, type OptionQuote, pctKept, returnOnCost, round2 } from "
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
-import { Chip, Money, Panel, Pct, Tile, usd } from "../components/ui.js";
+import { Chip, Money, Panel, Pct, premiumText, Tile, usd } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
@@ -223,8 +223,10 @@ export function TradeDetail({
                     <td>{leg.strike.toFixed(2)}</td>
                     <td>{leg.expiry.slice(5)}</td>
                     <td className="text-right">{leg.quantity}</td>
-                    <td className="text-right">{leg.openPrice.toFixed(2)}</td>
-                    <td className="text-right">{leg.closePrice?.toFixed(2) ?? "—"}</td>
+                    <td className="text-right">{premiumText(leg.openPrice)}</td>
+                    <td className="text-right">
+                      {leg.closePrice == null ? "—" : premiumText(leg.closePrice)}
+                    </td>
                     <td className="text-right">
                       <Money value={legCost(leg)} />
                     </td>

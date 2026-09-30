@@ -1,5 +1,5 @@
 import type { TradeFill } from "../api.js";
-import { Panel, usd } from "../components/ui.js";
+import { Panel, premiumText, usd } from "../components/ui.js";
 
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -54,7 +54,7 @@ export function FillsPanel({ fills }: { fills: TradeFill[] }) {
                 {fill.right}
               </td>
               <td className="text-right">{Math.abs(fill.quantity)}</td>
-              <td className="text-right">{fill.price.toFixed(2)}</td>
+              <td className="text-right">{premiumText(fill.price)}</td>
               <td className="text-right">{usd(fill.commission)}</td>
               <td className="pl-2 text-muted">
                 {fill.canceled ? "canceled" : (KIND_LABEL[fill.kind] ?? "")}

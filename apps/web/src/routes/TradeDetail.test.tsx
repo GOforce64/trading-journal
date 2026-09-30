@@ -700,6 +700,15 @@ describe("TradeDetail for a scalp", () => {
     expect(rows[3]?.textContent).toContain("1.15");
   });
 
+  it("shows fill and leg prices to their last digit, as 1.295, not 1.29", async () => {
+    stubSynced({ ...nvda, fills: [{ ...nvda.fills[0], id: "p", price: 1.295 }] });
+    renderDetail();
+    expect((await screen.findByTestId("fill-row-p")).textContent).toContain("1.295");
+    // The legs table's close price too, and a round premium still with two decimals.
+    expect(screen.getAllByText("1.295", { selector: "td" })).toHaveLength(2);
+    expect(screen.getAllByText("1.06", { selector: "td" }).length).toBeGreaterThan(0);
+  });
+
   it("labels expiries and canceled fills", async () => {
     stubSynced({
       ...nvda,
