@@ -190,6 +190,7 @@ core/chart: aggregate, ema, vwap, sessionLevels (pure, tested)
 | Weekends and holidays in the range | Fetched once, stored with `count = 0`, never fetched again. |
 | An EMA without enough history | Not drawn; its toggle says "needs more history". |
 | A split inside the warm-up days | The raw prices step, bending the EMAs for that trade. It's rare, and accepted. |
+| A split inside the daily chart's three years | The raw daily bars step at the split, and the daily EMAs across it are off until they catch up (EMA 167 takes months). Bars aren't split-adjusted, so they match the trade's own raw prices. A known limitation; see the README. |
 | A trade with no fills and no times | No markers; the opening view is the trade's first day, 09:30–10:30. |
 
 ---
