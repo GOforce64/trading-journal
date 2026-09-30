@@ -28,12 +28,15 @@ export function useFillScalpPrices() {
       if (!res.ok) throw new Error(`fetching the stock price failed: ${res.status}`);
       return res.json();
     },
-    // On the hook rather than on mutate, so it still runs after the page that asked has moved on.
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["trade"] }),
-        queryClient.invalidateQueries({ queryKey: ["trades"] }),
-      ]),
+    // On the hook rather than on mutate, so it still runs after the page that asked has moved on. A run that
+    // stored nothing (Alpaca's delay held every price back) changes no trade, so nothing refetches.
+    onSettled: (result) =>
+      result && result.filled === 0
+        ? undefined
+        : Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["trade"] }),
+            queryClient.invalidateQueries({ queryKey: ["trades"] }),
+          ]),
     gcTime: Number.POSITIVE_INFINITY,
   });
 }

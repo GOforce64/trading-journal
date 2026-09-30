@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -121,6 +121,33 @@ describe("useAutoFillPrices", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60_000);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("refetches the trades after a fill that stored something, not after one that stored nothing", async () => {
+    const fetchMock = stubFill((tradeIds) => ({
+      filled: 0,
+      missing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      unavailable: null,
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const listed = vi.fn(async () => []);
+    function Lists() {
+      useQuery({ queryKey: ["trades"], queryFn: listed });
+      return null;
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Lists />
+        <Page trade={scalp("t1")} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("note").textContent).toBe(
+        "Alpaca shares prices 15 minutes late: trying again in a minute.",
+      ),
+    );
+    expect(listed).toHaveBeenCalledTimes(1);
   });
 
   it("gives the reason Alpaca has no bar, or the server's own message", async () => {

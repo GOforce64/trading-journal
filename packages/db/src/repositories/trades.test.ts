@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { IronFlyDetailsInput, NewTrade } from "@tj/core";
 import { nyWallClock } from "@tj/core";
 import { asc } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { scalpTargets } from "../schema.js";
@@ -111,6 +111,19 @@ describe("trades repository", () => {
     const trades = repo();
     const ids = Array.from({ length: 6 }, () => trades.create({ ...sampleFly, openedAt: 3000 }).id);
     expect(trades.list().map((trade) => trade.id)).toEqual([...ids].sort().reverse());
+  });
+
+  it("reads a list's legs, details, levels, prices and tags a table at a time, not trade by trade", () => {
+    const trades = repo();
+    for (let index = 0; index < 20; index++) trades.create({ ...sampleFly, openedAt: 1000 + index });
+    // Drizzle keeps the better-sqlite3 handle on $client; every query prepares a statement there.
+    const client = (db as unknown as { $client: { prepare(sql: string): unknown } }).$client;
+    const prepare = vi.spyOn(client, "prepare");
+    const listed = trades.list();
+    expect(listed).toHaveLength(20);
+    expect(listed.every((trade) => trade.legs.length === 2 && trade.ironFly != null)).toBe(true);
+    expect(prepare.mock.calls.length).toBeLessThanOrEqual(8);
+    prepare.mockRestore();
   });
 
   it("hides excluded trades unless asked for them", () => {
