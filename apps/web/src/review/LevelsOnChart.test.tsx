@@ -135,7 +135,7 @@ describe("a level field and the chart together", () => {
     const field = await screen.findByRole("textbox", { name: "Stop" });
     act(() => field.focus());
     press(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230.5) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230.5), buttons: 1 });
     expect(stopField().value).toBe("230.50");
     fireEvent.mouseUp(window);
     await waitFor(() => expect(patches).toHaveLength(1));
@@ -209,7 +209,7 @@ describe("a level field and the chart together", () => {
     renderPage();
     await screen.findByRole("textbox", { name: "T1 price" });
     press(chart(), { clientX: 100, clientY: yOf(234.5), button: 0 });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(235.5) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(235.5), buttons: 1 });
     fireEvent.mouseUp(window);
     await waitFor(() =>
       expect(patches).toEqual([

@@ -156,6 +156,12 @@ export function IntradayChart({
     }
     function follow(event: MouseEvent) {
       if (!drag) return;
+      // No button held: the release happened where the window couldn't hear it (over another window), so the
+      // drag ends where the line last was.
+      if (event.buttons === 0) {
+        finish(true);
+        return;
+      }
       const price = priceAt(pointOf(event).y, toPrice);
       if (price == null) return;
       drag.price = price;
