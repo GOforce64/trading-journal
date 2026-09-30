@@ -18,3 +18,10 @@ export function dollars(value: number): string {
 /** A toggle in a row of toggles, like the Journal's book buttons. */
 export const segmentClass = (active: boolean) =>
   `rounded-[2px] border px-2 py-0.5 ${active ? "border-accent bg-[#2962ff1a] text-fg" : "border-line text-muted"}`;
+
+/** An R-multiple with its sign: "+0.43R", "−1.00R"; "0.00R" for a scratch (scalp-R spec §10). */
+export function rText(value: number): string {
+  const text = `${Math.abs(value).toFixed(2)}R`;
+  if (text === "0.00R") return text;
+  return `${value > 0 ? "+" : "−"}${text}`;
+}

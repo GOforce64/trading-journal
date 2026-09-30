@@ -2,6 +2,7 @@ import type { TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { LevelFields } from "./LevelFields.js";
 import { useLevels } from "./levels.js";
+import { useAutoFillPrices } from "./prices.js";
 import { QueueBar } from "./QueueBar.js";
 import { ReviewPanel } from "./ReviewPanel.js";
 
@@ -14,6 +15,7 @@ export function ScalpWorkspace({
   onOpenTrade?: (id: string) => void;
 }) {
   const levels = useLevels(trade);
+  useAutoFillPrices(trade);
   return (
     <>
       <QueueBar trade={trade} onOpenTrade={onOpenTrade} />

@@ -31,7 +31,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("useAutoSync", () => {
   it("asks the server for one automatic sync per page load, even under StrictMode", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-      const body = String(input).includes("/api/moves/fill")
+      const body = /\/api\/(moves|risk)\/fill/.test(String(input))
         ? { filled: 0, missing: [], unavailable: null }
         : SUMMARY;
       return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
@@ -56,5 +56,10 @@ describe("useAutoSync", () => {
     // Trades the sync added get their stock prices, as after a save.
     const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/moves/fill"));
     expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["t1"] });
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/risk/fill"))).toBe(true),
+    );
+    const prices = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/risk/fill"));
+    expect(JSON.parse(String(prices?.[1]?.body))).toEqual({ tradeIds: ["t1"] });
   });
 });

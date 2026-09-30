@@ -79,6 +79,7 @@ const json = (body: unknown, status = 200) =>
 /** Answers the trade, an empty queue, and patches. */
 function stubApi({ trade = SCALP as unknown, patch = () => json(trade) } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes("/api/risk/fill")) return json({ filled: 0, missing: [], unavailable: null });
     if (String(init?.method).toUpperCase() === "PATCH") return patch();
     return json(String(input).includes("review=pending") ? [] : trade);
   });
@@ -267,5 +268,14 @@ describe("ScalpWorkspace levels", () => {
       bar.compareDocumentPosition(screen.getByTestId("trade-charts")) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(bar.textContent).toContain("1 of 1");
+  });
+
+  it("asks for the scalp's stock prices when its page opens without them", async () => {
+    const fetchMock = stubApi({ trade: { ...SCALP, scalpPrices: null } });
+    renderWorkspace();
+    await waitFor(() => {
+      const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/risk/fill"));
+      expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["t1"] });
+    });
   });
 });
