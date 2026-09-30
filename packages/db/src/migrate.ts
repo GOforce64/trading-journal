@@ -12,7 +12,7 @@ export interface MigrateOptions {
 /** Snapshot the database, prune old snapshots, then apply pending migrations. */
 export function runMigrations(filePath: string, options: MigrateOptions): void {
   const { migrationsFolder, backupDir, keepBackups = 10 } = options;
-  if (backupDir && existsSync(filePath)) backupDatabase(filePath, backupDir, keepBackups);
+  if (backupDir && existsSync(filePath)) backupDatabase(filePath, backupDir, keepBackups, "migration");
   const db = openDatabase(filePath);
   migrate(db, { migrationsFolder });
 }

@@ -27,7 +27,7 @@ describe("oQuants import", () => {
   beforeEach(() => {
     const file = join(mkdtempSync(join(tmpdir(), "tj-import-")), "journal.db");
     runMigrations(file, { migrationsFolder: MIGRATIONS });
-    backup = vi.fn(() => "journal-backup.db");
+    backup = vi.fn(() => "/home/me/.local/share/trading-journal/backups/journal-import-x.db");
     db = openDatabase(file);
     app = createApp({ db, backup });
   });
@@ -56,7 +56,8 @@ describe("oQuants import", () => {
   it("imports new trades into the paper book after a backup", async () => {
     const res = await send("commit", payload);
     const body = await readJson<{ imported: number; backupFile: string | null; importedIds: string[] }>(res);
-    expect(body).toMatchObject({ imported: 1, backupFile: "journal-backup.db" });
+    // The file's name, not where it sits on disk (oquants-importer spec).
+    expect(body).toMatchObject({ imported: 1, backupFile: "journal-import-x.db" });
     expect(backup).toHaveBeenCalledOnce();
 
     const list = await readJson<{ id: string; underlying: string; book: string; source: string }[]>(

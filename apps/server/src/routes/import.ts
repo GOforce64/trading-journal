@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { zValidator } from "@hono/zod-validator";
 import { createIbkrRepo, createTradesRepo, type Db } from "@tj/db";
 import {
@@ -96,7 +97,8 @@ export function importRoutes(db: Db, backup?: () => string, now?: () => number) 
         if (fresh.length === 0) {
           return c.json({ imported: 0, backupFile: null as string | null, importedIds: [] as string[] }, 200);
         }
-        const backupFile = backup ? backup() : null;
+        // The file's name: where it sits on disk is the server's business (oquants-importer spec).
+        const backupFile = backup ? basename(backup()) : null;
         const importedIds = fresh.map((row) => row.id);
         const imported = repo.importMany(
           fresh.map((row) => ({ id: row.id, trade: row.trade })),

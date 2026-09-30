@@ -34,7 +34,7 @@ const market = createMarketData(keys);
 const app = createApp({
   db: openDatabase(paths.dbFile),
   webDir,
-  backup: () => backupDatabase(paths.dbFile, paths.backupDir),
+  backup: () => backupDatabase(paths.dbFile, paths.backupDir, 10, "import"),
   market,
   settings: {
     dataDir: paths.dataDir,
