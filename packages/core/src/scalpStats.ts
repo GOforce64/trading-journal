@@ -1,6 +1,16 @@
-import { nyMinuteOfDay } from "./calendar.js";
-import { type ReturnTrade, returnOnCost } from "./risk.js";
-import { groupTrades } from "./splits.js";
+import { nyMinuteOfDay, nyWeekday, WEEKDAYS } from "./calendar.js";
+import { keptStats } from "./kept.js";
+import { nyDate } from "./marks.js";
+import { premiumPaid, type ReturnTrade, returnOnCost } from "./risk.js";
+import {
+  daysToExpiry,
+  edgeBucket,
+  edgeLabels,
+  foldMiddle,
+  groupTrades,
+  monthLabel,
+  tradeSize,
+} from "./splits.js";
 import { type Closed, type StatTrade, type Summary, summarize } from "./stats.js";
 
 /** The scalp analytics (scalp-analytics spec §6, §7, §9): time buckets, breakdowns, mistake cost and setup cards. */
@@ -171,4 +181,242 @@ export function bucketStats(trades: readonly ClosedScalp[], by: "open" | "hold")
     ...(groups.has(UNKNOWN) ? [UNKNOWN] : []),
   ];
   return labels.map((label) => ({ label, ...groupStats(groups.get(label) ?? []) }));
+}
+
+export const BREAKDOWNS = [
+  "setup",
+  "ticker",
+  "dte",
+  "side",
+  "grade",
+  "emotion",
+  "weekday",
+  "cost",
+  "contracts",
+  "book",
+  "month",
+] as const;
+export type Breakdown = (typeof BREAKDOWNS)[number];
+
+/** What a breakdown needs besides the trades: names by id, and the edges of the bucketed dimensions. */
+export interface BreakdownContext {
+  setups: ReadonlyMap<string, string>;
+  /** Emotion tags only, so a trade's other tags are ignored. */
+  emotions: ReadonlyMap<string, string>;
+  costEdges: readonly number[];
+  contractEdges: readonly number[];
+}
+
+export interface BreakdownRow extends GroupStats {
+  label: string;
+}
+
+const NO_SETUP = "no setup";
+const NO_EMOTION = "none";
+const DTE_ORDER = ["0", "1", "2–7", "8+"];
+const GRADE_ORDER = ["A", "B", "C", "D", "F", "ungraded"];
+const SIDES: Record<string, string> = { C: "Calls", P: "Puts" };
+const bookLabel = (book: string) => book.charAt(0).toUpperCase() + book.slice(1);
+
+function dteLabel(days: number | null): string {
+  if (days == null) return UNKNOWN;
+  if (days <= 1) return String(days);
+  return days <= 7 ? "2–7" : "8+";
+}
+
+const toRows = (groups: [string, ClosedScalp[]][]): BreakdownRow[] =>
+  groups.map(([label, members]) => ({ label, ...groupStats(members) }));
+
+/** Rows by net, best first, with the `last` row (such as "no setup") at the end. */
+const byNet = (rows: readonly BreakdownRow[], last?: string): BreakdownRow[] => [
+  ...rows.filter((row) => row.label !== last).sort((a, b) => b.net - a.net),
+  ...rows.filter((row) => row.label === last),
+];
+
+/** One dimension's rows (spec §6.4). Empty rows are left out, and "unknown" comes last. */
+export function scalpBreakdown(
+  trades: readonly ClosedScalp[],
+  by: Breakdown,
+  context: BreakdownContext,
+): BreakdownRow[] {
+  switch (by) {
+    case "setup":
+      return byNet(
+        toRows(
+          groupTrades(trades, (trade) =>
+            trade.setupId == null ? NO_SETUP : (context.setups.get(trade.setupId) ?? "unknown setup"),
+          ),
+        ),
+        NO_SETUP,
+      );
+    case "ticker":
+      return foldMiddle(byNet(toRows(groupTrades(trades, (trade) => trade.underlying))), (middle) => ({
+        label: `${middle.size} others`,
+        ...groupStats(trades.filter((trade) => middle.has(trade.underlying))),
+      }));
+    case "dte":
+      return toRows(groupTrades(trades, (trade) => dteLabel(daysToExpiry(trade)), DTE_ORDER));
+    case "side":
+      return toRows(
+        groupTrades(trades, (trade) => SIDES[trade.legs[0]?.right ?? ""] ?? UNKNOWN, ["Calls", "Puts"]),
+      );
+    case "grade":
+      return toRows(groupTrades(trades, (trade) => trade.grade ?? "ungraded", GRADE_ORDER));
+    case "emotion":
+      return byNet(
+        toRows(
+          groupTrades(trades, (trade) => {
+            const names = trade.tagIds.flatMap((id) => {
+              const name = context.emotions.get(id);
+              return name == null ? [] : [name];
+            });
+            return names.length > 0 ? names : NO_EMOTION;
+          }),
+        ),
+        NO_EMOTION,
+      );
+    case "weekday":
+      return toRows(groupTrades(trades, (trade) => nyWeekday(trade.openedAt), WEEKDAYS));
+    case "cost":
+      return toRows(
+        groupTrades(
+          trades,
+          (trade) => {
+            const cost = premiumPaid(trade);
+            return cost == null ? UNKNOWN : edgeBucket(cost, context.costEdges, "usd");
+          },
+          edgeLabels(context.costEdges, "usd"),
+        ),
+      );
+    case "contracts":
+      return toRows(
+        groupTrades(
+          trades,
+          (trade) => {
+            const size = tradeSize(trade);
+            return size == null ? UNKNOWN : edgeBucket(size, context.contractEdges, "contracts");
+          },
+          edgeLabels(context.contractEdges, "contracts"),
+        ),
+      );
+    case "book":
+      return toRows(groupTrades(trades, (trade) => bookLabel(trade.book), ["Live", "Paper"]));
+    case "month": {
+      const monthOf = (trade: ClosedScalp) => nyDate(trade.closedAt).slice(0, 7);
+      const months = [...new Set(trades.map(monthOf))].sort();
+      return toRows(groupTrades(trades, (trade) => monthLabel(monthOf(trade)), months.map(monthLabel)));
+    }
+  }
+}
+
+export const NO_MISTAKES = "no mistakes";
+
+/** A mistake tag's scalps against the rest (spec §6.5). */
+export interface MistakeRow {
+  /** Null for the "no mistakes" row. */
+  tagId: string | null;
+  label: string;
+  /** The scalps carrying the tag; for "no mistakes", those carrying none. Null when there are none. */
+  withTag: GroupStats | null;
+  /** The rest of the scalps; for "no mistakes", those carrying at least one. Null when there are none. */
+  withoutTag: GroupStats | null;
+}
+
+const sideStats = (trades: readonly ClosedScalp[]) => (trades.length > 0 ? groupStats(trades) : null);
+
+/**
+ * One row per mistake tag the scalps carry, worst net first, then "no mistakes". Empty when no scalp carries a
+ * mistake. `mistakes` holds the mistake tags' names by id, so emotion tags are ignored.
+ */
+export function mistakeCost(
+  trades: readonly ClosedScalp[],
+  mistakes: ReadonlyMap<string, string>,
+): MistakeRow[] {
+  const hasMistake = (trade: ClosedScalp) => trade.tagIds.some((id) => mistakes.has(id));
+  const carried = new Set(trades.flatMap((trade) => trade.tagIds.filter((id) => mistakes.has(id))));
+  if (carried.size === 0) return [];
+  const rows = [...carried].map(
+    (tagId): MistakeRow => ({
+      tagId,
+      label: mistakes.get(tagId) ?? "unknown tag",
+      withTag: sideStats(trades.filter((trade) => trade.tagIds.includes(tagId))),
+      withoutTag: sideStats(trades.filter((trade) => !trade.tagIds.includes(tagId))),
+    }),
+  );
+  rows.sort((a, b) => (a.withTag?.net ?? 0) - (b.withTag?.net ?? 0) || a.label.localeCompare(b.label));
+  return [
+    ...rows,
+    {
+      tagId: null,
+      label: NO_MISTAKES,
+      withTag: sideStats(trades.filter((trade) => !hasMistake(trade))),
+      withoutTag: sideStats(trades.filter(hasMistake)),
+    },
+  ];
+}
+
+export interface CumulativePoint {
+  id: string;
+  closedAt: number;
+  underlying: string;
+  /** This trade's R, or net $ for a fly setup. */
+  value: number;
+  /** The running total through this trade. */
+  total: number;
+}
+
+function cumulative(
+  trades: readonly ClosedScalp[],
+  pick: (trade: ClosedScalp) => number | null | undefined,
+): CumulativePoint[] {
+  let total = 0;
+  return [...trades]
+    .sort((a, b) => a.closedAt - b.closedAt)
+    .flatMap((trade) => {
+      const value = pick(trade);
+      if (value == null) return [];
+      total += value;
+      return [{ id: trade.id, closedAt: trade.closedAt, underlying: trade.underlying, value, total }];
+    });
+}
+
+/** R added up trade by trade, in close order, over the trades that have one (spec §7.2). */
+export const cumulativeR = (trades: readonly ClosedScalp[]): CumulativePoint[] =>
+  cumulative(trades, (trade) => trade.risk?.r);
+
+/** A Playbook card (spec §7.2). */
+export interface SetupCard extends GroupStats {
+  setupId: string;
+  /** "fly" when every closed trade is an iron fly. */
+  kind: "scalp" | "fly";
+  /** A fly setup's Σ net ÷ Σ max profit; null for a scalp setup. */
+  kept: number | null;
+  /** Cumulative R for a scalp setup, cumulative net $ for a fly setup. */
+  points: CumulativePoint[];
+  lastClosedAt: number;
+}
+
+/**
+ * One card per setup its closed trades name, most trades first, then by name. `names` holds setup names by id, for
+ * the order only.
+ */
+export function setupCards(trades: readonly ClosedScalp[], names: ReadonlyMap<string, string>): SetupCard[] {
+  const bySetup = groupTrades(
+    trades.filter((trade) => trade.setupId != null),
+    (trade) => trade.setupId ?? "",
+  );
+  const nameOf = (card: SetupCard) => names.get(card.setupId) ?? "";
+  return bySetup
+    .map(([setupId, members]): SetupCard => {
+      const fly = members.every((trade) => trade.strategy === "iron_fly");
+      return {
+        setupId,
+        kind: fly ? "fly" : "scalp",
+        ...groupStats(members),
+        kept: fly ? keptStats(members).keptOverall : null,
+        points: fly ? cumulative(members, (trade) => trade.netPnl) : cumulativeR(members),
+        lastClosedAt: Math.max(...members.map((trade) => trade.closedAt)),
+      };
+    })
+    .sort((a, b) => b.trades - a.trades || nameOf(a).localeCompare(nameOf(b)));
 }
