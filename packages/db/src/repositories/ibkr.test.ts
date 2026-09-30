@@ -408,6 +408,37 @@ describe("orphans, links and runs", () => {
     expect(ibkr().fillsForTrade("trade-nvda")).toEqual([]);
   });
 
+  it("links a canceled fill to the trade of the correction booked under its trade id, so its page shows it", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    const original = fillInput({
+      brokerExecKey: "a.01.01",
+      brokerTradeId: "1786699376",
+      quantity: 2,
+      price: 0.73,
+    });
+    const correction = fillInput({
+      brokerExecKey: "a.01.02",
+      brokerTradeId: "1786699376",
+      quantity: 1,
+      price: 0.73,
+    });
+    const stray = fillInput({ brokerExecKey: "b.01.01", brokerTradeId: "999", quantity: 1, price: 1 });
+    ibkr().storeFills(ACCOUNT.id, [original, correction, stray], "activity");
+    ibkr().markCanceled(ACCOUNT.id, [{ brokerTradeId: "1786699376", quantity: 2, price: 0.73 }]);
+    ibkr().markCanceled(ACCOUNT.id, [{ brokerTradeId: "999", quantity: 1, price: 1 }]);
+    ibkr().linkFills(
+      ACCOUNT.id,
+      new Map([[correction.id, { tradeId: "trade-nvda", legId: "trade-nvda-leg" }]]),
+    );
+    const linked = ibkr().fillsForTrade("trade-nvda");
+    expect(linked.map((fill) => [fill.brokerExecKey, fill.canceled])).toEqual([
+      ["a.01.01", true],
+      ["a.01.02", false],
+    ]);
+    // A cancel with nothing standing beside it names no trade, so it stays unlinked.
+    expect(linked.some((fill) => fill.brokerExecKey === "b.01.01")).toBe(false);
+  });
+
   it("records the last run, errors before any account included", () => {
     expect(ibkr().lastRun()).toBeNull();
     ibkr().recordRun({

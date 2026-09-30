@@ -475,10 +475,27 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       return deleted;
     },
 
+    /**
+     * Links fills to their trades and legs, and unlinks the rest. A canceled fill, which grouping never sees, joins
+     * the trade of a fill standing under the same IBKR trade id (the correction), else under the same order: so the
+     * trade's Fills panel shows it, labelled canceled. One with nothing standing beside it stays unlinked.
+     */
     linkFills(accountId: string, links: ReadonlyMap<string, { tradeId: string; legId: string }>): void {
       db.update(fills).set({ tradeId: null, legId: null }).where(eq(fills.accountId, accountId)).run();
       for (const [fillId, link] of links) {
         db.update(fills).set({ tradeId: link.tradeId, legId: link.legId }).where(eq(fills.id, fillId)).run();
+      }
+      const all = db.select().from(fills).where(eq(fills.accountId, accountId)).all();
+      const standing = all.filter((fill) => !fill.canceled && fill.tradeId != null);
+      for (const fill of all.filter((each) => each.canceled)) {
+        const beside =
+          standing.find((other) => other.brokerTradeId === fill.brokerTradeId) ??
+          standing.find((other) => fill.brokerOrderId != null && other.brokerOrderId === fill.brokerOrderId);
+        if (!beside) continue;
+        db.update(fills)
+          .set({ tradeId: beside.tradeId, legId: beside.legId })
+          .where(eq(fills.id, fill.id))
+          .run();
       }
     },
 
