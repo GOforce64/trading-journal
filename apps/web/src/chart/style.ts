@@ -52,8 +52,9 @@ export function chartOptions(intraday: boolean): DeepPartial<ChartOptions> {
     timeScale: {
       borderColor: "#1f2430",
       timeVisible: intraday,
+      // A daily chart's business days are left to the library (null), which labels months and years.
       tickMarkFormatter: (time: Time, type: TickMarkType) =>
-        typeof time === "number" ? nyTickLabel(time, type) : String(time),
+        typeof time === "number" ? nyTickLabel(time, type) : null,
     },
     localization: {
       timeFormatter: (time: Time) => (typeof time === "number" ? nyTimeText(time * 1000) : String(time)),
