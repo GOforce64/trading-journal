@@ -64,7 +64,7 @@ describe("TradeCharts", () => {
     const levels = {
       lines: [{ id: "stop" as const, price: 229, color: "#ef5350", dashed: true, label: "STOP" }],
       editing: {
-        placing: "target" as const,
+        placing: "t2",
         onPlace: vi.fn(),
         onDrag: vi.fn(),
         onDrop: vi.fn(),
@@ -81,7 +81,7 @@ describe("TradeCharts", () => {
     expect(seriesOf("Candlestick")[0]?.priceLines).toEqual([
       expect.objectContaining({ price: 229, title: "STOP" }),
     ]);
-    expect(screen.getByTestId("placing-hint").textContent).toContain("place the target");
+    expect(screen.getByTestId("placing-hint").textContent).toContain("place T2 · Esc");
   });
 
   it("asks for the week before the trade through its last day, and the daily bars up to that day", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inPane, nearestLine, priceAt } from "./drag.js";
+import { inPane, lineName, nearestLine, priceAt } from "./drag.js";
 
 // 240 at the top of a 400 px pane, 220 at the bottom: 0.05 a pixel.
 const toY = (price: number) => ((240 - price) / 20) * 400;
@@ -7,14 +7,14 @@ const toPrice = (y: number) => 240 - (y / 400) * 20;
 // The stop sits at y 164, the target at y 158.
 const LINES = [
   { id: "stop" as const, price: 231.8 },
-  { id: "target" as const, price: 232.1 },
+  { id: "t1", price: 232.1 },
 ];
 
 describe("nearestLine", () => {
   it("grabs a line within 6 px, and the closer one when both are", () => {
     expect(nearestLine(LINES, 169, toY)).toBe("stop");
     expect(nearestLine(LINES, 161.5, toY)).toBe("stop");
-    expect(nearestLine(LINES, 160, toY)).toBe("target");
+    expect(nearestLine(LINES, 160, toY)).toBe("t1");
   });
 
   it("grabs nothing further away, nothing off the scale, and nothing without lines", () => {
@@ -45,5 +45,12 @@ describe("inPane", () => {
     expect(inPane(800, 10, pane)).toBe(false);
     expect(inPane(10, 400, pane)).toBe(false);
     expect(inPane(-1, 10, pane)).toBe(false);
+  });
+});
+
+describe("lineName", () => {
+  it("names the stop, and a target by its number", () => {
+    expect(lineName("stop")).toBe("the stop");
+    expect(lineName("t2")).toBe("T2");
   });
 });

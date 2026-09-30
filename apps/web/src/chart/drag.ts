@@ -1,32 +1,38 @@
 import { round2 } from "@tj/core";
 
-/** The two lines a scalp's review draws and drags (scalp-review spec §8). */
-export type LevelKind = "stop" | "target";
+/**
+ * A draggable line's id (scalp-R spec §9.3): "stop", or "t1", "t2"… for the targets, in the order the trade
+ * reaches them.
+ */
+export type LineId = string;
 
-/** How near, in pixels, a press must land to grab a line (spec §8.3). */
+/** How near, in pixels, a press must land to grab a line (scalp-review spec §8.3). */
 export const GRAB_PX = 6;
 
 /** What the intraday chart reports while the user places or drags the review's lines. */
 export interface ChartEditing {
   /** The line the next click on the chart places, if any. */
-  placing: LevelKind | null;
+  placing: LineId | null;
   /** A click placed a line here: save it. */
-  onPlace(kind: LevelKind, price: number): void;
+  onPlace(id: LineId, price: number): void;
   /** A dragged line is here now. Nothing is saved yet. */
-  onDrag(kind: LevelKind, price: number): void;
+  onDrag(id: LineId, price: number): void;
   /** The drag ended here: save it. */
-  onDrop(kind: LevelKind, price: number): void;
+  onDrop(id: LineId, price: number): void;
   /** Esc: stop placing, or a dragged line went back. */
   onCancel(): void;
 }
 
+/** How the placing hint names a line: "the stop", or "T2". */
+export const lineName = (id: LineId): string => (id === "stop" ? "the stop" : id.toUpperCase());
+
 /** The line within reach of `y`, the closer one when both are. `toY` answers null for a price off the scale. */
 export function nearestLine(
-  lines: readonly { id: LevelKind; price: number }[],
+  lines: readonly { id: LineId; price: number }[],
   y: number,
   toY: (price: number) => number | null,
-): LevelKind | null {
-  let best: { id: LevelKind; distance: number } | null = null;
+): LineId | null {
+  let best: { id: LineId; distance: number } | null = null;
   for (const line of lines) {
     const at = toY(line.price);
     if (at == null) continue;

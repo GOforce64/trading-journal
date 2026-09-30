@@ -1,3 +1,4 @@
+import { scalpRisk } from "@tj/core";
 import type { TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { LevelFields } from "./LevelFields.js";
@@ -16,11 +17,17 @@ export function ScalpWorkspace({
 }) {
   const levels = useLevels(trade);
   useAutoFillPrices(trade);
+  // Priced where the lines are right now, so the strip follows a drag (scalp-R spec §9.2).
+  const live = scalpRisk(trade, {
+    basis: levels.basis,
+    stop: levels.stop.shown,
+    targets: levels.targets.shown,
+  });
   return (
     <>
       <QueueBar trade={trade} onOpenTrade={onOpenTrade} />
       <TradeCharts trade={trade} levels={levels.chart} />
-      <ReviewPanel trade={trade} layout="strip" levels={<LevelFields levels={levels} />} />
+      <ReviewPanel trade={trade} layout="strip" levels={<LevelFields levels={levels} risk={live} />} />
     </>
   );
 }
