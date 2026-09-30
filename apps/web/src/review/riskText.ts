@@ -100,7 +100,9 @@ export function problemText(risk: ScalpRisk, priceNote: string): string {
       }
       const stock = risk.stockAtEntry?.price ?? 0;
       const put = risk.right === "P";
-      const where = risk.stop === stock ? "at" : put ? "below" : "above";
+      // Compared at the cents the message shows, so a stop typed at 230.83 against 230.8279 reads "at".
+      const cents = (price: number | null) => Math.round((price ?? 0) * 100);
+      const where = cents(risk.stop) === cents(stock) ? "at" : put ? "below" : "above";
       return `The stop is ${where} the stock at entry (${stock.toFixed(2)}), so this ${put ? "put" : "call"} can't lose there.`;
     }
     case "cannot_price":

@@ -131,6 +131,13 @@ describe("problemText", () => {
     );
     expect(reason({ legs: [] })).toBe("R needs a single long option.");
   });
+
+  it("says at, not above, for a stop at the cent the message shows the stock at", () => {
+    // The fetched stock is 230.8279, shown as 230.83; a stop typed at 230.83 is where the stock was.
+    expect(reason({}, { stopPrice: 230.83 })).toBe(
+      "The stop is at the stock at entry (230.83), so this call can't lose there.",
+    );
+  });
 });
 
 describe("liveLine", () => {
