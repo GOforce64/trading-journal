@@ -1,3 +1,4 @@
+import { positionCash } from "@tj/core";
 import { describe, expect, it } from "vitest";
 import { FLY_LEGS, fixturePayload, fixtureTrade, OQUANTS_HEADERS } from "./fixture.js";
 import { type ParsedTrade, parseOquants, type SkippedRow } from "./parse.js";
@@ -170,6 +171,41 @@ describe("parseOquants", () => {
     const { rows } = parseOquants(fixturePayload([fixtureTrade(), fixtureTrade()]));
     expect(rows.map((row) => row.kind)).toEqual(["trade", "skip"]);
     expect((rows[1] as SkippedRow).reason).toBe("duplicate row");
+  });
+
+  it("reads money written with a true minus sign or in parentheses", () => {
+    expect(parsed({ cost: "−1,192.00" }).trade.ironFly?.netCost).toBe(-1192);
+    expect(parsed({ cost: "(1,192.00)" }).trade.ironFly?.netCost).toBe(-1192);
+  });
+
+  it("reads a page counter past a thousand", () => {
+    const { warnings } = parseOquants(fixturePayload([fixtureTrade()], { pageCounter: "1–50 of 1,234" }));
+    expect(warnings).toEqual(["Collected 1 trades, the page counter said 1,234. Some rows may be missing."]);
+  });
+
+  it("skips a trade whose legs expire on different dates", () => {
+    const raw = fixtureTrade();
+    const [path = "", query = ""] = raw.designerHref.split("?");
+    const params = new URLSearchParams(query);
+    params.set("positions[3][expiration]", "2026-09-18");
+    const row = only(fixturePayload([{ ...raw, designerHref: `${path}?${params}` }]));
+    expect(row).toMatchObject({ kind: "skip", reason: "the legs expire on different dates" });
+  });
+
+  it("stores exits precise enough that re-saving a 3-lot rebuilds its P&L to the cent", () => {
+    // $100 on a 3-lot short call is 0.3333… a share: at 4 decimals, 300 shares come back as $99.99.
+    const { trade } = parsed({
+      cost: "-892.00",
+      pnl: "+192.00",
+      legs: [
+        { type: "Call", strike: 50, size: -3, cost: "-630.00", pnl: "+100.00" },
+        { type: "Put", strike: 50, size: -3, cost: "-480.00", pnl: "+200.00" },
+        { type: "Call", strike: 58, size: 3, cost: "+105.00", pnl: "-50.00" },
+        { type: "Put", strike: 45, size: 3, cost: "+105.00", pnl: "-50.00" },
+      ],
+    });
+    expect(trade.netPnl).toBe(192);
+    expect(positionCash(trade.legs, { open: trade.fees }).netPnl).toBe(192);
   });
 
   it("warns when the page counter disagrees with what was collected", () => {

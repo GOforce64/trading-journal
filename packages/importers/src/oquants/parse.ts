@@ -63,9 +63,14 @@ interface Structure {
 }
 
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+/** Leg prices keep 6 decimals, so a re-save that works the P&L out from them lands on the same cent. */
+const round6 = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
 
+/** A money cell: "-1,192.00", "+512.00", a true minus "−1,192.00", or accounting's "(1,192.00)". */
 function money(text: string): number {
-  const cleaned = text.replace(/[\s,$+]/g, "");
+  let cleaned = text.replace(/[\s,$+]/g, "").replace(/\u2212/g, "-");
+  const bracketed = /^\((.*)\)$/.exec(cleaned);
+  if (bracketed) cleaned = `-${bracketed[1]}`;
   const value = Number(cleaned);
   if (cleaned === "" || Number.isNaN(value)) throw new Skip(`unparseable number "${text}"`);
   return value;
@@ -187,6 +192,8 @@ function parseTrade(raw: OquantsTradeCells, cell: CellReader, timeZone: string):
   if (raw.legs.length === 0)
     throw new Skip("no legs collected — the row did not expand; run the snippet again");
   const legs = readLegs(raw, cell);
+  // A fly settles on one day; legs on different dates are a calendar, which the fly model can't hold.
+  if (new Set(legs.map((leg) => leg.expiry)).size > 1) throw new Skip("the legs expire on different dates");
   const structure = classify(legs);
   const flags: string[] = [];
   if (structure.putWingStrike === 0) flags.push("1 wing");
@@ -214,7 +221,7 @@ function parseTrade(raw: OquantsTradeCells, cell: CellReader, timeZone: string):
 
   const contracts = Math.abs(legs[0]?.quantity ?? 0);
   const perShare = (dollars: number, quantity: number) =>
-    round4(Math.abs(dollars) / (Math.abs(quantity) * 100));
+    round6(Math.abs(dollars) / (Math.abs(quantity) * 100));
   const legInputs: LegInput[] = legs.map((leg) => ({
     right: leg.right,
     strike: leg.strike,
@@ -261,10 +268,12 @@ function parseTrade(raw: OquantsTradeCells, cell: CellReader, timeZone: string):
 }
 
 function counterWarnings(payload: OquantsPayload): string[] {
-  const total = /of\s+(\d+)/.exec(payload.pageCounter)?.[1];
-  if (total === undefined || Number(total) === payload.trades.length) return [];
+  // "1–50 of 1,234": the total can carry thousands separators.
+  const text = /of\s+([\d,]+)/.exec(payload.pageCounter)?.[1];
+  const total = text === undefined ? undefined : Number(text.replace(/,/g, ""));
+  if (total === undefined || Number.isNaN(total) || total === payload.trades.length) return [];
   return [
-    `Collected ${payload.trades.length} trades, the page counter said ${total}. Some rows may be missing.`,
+    `Collected ${payload.trades.length} trades, the page counter said ${total.toLocaleString("en-US")}. Some rows may be missing.`,
   ];
 }
 
