@@ -18,12 +18,14 @@ import { Section } from "../analytics/Section.js";
 import type { EdgeControl } from "../analytics/SplitGrid.js";
 import { coverageText, holdText, METRICS, type Metric, returnText } from "../analytics/scalpText.js";
 import { Money } from "../components/ui.js";
-import { type Tag, useSetups, useTags } from "../review/data.js";
+import { type Setup, type Tag, useSetups, useTags } from "../review/data.js";
 import { useBackfillPrices } from "../review/prices.js";
 import type { TabProps } from "./OverviewTab.js";
 
 const tagNames = (tags: readonly Tag[] | undefined, kind: "mistake" | "emotion") =>
   new Map((tags ?? []).filter((tag) => tag.kind === kind).map((tag) => [tag.id, tag.name]));
+
+const NO_SETUPS: readonly Setup[] = [];
 
 const openTitle = (label: string) => (label === "before open" ? label : `${label} min after the open`);
 const holdTitle = (label: string) => {
@@ -34,22 +36,36 @@ const holdTitle = (label: string) => {
 /** Which scalps work: by time of day, hold, setup and the rest (scalp-analytics spec §6). */
 export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   const scalps = useMemo(() => closedTrades(trades.filter((trade) => trade.strategy === "scalp")), [trades]);
-  const { data: setups = [] } = useSetups();
+  const { data: setups = NO_SETUPS } = useSetups();
   const { data: tags, isError: tagsFailed } = useTags();
   // Every scalp, not just the filtered ones: the backfill runs once a visit (spec §8).
   const fill = useBackfillPrices(useAllTrades().data);
-  const summary = scalpSummary(scalps);
-  const none = summary.trades === 0;
   const metric: Metric = search.metric ?? "net";
   const by = search.by ?? "setup";
   const costEdges = resolveEdges("cost", search.costEdges);
   const contractEdges = resolveEdges("contracts", search.contractEdges);
-  const context: BreakdownContext = {
-    setups: new Map(setups.map((setup) => [setup.id, setup.name])),
-    emotions: tagNames(tags, "emotion"),
-    costEdges,
-    contractEdges,
-  };
+  // Worked out again only when the scalps, the names or the edges change, not on every render.
+  const costKey = costEdges.join(",");
+  const contractKey = contractEdges.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the edges are keyed by their text, a fresh array each render
+  const context = useMemo<BreakdownContext>(
+    () => ({
+      setups: new Map(setups.map((setup) => [setup.id, setup.name])),
+      emotions: tagNames(tags, "emotion"),
+      costEdges,
+      contractEdges,
+    }),
+    [setups, tags, costKey, contractKey],
+  );
+  const summary = useMemo(() => scalpSummary(scalps), [scalps]);
+  const openRows = useMemo(() => bucketStats(scalps, "open"), [scalps]);
+  const holdRows = useMemo(() => bucketStats(scalps, "hold"), [scalps]);
+  const breakdown = useMemo(() => scalpBreakdown(scalps, by, context), [scalps, by, context]);
+  const mistakes = useMemo(
+    () => (tags ? mistakeCost(scalps, tagNames(tags, "mistake")) : null),
+    [scalps, tags],
+  );
+  const none = summary.trades === 0;
 
   let edges: EdgeControl | undefined;
   if (by === "cost") {
@@ -131,21 +147,21 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             <Section title="Minutes after the open">
-              <MetricBars rows={bucketStats(scalps, "open")} metric={metric} title={openTitle} />
+              <MetricBars rows={openRows} metric={metric} title={openTitle} />
             </Section>
             <Section title="Hold time">
-              <MetricBars rows={bucketStats(scalps, "hold")} metric={metric} title={holdTitle} />
+              <MetricBars rows={holdRows} metric={metric} title={holdTitle} />
             </Section>
           </div>
           <BreakdownPanel
             by={by}
             onBy={(next) => onSearch({ by: next === "setup" ? undefined : next })}
-            rows={scalpBreakdown(scalps, by, context)}
+            rows={breakdown}
             metric={metric}
             edges={edges}
           />
-          {tags ? (
-            <MistakeCost rows={mistakeCost(scalps, tagNames(tags, "mistake"))} />
+          {mistakes ? (
+            <MistakeCost rows={mistakes} />
           ) : (
             <Section title="Mistake cost">
               <p className="text-muted">{tagsFailed ? "Couldn't load the tags." : "Loading…"}</p>
