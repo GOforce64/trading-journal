@@ -47,4 +47,18 @@ describe("SplitGrid", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(onChange).toHaveBeenLastCalledWith(null);
   });
+
+  it("previews the buckets as edges are typed, so 2,500 shows itself as two edges", () => {
+    render(
+      <SplitGrid
+        panels={[
+          { title: "Credit", rows, edges: { kind: "usd", edges: [250, 500, 1000], onChange: vi.fn() } },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "edit" }));
+    expect(screen.getByTestId("edge-preview").textContent).toBe("< $250 · $250–500 · $500–1,000 · $1,000+");
+    fireEvent.change(screen.getByLabelText("Credit edges"), { target: { value: "2,500" } });
+    expect(screen.getByTestId("edge-preview").textContent).toBe("< $2 · $2–500 · $500+");
+  });
 });

@@ -1,4 +1,4 @@
-import { type EdgeKind, parseEdges, type SplitRow } from "@tj/core";
+import { type EdgeKind, edgeLabels, parseEdges, type SplitRow } from "@tj/core";
 import { useState } from "react";
 import { dollars, profitFactorText, winRateText } from "./format.js";
 
@@ -94,6 +94,7 @@ export function EdgeEditor({ title, control }: { title: string; control: EdgeCon
       </button>
     );
   }
+  const preview = parseEdges(draft, control.kind);
   const save = () => {
     const edges = parseEdges(draft, control.kind);
     if (!edges) {
@@ -124,6 +125,12 @@ export function EdgeEditor({ title, control }: { title: string; control: EdgeCon
       >
         Reset
       </button>
+      {/* The buckets as typed: "2,500" reads as two edges, 2 and 500, and this shows it. */}
+      {!problem && preview && (
+        <span data-testid="edge-preview" className="basis-full text-right text-muted">
+          {edgeLabels(preview, control.kind).join(" · ")}
+        </span>
+      )}
       {problem && (
         <span role="alert" className="basis-full text-right text-down">
           {problem}
