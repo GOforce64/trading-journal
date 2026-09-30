@@ -337,6 +337,15 @@ describe("applying a synced trade", () => {
     expect(trades().get("trade-nvda")?.netPnl).toBe(50);
     expect(ibkr().apply(scalp({ netPnl: 50 }), ACCOUNT.id)).toBe("unchanged");
   });
+
+  it("doesn't call seconds an edit form dropped a difference worth keeping", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    // An older edit form saved times to the minute: 09:31:05 came back as 09:31:00, with the P&L edited too.
+    trades().update("trade-nvda", { netPnl: 50, openedAt: OPEN - 5_000 });
+    expect(ibkr().apply(scalp({ netPnl: 50 }), ACCOUNT.id)).toBe("unchanged");
+    // A real difference is still kept, and said.
+    expect(ibkr().apply(scalp({ netPnl: 60 }), ACCOUNT.id)).toBe("kept_edits");
+  });
 });
 
 describe("the duplicate guards", () => {

@@ -167,14 +167,23 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       .run();
   }
 
+  /**
+   * Whether the stored trade already says what IBKR does. `toTheMinute` compares times by the minute: an edited trade
+   * whose only difference is seconds an older edit form dropped hasn't differed in a way worth "kept your edits".
+   */
   function sameFacts(
     existing: typeof trades.$inferSelect,
     candidate: SyncedTradeInput,
     accountId: string,
+    toTheMinute = false,
   ): boolean {
     const want = facts(candidate.trade, accountId);
+    const minute = (at: unknown) => (typeof at === "number" ? Math.floor(at / 60_000) : at);
     for (const [key, value] of Object.entries(want)) {
-      if (existing[key as keyof typeof want] !== value) return false;
+      const stored = existing[key as keyof typeof want];
+      if (toTheMinute && (key === "openedAt" || key === "closedAt")) {
+        if (minute(stored) !== minute(value)) return false;
+      } else if (stored !== value) return false;
     }
     const storedLegs = db
       .select()
@@ -410,9 +419,11 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
         writeFly(candidate);
         return "added";
       }
-      const same = sameFacts(existing, candidate, accountId);
-      if (existing.factsEditedAt != null) return same ? "unchanged" : "kept_edits";
-      if (same) return "unchanged";
+      // An edited trade is left alone either way; the answer only says whether IBKR differs.
+      if (existing.factsEditedAt != null) {
+        return sameFacts(existing, candidate, accountId, true) ? "unchanged" : "kept_edits";
+      }
+      if (sameFacts(existing, candidate, accountId)) return "unchanged";
       db.update(trades)
         .set({ ...facts(candidate.trade, accountId), updatedAt: timestamp })
         .where(eq(trades.id, candidate.id))
