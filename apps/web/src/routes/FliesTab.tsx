@@ -15,7 +15,7 @@ const wholeDollars = (value: number | null) =>
 export function FliesTab({ trades, search, onSearch }: TabProps) {
   const flies = closedTrades(trades.filter((trade) => trade.strategy === "iron_fly"));
   const kept = keptStats(flies);
-  const creditEdges = resolveEdges("usd", search.creditEdges);
+  const creditEdges = resolveEdges("credit", search.creditEdges);
   const tickers = new Map(flies.map((trade) => [trade.id, trade.underlying]));
 
   return (
@@ -71,7 +71,7 @@ export function FliesTab({ trades, search, onSearch }: TabProps) {
               kind: "usd",
               edges: creditEdges,
               onChange: (edges) => {
-                rememberEdges("usd", edges);
+                rememberEdges("credit", edges);
                 onSearch({ creditEdges: edges ? edges.join(",") : undefined });
               },
             },

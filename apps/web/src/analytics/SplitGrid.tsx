@@ -75,7 +75,8 @@ const RULES: Record<EdgeKind, string> = {
   contracts: "Use increasing whole numbers from 2, like 2, 4, 6.",
 };
 
-function EdgeEditor({ title, control }: { title: string; control: EdgeControl }) {
+/** An "edit" link that opens a field for a split's edges, with Save and Reset. */
+export function EdgeEditor({ title, control }: { title: string; control: EdgeControl }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const close = () => {

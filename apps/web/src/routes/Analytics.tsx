@@ -10,6 +10,7 @@ import {
 } from "../analytics/search.js";
 import { TabButton } from "../components/ui.js";
 import { todayNy } from "../market.js";
+import { type Setup, useSetups } from "../review/data.js";
 import { FliesTab } from "./FliesTab.js";
 import { OverviewTab } from "./OverviewTab.js";
 
@@ -25,12 +26,17 @@ const INPUT =
 /** Aggregated statistics over the filtered trades (spec §7). */
 export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
   const { data, isLoading, error } = useAllTrades();
+  const { data: setups } = useSetups();
   const tickers = useMemo(() => [...new Set((data ?? []).map((trade) => trade.underlying))].sort(), [data]);
-  // A ticker the journal doesn't have (an old or hand-edited link) counts as All, which is what the dropdown shows.
-  const view = useMemo(
-    () => (search.ticker && !tickers.includes(search.ticker) ? { ...search, ticker: undefined } : search),
-    [search, tickers],
-  );
+  // A ticker or setup the journal doesn't have (an old or hand-edited link) counts as All, which is what the
+  // dropdown shows. A setup is only judged once the setups have loaded.
+  const view = useMemo(() => {
+    let next = search;
+    if (next.ticker && !tickers.includes(next.ticker)) next = { ...next, ticker: undefined };
+    if (next.setup && setups && !setups.some((setup) => setup.id === next.setup))
+      next = { ...next, setup: undefined };
+    return next;
+  }, [search, tickers, setups]);
   const trades = useMemo(() => filterTrades(data ?? [], toFilter(view)), [data, view]);
 
   if (isLoading) return <p className="text-muted">Loading…</p>;
@@ -38,7 +44,7 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <FilterRow search={view} onSearch={onSearch} tickers={tickers} />
+      <FilterRow search={view} onSearch={onSearch} tickers={tickers} setups={setups ?? []} />
       <nav aria-label="Analytics tabs" className="flex gap-4 border-line border-b text-[12px]">
         <TabButton active={search.tab !== "flies"} onClick={() => onSearch({ tab: undefined })}>
           Overview
@@ -60,16 +66,22 @@ function FilterRow({
   search,
   onSearch,
   tickers,
+  setups,
 }: {
   search: AnalyticsSearch;
   onSearch: AnalyticsProps["onSearch"];
   tickers: readonly string[];
+  setups: readonly Setup[];
 }) {
   const today = todayNy();
   const preset = activePreset(search, today);
   const [customOpen, setCustomOpen] = useState(false);
   const showCustom = customOpen || preset === "custom";
   const books = search.books ? [search.books] : ["live", "paper"];
+  // Archived setups stay out of the list unless the link names one.
+  const setupOptions = setups
+    .filter((setup) => !setup.archived || setup.id === search.setup)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   // One book must stay on: switching off the other leaves just this one, and the last one can't be switched off.
   const toggleBook = (book: "live" | "paper") => {
@@ -147,6 +159,22 @@ function FilterRow({
           {tickers.map((ticker) => (
             <option key={ticker} value={ticker}>
               {ticker}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="ml-2 flex items-center gap-1 text-muted uppercase tracking-wider">
+        Setup
+        <select
+          aria-label="Setup"
+          value={search.setup ?? ""}
+          onChange={(event) => onSearch({ setup: event.target.value || undefined })}
+          className={INPUT}
+        >
+          <option value="">All</option>
+          {setupOptions.map((setup) => (
+            <option key={setup.id} value={setup.id}>
+              {setup.name}
             </option>
           ))}
         </select>

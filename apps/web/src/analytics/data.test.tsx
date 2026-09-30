@@ -6,10 +6,17 @@ import { filterTrades, type TradeFilter, useAllTrades } from "./data.js";
 import { ny } from "./testing.js";
 
 const trade = (
-  overrides: Partial<{ book: string; underlying: string; closedAt: number | null; excluded: boolean }>,
+  overrides: Partial<{
+    book: string;
+    underlying: string;
+    setupId: string | null;
+    closedAt: number | null;
+    excluded: boolean;
+  }>,
 ) => ({
   book: "paper",
   underlying: "AA",
+  setupId: null,
   closedAt: ny("2026-09-10 10:00"),
   excluded: false,
   ...overrides,
@@ -28,6 +35,11 @@ describe("filterTrades", () => {
     expect(filterTrades(trades, ALL)).toHaveLength(2);
     expect(filterTrades(trades, { ...ALL, books: ["paper"] }).map((t) => t.underlying)).toEqual(["BB"]);
     expect(filterTrades(trades, { ...ALL, ticker: "BB" })).toHaveLength(1);
+  });
+
+  it("keeps one setup's trades", () => {
+    const trades = [trade({ setupId: "orb" }), trade({ setupId: "vwap" }), trade({})];
+    expect(filterTrades(trades, { ...ALL, setup: "orb" })).toEqual([trades[0]]);
   });
 
   it("drops excluded trades unless asked for them", () => {

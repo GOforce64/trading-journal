@@ -24,6 +24,16 @@ interface RowSpec {
   fly?: Record<string, unknown>;
   /** A scalp's R, as the server works it out; absent means no R. */
   r?: number | null;
+  /** Why a scalp has no R, as the server says. */
+  problem?: string | null;
+  setupId?: string | null;
+  grade?: string | null;
+  tagIds?: string[];
+  right?: "C" | "P";
+  /** The entry premium; 1 by default. */
+  openPrice?: number;
+  /** A scalp's fetched stock prices; present by default, so pages don't ask the filler. */
+  scalpPrices?: unknown;
 }
 
 /** A trade as GET /api/trades returns it: a balanced 9 / 10 / 11 fly unless the strategy says scalp. */
@@ -44,19 +54,20 @@ export function tradeRow(spec: RowSpec) {
     feesOpen: null,
     feesClose: null,
     notes: null,
-    grade: null,
+    grade: spec.grade ?? null,
+    setupId: spec.setupId ?? null,
     excluded: spec.excluded ?? false,
     excludeReason: null,
-    tagIds: [],
+    tagIds: spec.tagIds ?? [],
     legs: [
       {
         id: `${spec.id}-l1`,
-        right: "C",
+        right: spec.right ?? "C",
         strike: 10,
         expiry: spec.expiry ?? "2026-09-04",
         quantity: fly ? -contracts : contracts,
         multiplier: 100,
-        openPrice: 1,
+        openPrice: spec.openPrice ?? 1,
         closePrice: spec.closed ? 0.5 : null,
       },
     ],
@@ -82,19 +93,37 @@ export function tradeRow(spec: RowSpec) {
         }
       : null,
     metrics: null,
-    risk: spec.r === undefined ? null : { r: spec.r },
+    risk:
+      spec.r === undefined && spec.problem === undefined
+        ? null
+        : { r: spec.r ?? null, problem: spec.problem ?? null },
+    scalpPrices:
+      spec.scalpPrices !== undefined
+        ? spec.scalpPrices
+        : fly
+          ? null
+          : { entryPrice: 10, holdHigh: 11, holdLow: 9 },
   };
 }
 
-/** Answers the trade list with `trades`, the review queue with `pending`, and option quotes with none (a key is set up). */
-export function stubTrades(trades: unknown[], pending: unknown[] = []) {
+export interface Taxonomy {
+  setups?: unknown[];
+  tags?: unknown[];
+}
+
+/**
+ * Answers the trade list with `trades`, the review queue with `pending`, setups and tags with `taxonomy`'s, option
+ * quotes with none (a key is set up), and the scalp price filler with nothing filled.
+ */
+export function stubTrades(trades: unknown[], pending: unknown[] = [], taxonomy: Taxonomy = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
-    const body = url.includes("/api/option-quotes")
-      ? { quotes: {}, available: true }
-      : url.includes("review=pending")
-        ? pending
-        : trades;
+    let body: unknown = trades;
+    if (url.includes("/api/option-quotes")) body = { quotes: {}, available: true };
+    else if (url.includes("review=pending")) body = pending;
+    else if (url.includes("/api/setups")) body = taxonomy.setups ?? [];
+    else if (url.includes("/api/tags")) body = taxonomy.tags ?? [];
+    else if (url.includes("/api/risk/fill")) body = { filled: 0, missing: [], unavailable: null };
     return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetchMock);

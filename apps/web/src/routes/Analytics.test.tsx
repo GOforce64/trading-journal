@@ -173,6 +173,72 @@ describe("Analytics filters", () => {
   });
 });
 
+describe("Analytics' Setup filter", () => {
+  const SETUPS = [
+    { id: "orb", name: "ORB breakout", strategy: "scalp", description: null, archived: false, tradeCount: 1 },
+    { id: "old", name: "Old setup", strategy: null, description: null, archived: true, tradeCount: 1 },
+  ];
+  /* AA +100 under ORB, BB −300 under the archived Old setup, CC +280 with none: +$80 in all. */
+  const TAGGED = [
+    tradeRow({
+      id: "a",
+      underlying: "AA",
+      opened: "2026-09-02 15:45",
+      closed: "2026-09-03 09:50",
+      netPnl: 100,
+      setupId: "orb",
+    }),
+    tradeRow({
+      id: "b",
+      underlying: "BB",
+      opened: "2026-09-03 15:50",
+      closed: "2026-09-04 15:40",
+      netPnl: -300,
+      setupId: "old",
+    }),
+    tradeRow({
+      id: "c",
+      underlying: "CC",
+      opened: "2026-09-04 15:30",
+      closed: "2026-09-08 09:45",
+      netPnl: 280,
+    }),
+  ];
+
+  it("lists the setups that aren't archived, and narrows every tab to the chosen one", async () => {
+    stubTrades(TAGGED, [], { setups: SETUPS });
+    const onSearch = vi.fn();
+    const { rerender } = renderWithClient(<Analytics search={{}} onSearch={onSearch} />);
+    const select = await screen.findByRole("combobox", { name: "Setup" });
+    await waitFor(() =>
+      expect([...(select as HTMLSelectElement).options].map((option) => option.text)).toEqual([
+        "All",
+        "ORB breakout",
+      ]),
+    );
+    fireEvent.change(select, { target: { value: "orb" } });
+    expect(onSearch).toHaveBeenCalledWith({ setup: "orb" });
+    rerender(<Analytics search={{ setup: "orb" }} onSearch={onSearch} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$100.00"));
+  });
+
+  it("lists an archived setup the link names", async () => {
+    stubTrades(TAGGED, [], { setups: SETUPS });
+    renderWithClient(<Analytics search={{ setup: "old" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("-$300.00"));
+    const select = screen.getByRole("combobox", { name: "Setup" }) as HTMLSelectElement;
+    expect(select.value).toBe("old");
+    expect([...select.options].map((option) => option.text)).toEqual(["All", "Old setup", "ORB breakout"]);
+  });
+
+  it("counts a setup the journal doesn't have as All", async () => {
+    stubTrades(TAGGED, [], { setups: SETUPS });
+    renderWithClient(<Analytics search={{ setup: "gone" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$80.00"));
+    expect((screen.getByRole("combobox", { name: "Setup" }) as HTMLSelectElement).value).toBe("");
+  });
+});
+
 describe("Analytics with an old link", () => {
   it("ignores a ticker the journal doesn't have, instead of showing an empty page under All", async () => {
     stubTrades(TRADES);
@@ -360,7 +426,9 @@ describe("Analytics Iron flies: move data", () => {
               }
             : path === "/api/option-quotes"
               ? { quotes: {}, available: true }
-              : MOVED;
+              : path === "/api/setups" || path === "/api/tags"
+                ? []
+                : MOVED;
       return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
     });
     vi.stubGlobal("fetch", fetchMock);
