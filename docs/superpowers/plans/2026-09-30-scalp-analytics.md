@@ -4550,3 +4550,32 @@ git commit -m "docs: point the specs and README at the scalp analytics, with its
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+---
+
+## After execution (2026-09-30)
+
+Executed inline on `feat/scalp-analytics`, 6c42f99..36cd28e. The suite has 1,043 tests. The final Opus review found 1 Critical and 1 Important issue, both fixed, and raised 4 Minor ones.
+
+### Fixed
+- **From the live check:** a setup card's "Avg return" label wrapped at 1024 px (6e91a18).
+- **Critical, from the final review:** with every bar on one side of zero, the axis fitted the data alone. The smallest bar vanished and the zero line went (e0616de).
+- **Important, from the final review:** the breakdown's labels crowded past about 4 rows at 1024 px. Its bars now lie down, one band per row. Cells are keyed by label, which also clears the review's duplicate-key Minor (36cd28e).
+
+### Rulings made while executing
+- The plan expected 256 core tests after Task 2; there are 258. The two Review Focus tests were added after the count was taken.
+- **Reviewer items that stand:**
+  - A "Both" setup's card counts its flies too, but opens the Scalps tab (spec §7.2).
+  - Scalps the filler answers `no_bars` for are asked about again each visit (spec §8).
+  - The fetching count covers the whole journal (deviation 8).
+  - With setups failed to load, set-up scalps merge into "unknown setup" (spec §10).
+  - Weekend entries get Sat/Sun rows.
+  - After-hours entries fall in 60+.
+  - The tooltip heading reads "0–5 min after the open".
+- **Outside this branch:** Overview's `MonthBars` has the same zero-baseline weakness for all-negative months.
+
+### Deferred minors
+1. The Playbook ignores its queries' errors. The cards read "Loading…" forever if the trade list fails, and show the empty-state text while setups load or after they fail.
+2. With setups failed or still loading, a setup link filters the trades while the Setup dropdown shows All or blank.
+3. `ScalpsTab` recomputes every stat on each render, with no `useMemo`. That's fine at today's scale.
+4. Overview's `MonthBars` doesn't take in zero (pre-existing).
