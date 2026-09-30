@@ -226,6 +226,18 @@ describe("Playbook", () => {
     expect(within(cards).getByRole("article", { name: "Old setup" })).toBeTruthy();
   });
 
+  it("says the cards couldn't load when the trades fail, instead of loading for ever", async () => {
+    const fetchMock = stubApi();
+    const answered = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) =>
+      String(input).includes("/api/trades")
+        ? json({ error: "boom" }, 500)
+        : (answered?.(input, init) as Promise<Response>),
+    );
+    renderPlaybook();
+    expect(await screen.findByText("Couldn't load the setups' trades: reload to try again.")).toBeTruthy();
+  });
+
   it("fetches the stock prices the scalps lack, once", async () => {
     const missing = tradeRow({
       id: "m1",

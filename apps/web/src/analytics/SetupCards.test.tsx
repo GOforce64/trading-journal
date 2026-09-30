@@ -146,6 +146,16 @@ describe("SetupCards", () => {
     expect(card("Old setup").getByText("Both")).toBeTruthy();
   });
 
+  it("says so when the trades or setups couldn't load, and waits for the setups before saying there are none", () => {
+    const { rerender } = render(
+      <SetupCards trades={undefined} setups={SETUPS} showArchived={false} failed />,
+    );
+    expect(screen.getByText("Couldn't load the setups' trades: reload to try again.")).toBeTruthy();
+    rerender(<SetupCards trades={TRADES} setups={[]} showArchived={false} setupsLoading />);
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.queryByText("Tag trades with a setup to see its stats here.")).toBeNull();
+  });
+
   it("says what to do without cards, and waits for the trades", () => {
     const open = tradeRow({
       id: "open",

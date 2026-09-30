@@ -38,12 +38,19 @@ export interface PlaybookProps {
 export function Playbook({ onOpenSetup }: PlaybookProps) {
   // Shared by the cards and the Setups table.
   const [showArchived, setShowArchived] = useState(false);
-  const { data: trades } = useAllTrades();
-  const { data: setups = [] } = useSetups();
+  const { data: trades, isError: tradesFailed } = useAllTrades();
+  const { data: setups = [], isError: setupsFailed, isLoading: setupsLoading } = useSetups();
   useBackfillPrices(trades);
   return (
     <div className="flex flex-col gap-3">
-      <SetupCards trades={trades} setups={setups} showArchived={showArchived} onOpenSetup={onOpenSetup} />
+      <SetupCards
+        trades={trades}
+        setups={setups}
+        showArchived={showArchived}
+        onOpenSetup={onOpenSetup}
+        failed={tradesFailed || setupsFailed}
+        setupsLoading={setupsLoading}
+      />
       <SetupsPanel showArchived={showArchived} onShowArchived={setShowArchived} />
       <TagsPanel />
     </div>

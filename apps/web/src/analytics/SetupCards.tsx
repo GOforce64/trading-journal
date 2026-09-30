@@ -122,6 +122,8 @@ export function SetupCards({
   showArchived,
   onOpenSetup,
   today = todayNy(),
+  failed = false,
+  setupsLoading = false,
 }: {
   /** Every trade; undefined while they load. */
   trades: readonly TradeView[] | undefined;
@@ -130,6 +132,10 @@ export function SetupCards({
   onOpenSetup?: (setupId: string, tab: "scalps" | "flies") => void;
   /** New York's date, YYYY-MM-DD; the year decides whether a date shows its own. */
   today?: string;
+  /** The trades or the setups couldn't load. */
+  failed?: boolean;
+  /** The setups are still loading, so no card can be named yet. */
+  setupsLoading?: boolean;
 }) {
   const shown = new Map(
     setups.filter((setup) => showArchived || !setup.archived).map((setup) => [setup.id, setup]),
@@ -141,7 +147,8 @@ export function SetupCards({
       )
     : [];
   let body: ReactNode;
-  if (!trades) body = <p className="text-muted">Loading…</p>;
+  if (failed) body = <p className="text-down">Couldn't load the setups' trades: reload to try again.</p>;
+  else if (!trades || setupsLoading) body = <p className="text-muted">Loading…</p>;
   else if (cards.length === 0)
     body = <p className="text-muted">Tag trades with a setup to see its stats here.</p>;
   else {
