@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseContracts, parsePrice, targetId, targetIndex } from "./levels.js";
+import { parseAmount, parseContracts, parsePrice, targetId, targetIndex } from "./levels.js";
 
 describe("parsePrice", () => {
   it("reads plain prices, to the cent", () => {
@@ -36,5 +36,15 @@ describe("targetId and targetIndex", () => {
     expect(targetId(0)).toBe("t1");
     expect(targetIndex("t2")).toBe(1);
     expect(targetIndex("stop")).toBeNull();
+  });
+});
+
+describe("parseAmount", () => {
+  it("reads dollars to the cent, above 0", () => {
+    expect(parseAmount("120")).toBe(120);
+    expect(parseAmount("104.054")).toBe(104.05);
+    expect(parseAmount("0")).toBe("A planned risk must be above 0");
+    for (const typed of ["$120", "-5", "abc", ""])
+      expect(parseAmount(typed)).toBe("Enter an amount like 120");
   });
 });

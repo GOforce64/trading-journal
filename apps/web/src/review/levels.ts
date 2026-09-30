@@ -18,6 +18,13 @@ export function parsePrice(text: string, basis: LevelBasis): number | string {
   return price;
 }
 
+/** A typed dollar amount, such as a planned risk (scalp-R spec §9.2): digits and a decimal point; above 0. */
+export function parseAmount(text: string): number | string {
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(text)) return "Enter an amount like 120";
+  const amount = round2(Number(text));
+  return amount > 0 ? amount : "A planned risk must be above 0";
+}
+
 /** A typed contract count (scalp-R spec §8): a whole number, 1 or more. */
 export function parseContracts(text: string): number | string {
   return /^\d+$/.test(text) && Number(text) >= 1 ? Number(text) : "Contracts are a whole number, 1 or more";

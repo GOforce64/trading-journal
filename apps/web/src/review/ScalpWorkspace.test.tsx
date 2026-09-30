@@ -42,6 +42,9 @@ vi.mock("../chart/TradeCharts.js", () => ({
         <button type="button" onClick={() => edit?.onDrop("t1", 235)}>
           chart: drop T1
         </button>
+        <button type="button" onClick={() => edit?.onDrag("stop", 228)}>
+          chart: drag the stop to 228
+        </button>
       </div>
     );
   },
@@ -95,6 +98,22 @@ const STOCK = {
   riskOverride: null,
   targets: [{ price: 234.5, contracts: 2 }],
 };
+/** The spec's worked example: in at 09:31:05, out at 09:46:12, stop 229, T1 233 ×1, T2 234.50 ×1. */
+const WORKED = {
+  ...SCALP,
+  openedAt: Date.UTC(2026, 8, 28, 13, 31, 5),
+  closedAt: Date.UTC(2026, 8, 28, 13, 46, 12),
+  scalpPrices: { ...PRICES, entryPrice: 230.78 + (231.355 - 230.78) * (5 / 60) },
+  scalp: {
+    ...STOCK,
+    stopPrice: 229,
+    targets: [
+      { price: 233, contracts: 1 },
+      { price: 234.5, contracts: 1 },
+    ],
+  },
+};
+const liveRisk = () => screen.getByTestId("live-risk").textContent;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -384,5 +403,84 @@ describe("ScalpWorkspace levels", () => {
     renderWorkspace();
     expect(await screen.findByText("1 runner, counted at T2")).toBeTruthy();
     expect(screen.getAllByText("on the wrong side")).toHaveLength(1);
+  });
+});
+
+describe("ScalpWorkspace R", () => {
+  it("shows the live line, and it follows a drag of the stop before anything is saved", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toBe("Risk $104.05 · R +0.43 · R:R 2.8"));
+    fireEvent.click(screen.getByRole("button", { name: "chart: drag the stop to 228" }));
+    await waitFor(() => expect(liveRisk()).toBe("Risk $141.22 · R +0.32 · R:R 2.0"));
+    expect(patches(fetchMock)).toEqual([]);
+  });
+
+  it("gives the reason instead without a planned risk", async () => {
+    stubApi({ trade: { ...WORKED, scalp: null } });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toBe("Set a stop in the review strip to get R."));
+  });
+
+  it("types the stock at entry, refusing 0", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Type the stock at entry" }));
+    const stock = field("Stock at entry");
+    expect(stock.value).toBe("230.83");
+    fireEvent.change(stock, { target: { value: "0" } });
+    fireEvent.blur(stock);
+    expect(screen.getByText("A stock price must be above 0")).toBeTruthy();
+    fireEvent.change(stock, { target: { value: "231" } });
+    fireEvent.keyDown(stock, { key: "Enter" });
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", stockEntryOverride: 231 } }]),
+    );
+  });
+
+  it("shows a typed stock price, and ✕ goes back to the fetched one", async () => {
+    const fetchMock = stubApi({ trade: { ...WORKED, scalp: { ...WORKED.scalp, stockEntryOverride: 231 } } });
+    renderWorkspace();
+    expect(await screen.findByText("231.00")).toBeTruthy();
+    expect(screen.getAllByText("(typed)")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Use the fetched stock price" }));
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", stockEntryOverride: null } }]),
+    );
+  });
+
+  it("types a planned risk in dollars, refusing 0, and a typed one replaces the model", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Type the planned risk" }));
+    const risk = field("Planned risk");
+    expect(risk.value).toBe("104.05");
+    fireEvent.change(risk, { target: { value: "0" } });
+    fireEvent.blur(risk);
+    expect(screen.getByText("A planned risk must be above 0")).toBeTruthy();
+    fireEvent.change(risk, { target: { value: "120" } });
+    fireEvent.keyDown(risk, { key: "Enter" });
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", riskOverride: 120 } }]),
+    );
+  });
+
+  it("prices a typed planned risk, with ✕ to go back to the model", async () => {
+    const fetchMock = stubApi({ trade: { ...WORKED, scalp: { ...WORKED.scalp, riskOverride: 120 } } });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toBe("Risk $120.00 · R +0.37 · R:R 2.4"));
+    expect(screen.getByText("$120.00")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use the model's planned risk" }));
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", riskOverride: null } }]),
+    );
+  });
+
+  it("prices from a typed stock at entry when none was fetched", async () => {
+    stubApi({
+      trade: { ...WORKED, scalpPrices: null, scalp: { ...WORKED.scalp, stockEntryOverride: 230.83 } },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toMatch(/^Risk \$104\.\d\d · R \+0\.43 · R:R 2\.8$/));
   });
 });
