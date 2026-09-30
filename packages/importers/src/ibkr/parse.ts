@@ -177,9 +177,10 @@ function confirmFill(row: Row) {
   });
 }
 
+/** A cancel from either statement: Activity's rows name the price `tradePrice`, Today's name it `price`. */
 function cancelOf(row: Row): CancelRef | null {
   const quantity = -Number(row.quantity);
-  const price = Number(row.tradePrice);
+  const price = Number(row.tradePrice ?? row.price);
   if (
     !row.origTradeID ||
     !Number.isFinite(quantity) ||
