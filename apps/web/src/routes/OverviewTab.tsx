@@ -19,7 +19,7 @@ import {
 import { MonthBars, RollingLine } from "../analytics/Charts.js";
 import { EquityCurve } from "../analytics/EquityCurve.js";
 import { rememberEdges, resolveEdges } from "../analytics/edges.js";
-import { dollars, profitFactorText, shareText, winRateText } from "../analytics/format.js";
+import { dollars, profitFactorText, rText, shareText, winRateText } from "../analytics/format.js";
 import { KpiStrip } from "../analytics/KpiStrip.js";
 import { Section } from "../analytics/Section.js";
 import { SplitGrid } from "../analytics/SplitGrid.js";
@@ -59,6 +59,15 @@ export function OverviewTab({ trades, search, onSearch, onOpenTrade }: TabProps)
             id: "expectancy",
             label: "Expectancy",
             value: summary.expectancy == null ? "—" : <Money value={summary.expectancy} />,
+          },
+          {
+            id: "avg-r",
+            label: "Avg R",
+            value: summary.avgR == null ? "—" : rText(summary.avgR),
+            sub:
+              summary.rCount > 0
+                ? `over ${summary.rCount} scalp${summary.rCount === 1 ? "" : "s"}`
+                : undefined,
           },
           {
             id: "avg-win-loss",

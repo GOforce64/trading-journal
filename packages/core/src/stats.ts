@@ -26,6 +26,8 @@ export interface StatTrade {
   fees: number;
   legs: readonly StatLeg[];
   ironFly: StatFly | null;
+  /** A scalp's R (scalp-R spec §10); absent or null without one. */
+  risk?: { r: number | null } | null;
 }
 
 export type Closed<T extends StatTrade> = T & { closedAt: number; netPnl: number };
@@ -56,6 +58,10 @@ export interface Summary {
   avgWin: number | null;
   avgLoss: number | null;
   maxDrawdown: number;
+  /** The mean R of the trades that have one, to 0.01; null with none (scalp-R spec §10). */
+  avgR: number | null;
+  /** How many trades have an R. */
+  rCount: number;
 }
 
 const total = (trades: readonly ClosedTrade[], pick: (trade: ClosedTrade) => number) =>
@@ -70,6 +76,10 @@ export function summarize(trades: readonly ClosedTrade[]): Summary {
   const net = total(trades, (trade) => trade.netPnl);
   const fees = total(trades, (trade) => trade.fees);
   const count = trades.length;
+  const rs = trades.flatMap((trade) => {
+    const r = trade.risk?.r;
+    return r == null ? [] : [r];
+  });
   let profitFactor: number | null = null;
   if (losses.length > 0) profitFactor = grossWins / -grossLosses;
   else if (wins.length > 0) profitFactor = Number.POSITIVE_INFINITY;
@@ -89,6 +99,8 @@ export function summarize(trades: readonly ClosedTrade[]): Summary {
     avgWin: wins.length ? round2(grossWins / wins.length) : null,
     avgLoss: losses.length ? round2(grossLosses / losses.length) : null,
     maxDrawdown: maxDrawdown(trades),
+    avgR: rs.length ? round2(rs.reduce((sum, r) => sum + r, 0) / rs.length) : null,
+    rCount: rs.length,
   };
 }
 

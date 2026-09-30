@@ -55,6 +55,13 @@ function setup(onNewScalp?: () => void, pending: unknown[] = [scalp]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Scalps", () => {
+  it("shows each scalp's return on the premium paid, under Return", async () => {
+    setup();
+    // +$44.74 on 2 × 100 × 1.06 = $212 paid.
+    expect((await screen.findByTestId("pct-s1")).textContent).toBe("+21.10%");
+    expect(screen.getByRole("columnheader", { name: "Return" })).toBeTruthy();
+  });
+
   it("asks for scalps only, and lists them under its own title", async () => {
     const fetchMock = setup();
     expect(await screen.findByText("NVDA")).toBeTruthy();

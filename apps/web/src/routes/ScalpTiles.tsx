@@ -1,3 +1,4 @@
+import { returnOnCost } from "@tj/core";
 import type { TradeView } from "../api.js";
 import { Pct, Tile } from "../components/ui.js";
 
@@ -25,8 +26,6 @@ export function heldText(ms: number): string {
 export function ScalpTiles({ trade }: { trade: TradeView }) {
   const leg = trade.legs[0];
   const contracts = leg ? Math.abs(leg.quantity) : 0;
-  const cost = leg ? contracts * leg.multiplier * leg.openPrice : 0;
-  const returnOnCost = trade.netPnl != null && cost > 0 ? trade.netPnl / cost : null;
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
       <Tile label="Contract" testId="tile-contract">
@@ -47,7 +46,7 @@ export function ScalpTiles({ trade }: { trade: TradeView }) {
         {usd(trade.fees)}
       </Tile>
       <Tile label="Return on cost" testId="tile-return">
-        <Pct value={returnOnCost} />
+        <Pct value={returnOnCost(trade)} />
       </Tile>
     </div>
   );

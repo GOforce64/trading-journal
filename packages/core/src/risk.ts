@@ -294,3 +294,21 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
     mfe,
   };
 }
+
+/** What `returnOnCost` reads from a trade. A stored trade, and the web app's trade rows, satisfy it as they are. */
+export interface ReturnTrade {
+  strategy: string;
+  netPnl: number | null;
+  legs: readonly { quantity: number; multiplier: number; openPrice: number }[];
+}
+
+/**
+ * A scalp's net P&L over the premium paid, contracts × multiplier × entry premium: 0.211 is +21.1%.
+ * Null for an open trade, a fly, or anything but a single long option.
+ */
+export function returnOnCost(trade: ReturnTrade): number | null {
+  const leg = trade.legs.length === 1 ? trade.legs[0] : undefined;
+  if (trade.strategy !== "scalp" || trade.netPnl == null || !leg || leg.quantity <= 0) return null;
+  const cost = leg.quantity * leg.multiplier * leg.openPrice;
+  return cost > 0 ? trade.netPnl / cost : null;
+}

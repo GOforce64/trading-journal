@@ -154,6 +154,23 @@ describe("Analytics filters", () => {
     fireEvent.change(await screen.findByRole("combobox", { name: "Ticker" }), { target: { value: "CC" } });
     expect(onSearch).toHaveBeenCalledWith({ ticker: "CC" });
   });
+
+  it("shows Avg R over the scalps that have one", async () => {
+    stubTrades([
+      ...TRADES,
+      tradeRow({
+        id: "s1",
+        underlying: "NVDA",
+        strategy: "scalp",
+        opened: "2026-09-28 09:31",
+        closed: "2026-09-28 09:46",
+        netPnl: 44.74,
+        r: 0.43,
+      }),
+    ]);
+    renderWithClient(<Analytics search={{}} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("avg-r")).toBe("Avg R+0.43Rover 1 scalp"));
+  });
 });
 
 describe("Analytics with an old link", () => {

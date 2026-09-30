@@ -7,6 +7,7 @@ import {
   contractsHeld,
   holdRange,
   type RiskTrade,
+  returnOnCost,
   scalpRisk,
   sortTargets,
   stockAt,
@@ -377,5 +378,21 @@ describe("scalpRisk", () => {
         },
       ),
     );
+  });
+});
+
+describe("returnOnCost", () => {
+  it("is a scalp's net P&L over the premium paid", () => {
+    // +$44.74 on 2 × 100 × 1.06 = $212 paid.
+    expect(returnOnCost(nvda())).toBeCloseTo(0.211, 4);
+    expect(returnOnCost(nvda({ netPnl: -212 }))).toBe(-1);
+  });
+
+  it("is null for an open trade, a fly, and anything but a single long option", () => {
+    expect(returnOnCost(nvda({ closedAt: null, netPnl: null }))).toBeNull();
+    expect(returnOnCost(nvda({ strategy: "iron_fly" }))).toBeNull();
+    expect(returnOnCost(nvda({ legs: [leg(), leg({ right: "P" })] }))).toBeNull();
+    expect(returnOnCost(nvda({ legs: [leg({ quantity: -2 })] }))).toBeNull();
+    expect(returnOnCost(nvda({ legs: [leg({ openPrice: 0 })] }))).toBeNull();
   });
 });
