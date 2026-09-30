@@ -92,6 +92,8 @@ The review status lives in `core` so the server's filter and the web's labels ca
   | `target_price` | REAL, nullable | The same. |
 
   No sync columns, like `iron_fly_details`: a merge follows the trade's `edited_at` (parent spec §12). The R step adds its columns to this table (§15).
+
+  Scalp R (migration 0006) replaced `target_price` with the `scalp_targets` list and added `stock_entry_override` and `risk_override` ([2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md) §5).
 - **`trades.reviewed_at`**: INTEGER, nullable. When the user clicked **Done reviewing**; null otherwise.
 - Nothing is backfilled: the table starts empty and every `reviewed_at` is null.
 
@@ -111,10 +113,10 @@ The review status lives in `core` so the server's filter and the web's labels ca
 
 ### 6.2 Trades
 
-- **Every trade** the API returns carries `review` (the value above) and `scalp` (`{ levelBasis, stopPrice, targetPrice }`, or null without a row).
+- **Every trade** the API returns carries `review` (the value above) and `scalp` (`{ levelBasis, stopPrice, targets, stockEntryOverride, riskOverride }`, or null without a row).
 - **`GET /api/trades?review=pending`** returns the pending trades only, **oldest first** (by `openedAt`), with no 500-row limit. The queue, the nav badge and the Dashboard section all read `?strategy=scalp&review=pending`, so one query key serves them and one invalidation updates them.
 - **`PATCH /api/trades/:id`** gains two fields:
-  - `scalp: { levelBasis?, stopPrice?, targetPrice? }` merges into the row, the way `ironFly` does. A missing row is created; `levelBasis` is then required, and the web always sends it. A stock price must be above 0; a premium can be 0, meaning "let it ride to zero"; both are rounded to $0.01. Only a scalp takes `scalp` (400 otherwise).
+  - `scalp: { levelBasis?, stopPrice?, targets? }` (a list since scalp R, §8 there) merges into the row, the way `ironFly` does. A missing row is created; `levelBasis` is then required, and the web always sends it. A stock price must be above 0; a premium can be 0, meaning "let it ride to zero"; both are rounded to $0.01. Only a scalp takes `scalp` (400 otherwise).
   - `reviewed: true` stamps `reviewed_at` with the server's clock; `false` clears it.
 - **Changing the basis clears both levels** on the server, unless the same patch sets them, since they're then in the new basis. A stock level means nothing as a premium. The web never sends both.
 - **At most one emotion tag:** a `tagIds` holding two tags of kind `emotion` is refused (400, "A trade has at most one emotion").
@@ -188,7 +190,7 @@ Along the bottom: **Exclude from stats** on the left; **Done reviewing** on the 
 
 - **Stock basis only**, on the **intraday chart only**:
   - stop: red (`#ef5350`), dashed, labelled **STOP**;
-  - target: green (`#26a69a`), dashed, labelled **TARGET**;
+  - each target: green (`#26a69a`), dashed, labelled **T1 ×1**, **T2 ×1** (scalp R spec §9.3);
   - both show their price on the price axis.
 - **Premium basis:** no lines. Under the fields: "Premium levels aren't drawn yet: there's no option chart."
 - Without a chart (no key, an index, Alpaca down), the fields still work.
@@ -357,6 +359,8 @@ The seeded placeholders are ordinary rows, renamed or archived like any other. P
 ---
 
 ## 15. For the R step
+
+Built in [2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md).
 
 - R reads the stop from `scalp_details`:
   - **Premium basis:** planned risk is (entry premium − stop premium) × contracts × multiplier, with no model.

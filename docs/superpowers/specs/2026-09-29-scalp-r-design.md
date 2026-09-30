@@ -1,7 +1,7 @@
 # Scalp R — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Approved 2026-09-30. Plan: [2026-09-30-scalp-r.md](../plans/2026-09-30-scalp-r.md); the deviations it proposes are folded in here.
+- **Status:** Approved; implemented on feat/scalp-r. Plan: [2026-09-30-scalp-r.md](../plans/2026-09-30-scalp-r.md), whose deviations are folded in.
 - **Scope:** R for each scalp. It covers:
   - the stock price at entry, fetched and interpolated from minute bars;
   - implied volatility, solved from the entry premium;
@@ -374,3 +374,20 @@ It sits under the scalp tiles.
 
 1. **The second part:** the Scalps tab in Analytics (time of day, hold time, breakdowns with R and return on cost, mistake cost) and the Playbook's per-setup stat cards.
 2. **The option-premium chart** (scalp-review spec §16, item 1), which also gives MAE/MFE in R on the premium basis.
+
+### Live check (2026-09-30)
+
+Over a read-only copy of the real journal, migrated to 0006, with the real Alpaca key. Headless Firefox took the screenshots.
+
+- **The worked example matches §1.** The Sep 28 NVDA 232.5C scalp was added with its fills' times. The stop was set at 229, with T1 233 ×1 and T2 234.50 ×1.
+  - `POST /api/risk/fill` answered `{"filled":1,"missing":[],"unavailable":null}` in 0.57 s.
+  - The stock at entry was 230.8279, with a hold range of 230.71–233.21.
+  - IV 0.7038, the option at the stop 0.5397, planned risk $104.05 and R 0.4300.
+  - Planned reward $288.61 and R:R 2.774. MAE was 0.12 (0.0645R) and MFE 2.38 (1.3032R), with 388.9 minutes left.
+- **The tiles** read "$104.05 · option 1.06 → 0.54 at the stop", "+0.43R · +$44.74 ÷ $104.05", and "2.8 · reward $288.61 over 2 targets". MAE read "−0.12 · −0.06R · stock low 230.71" and MFE "+2.38 · +1.30R · stock high 233.21". The model tile read "IV 70.4% · stock 230.83 · 6 h 29 min left". Return on cost was +21.10%.
+- **A real drag.**
+  - With T1 alone saved, **+ Target** and a click 25% down the chart placed T2 at 233.11 ×1.
+  - Dragging it 30 px up changed the live line before anything was saved: R:R went from 1.9 to 2.8.
+  - The drop saved the list once, with T2 at 234.49. The chart didn't pan.
+- **The lists.** The Scalps list read +0.43R under R and +21.10% under Return. The Dashboard and Analytics Overview each read Avg R +0.43R, "over 1 scalp".
+- **At 1024 px** nothing overlaps or is cut off. The tiles stay six to a row, because Tailwind's `lg` starts at 1024; their small print wraps.

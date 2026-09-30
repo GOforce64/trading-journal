@@ -56,17 +56,18 @@ requests that don't come from `localhost`.
 - **Scalps** — synced from IBKR (Flex Web Service) from a start date you choose, or
   typed in, with every fill kept; reviewed on the trade page with the chart: drag the stop and
   target on the chart (or type them as option premium), pick a setup, mistakes, an emotion and a grade,
-  and work through a To review queue; setups and tags live on the Playbook page. Next: a Black-Scholes
-  estimate of the dollar risk the stop implies, and R-multiples. The chart of the session: 3-minute candles (1m to 1h),
-  with a daily chart beside it, your fills marked, EMAs, VWAP, and premarket and prior-day
-  levels, from Alpaca's free data.
+  and work through a To review queue; setups and tags live on the Playbook page. Each scalp
+  gets its R: the stop repriced by Black-Scholes into dollars at risk, several targets with
+  trims, R, R:R, MAE/MFE, its return on the premium paid, and Avg R on the Dashboard. The
+  chart of the session: 3-minute candles (1m to 1h), with a daily chart beside it, your fills
+  marked, EMAs, VWAP, and premarket and prior-day levels, from Alpaca's free data.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
   P&L calendar, open and recent trades) and an Analytics page with every split at once
   and an Iron flies tab measured against max profit.
 - **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
   dollar statistics.
 
-R-multiples, missed trades and an option-premium chart arrive in later steps; see
+Scalp analytics, missed trades and an option-premium chart arrive in later steps; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
 [the plans](docs/superpowers/plans/).
 
