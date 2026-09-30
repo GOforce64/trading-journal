@@ -148,4 +148,42 @@ describe("Import", () => {
     expect(String(requests(fetchMock)[2]?.[0])).toContain("/api/moves/fill");
     expect(JSON.parse(String(requests(fetchMock)[2]?.[1]?.body))).toEqual({ tradeIds: ["id-1"] });
   });
+
+  it("says so when fetching the stock prices failed, rather than nothing", async () => {
+    stubFetch(
+      json(preview),
+      json({ imported: 1, backupFile: null, importedIds: ["id-1"] }),
+      json({ error: "boom" }, 500),
+    );
+    setup();
+    paste('{"format":"oquants-cells/1"}');
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Import 1" }));
+    expect(
+      await screen.findByText(
+        "Couldn't fetch stock prices: the server answered 500. Try Fill in missing on the Iron flies tab.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("asks for the prices of more than 1,000 imported trades in batches the server takes", async () => {
+    const ids = Array.from({ length: 1001 }, (_, index) => `id-${index}`);
+    const answer = (count: number) => json({ filled: count, missing: [], unavailable: null });
+    const fetchMock = stubFetch(
+      json(preview),
+      json({ imported: 1001, backupFile: null, importedIds: ids }),
+      answer(1000),
+      answer(1),
+    );
+    setup();
+    paste('{"format":"oquants-cells/1"}');
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Import 1" }));
+    await waitFor(() => expect(requests(fetchMock)).toHaveLength(4));
+    const sizes = requests(fetchMock)
+      .slice(2)
+      .map((call) => JSON.parse(String(call[1]?.body)).tradeIds.length);
+    expect(sizes).toEqual([1000, 1]);
+    expect(await screen.findByText(/^Filled 1,?001/)).toBeTruthy();
+  });
 });

@@ -12,6 +12,12 @@ export type PriceSide = FillResult["missing"][number]["side"];
 export type MissingReason = FillResult["missing"][number]["reason"];
 
 export const FILL_KEY = ["fill-moves"];
+/** The most ids the fill endpoint takes a request. */
+const FILL_BATCH = 1000;
+
+/** Why a fill failed, for the pages that started it. */
+export const fillFailure = (error: unknown, hint = "") =>
+  `Couldn't fetch stock prices: ${error instanceof Error ? error.message : String(error)}.${hint}`;
 
 export const MOVE_COPY = {
   noKey: "Add an Alpaca key in Settings to fetch stock prices.",
@@ -31,9 +37,24 @@ export function useFillMoves() {
   return useMutation({
     mutationKey: FILL_KEY,
     mutationFn: async (tradeIds?: string[]): Promise<FillResult> => {
-      const res = await api.api.moves.fill.$post({ json: tradeIds ? { tradeIds } : {} });
-      if (!res.ok) throw new Error(`fill failed: ${res.status}`);
-      return res.json();
+      const post = async (json: { tradeIds?: string[] }) => {
+        const res = await api.api.moves.fill.$post({ json });
+        if (!res.ok) throw new Error(`the server answered ${res.status}`);
+        return res.json();
+      };
+      if (!tradeIds) return post({});
+      // The server takes 1,000 ids a request; a bigger import goes in batches, answered as one.
+      let merged: FillResult = { filled: 0, missing: [], unavailable: null };
+      for (let start = 0; start < tradeIds.length; start += FILL_BATCH) {
+        const result = await post({ tradeIds: tradeIds.slice(start, start + FILL_BATCH) });
+        merged = {
+          filled: merged.filled + result.filled,
+          missing: [...merged.missing, ...result.missing],
+          unavailable: result.unavailable,
+        };
+        if (result.unavailable) break;
+      }
+      return merged;
     },
     // On the hook rather than on mutate, so it still runs after the page that saved has moved on.
     onSettled: () =>

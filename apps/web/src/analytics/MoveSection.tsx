@@ -1,5 +1,5 @@
 import { ivCrushHistogram, type MoveRow, movePoints, moveRatioBuckets, type RatioSummary } from "@tj/core";
-import { fillSummary, MOVE_COPY, useFilling, useFillMoves, useMarketOn } from "../moves.js";
+import { fillFailure, fillSummary, MOVE_COPY, useFilling, useFillMoves, useMarketOn } from "../moves.js";
 import { dollars } from "./format.js";
 import { CrushHistogram, MoveScatter } from "./MoveCharts.js";
 import { Section } from "./Section.js";
@@ -81,6 +81,7 @@ export function MoveSection({
             {fetching ? MOVE_COPY.fetching : "Fill in missing"}
           </button>
         )}
+        {fill.error && <span className="text-down">{fillFailure(fill.error)}</span>}
         {fill.data && <span>{fillSummary(fill.data)}</span>}
       </p>
       <div className="grid gap-2 lg:grid-cols-3">

@@ -427,6 +427,26 @@ describe("Analytics Iron flies: move data", () => {
     expect(button.getAttribute("title")).toBe("Add an Alpaca key in Settings to fetch stock prices.");
   });
 
+  it("says so when Fill in missing failed", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/moves/fill") return new Response("{}", { status: 500 });
+      const body =
+        path === "/api/settings"
+          ? { dataDir: null, marketData: { state: "on", message: null, keyIdHint: null } }
+          : path === "/api/setups" || path === "/api/tags"
+            ? []
+            : MOVED;
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    const button = await screen.findByRole("button", { name: "Fill in missing" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    expect(await screen.findByText("Couldn't fetch stock prices: the server answered 500.")).toBeTruthy();
+  });
+
   it("fills every fly's missing stock prices on request, and says how it went", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const path = new URL(String(input), "http://localhost").pathname;
