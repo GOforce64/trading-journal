@@ -141,6 +141,20 @@ describe("Playbook", () => {
     );
   });
 
+  it("says why archiving a setup or a tag failed", async () => {
+    stubApi("The server is read-only");
+    renderPlaybook();
+    fireEvent.click(within(await screen.findByTestId("setup-orb")).getByRole("button", { name: "Archive" }));
+    expect(
+      await within(setupsPanel()).findByText("Couldn't archive ORB breakout: The server is read-only"),
+    ).toBeTruthy();
+    const fomo = (await screen.findByText("FOMO entry")).closest("li") as HTMLElement;
+    fireEvent.click(within(fomo).getByRole("button", { name: "Archive" }));
+    expect(
+      await within(tagsPanel()).findByText("Couldn't archive FOMO entry: The server is read-only"),
+    ).toBeTruthy();
+  });
+
   it("shows why a name was refused beside the row, keeping the draft", async () => {
     stubApi("A setup with that name exists");
     renderPlaybook();
