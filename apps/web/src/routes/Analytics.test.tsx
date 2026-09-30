@@ -231,6 +231,21 @@ describe("Analytics' Setup filter", () => {
     expect([...select.options].map((option) => option.text)).toEqual(["All", "Old setup", "ORB breakout"]);
   });
 
+  it("keeps showing the linked setup when the setups couldn't load, rather than All", async () => {
+    const fetchMock = stubTrades(TAGGED, [], { setups: SETUPS });
+    const answered = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) =>
+      String(input).includes("/api/setups")
+        ? new Response("{}", { status: 500 })
+        : (answered?.(input, init) as Promise<Response>),
+    );
+    renderWithClient(<Analytics search={{ setup: "orb" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$100.00"));
+    const select = screen.getByRole("combobox", { name: "Setup" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.selectedOptions[0]?.text).toBe("this setup"));
+    expect(select.value).toBe("orb");
+  });
+
   it("counts a setup the journal doesn't have as All", async () => {
     stubTrades(TAGGED, [], { setups: SETUPS });
     renderWithClient(<Analytics search={{ setup: "gone" }} onSearch={() => {}} />);
