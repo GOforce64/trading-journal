@@ -1,4 +1,5 @@
 import { ivCrushHistogram, type MoveRow, movePoints, moveRatioBuckets, type RatioSummary } from "@tj/core";
+import { useMemo } from "react";
 import {
   fillFailure,
   fillSummary,
@@ -65,9 +66,10 @@ export function MoveSection({
   flies: readonly MoveRow[];
   tickers: ReadonlyMap<string, string>;
 }) {
-  const points = movePoints(flies);
-  const ratios = moveRatioBuckets(flies);
-  const crush = ivCrushHistogram(flies);
+  // Each works out every fly's moves (an IV solve apiece), so only a new list of flies runs them again.
+  const points = useMemo(() => movePoints(flies), [flies]);
+  const ratios = useMemo(() => moveRatioBuckets(flies), [flies]);
+  const crush = useMemo(() => ivCrushHistogram(flies), [flies]);
   const market = useMarketState();
   const marketOn = market === "on";
   const fetching = useFilling();
