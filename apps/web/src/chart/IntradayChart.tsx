@@ -364,7 +364,8 @@ export function IntradayChart({
           {model.emas.map((each, index) => {
             const value = values.emas[index]?.get(candle.t);
             return show[`ema${index}` as Toggle] && value !== undefined ? (
-              <span key={each.length} style={{ color: EMA_COLORS[index] }}>
+              // biome-ignore lint/suspicious/noArrayIndexKey: the slot is an EMA's identity, and two can share a length
+              <span key={`ema${index}`} style={{ color: EMA_COLORS[index] }}>
                 EMA {each.length} {value.toFixed(2)}
               </span>
             ) : null;

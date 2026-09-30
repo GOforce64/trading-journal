@@ -129,6 +129,19 @@ describe("IntradayChart", () => {
   });
 });
 
+describe("IntradayChart's legend", () => {
+  it("lists two EMAs of the same length, each once, without React confusing them", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const twins = intradayModel(BARS, TRADE, 3, [8, 8, 20, 50]);
+    render(<IntradayChart model={twins} show={DEFAULT_PREFS.show} fitKey={0} />);
+    act(() => library.crosshair?.({ time: nyWallClock(DAY, 600) / 1000 }));
+    const legend = screen.getByTestId("chart-legend").textContent ?? "";
+    expect(legend.match(/EMA 8 /g)).toHaveLength(2);
+    expect(errors.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(false);
+    errors.mockRestore();
+  });
+});
+
 describe("DailyChart", () => {
   it("draws daily candles by date, with the trade's days marked, opening on the last six months", () => {
     const daily = [
