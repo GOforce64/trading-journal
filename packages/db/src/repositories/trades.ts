@@ -205,9 +205,11 @@ export function mergeLevels(
   const levelBasis = patch.levelBasis ?? existing?.levelBasis;
   if (!levelBasis) throw new ReviewRuleError("A scalp's first level needs a basis");
   const kept = existing?.levelBasis === levelBasis ? existing : null;
+  // Each value is judged at the cent it's stored at: 0.004 is refused as the 0 it would become.
   const level = (value: number) => {
-    if (levelBasis === "stock" && value <= 0) throw new ReviewRuleError("A stock price must be above 0");
-    return round2(value);
+    const cents = round2(value);
+    if (levelBasis === "stock" && cents <= 0) throw new ReviewRuleError("A stock price must be above 0");
+    return cents;
   };
   const stop = patch.stopPrice === undefined ? (kept?.stopPrice ?? null) : patch.stopPrice;
   let targets = kept?.targets ?? [];
@@ -218,8 +220,9 @@ export function mergeLevels(
   }
   const override = (sent: number | null | undefined, stored: number | null, message: string) => {
     const value = sent === undefined ? stored : sent;
-    if (value != null && value <= 0) throw new ReviewRuleError(message);
-    return value == null ? null : round2(value);
+    const cents = value == null ? null : round2(value);
+    if (cents != null && cents <= 0) throw new ReviewRuleError(message);
+    return cents;
   };
   return {
     tradeId,

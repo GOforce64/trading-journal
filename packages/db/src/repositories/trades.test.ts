@@ -703,6 +703,20 @@ describe("the scalp review", () => {
     );
   });
 
+  it("judges a value at the cent it's stored at, so 0.004 is refused as the 0 it would become", () => {
+    const id = repo().create(nvda).id;
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", stockEntryOverride: 0.004 } })).toThrow(
+      "A stock price must be above 0",
+    );
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", riskOverride: 0.004 } })).toThrow(
+      "A planned risk must be above 0",
+    );
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 0.004 } })).toThrow(
+      "A stock price must be above 0",
+    );
+    expect(repo().get(id)?.scalp).toBeNull();
+  });
+
   it("lists scalps missing a fetched price, oldest first, and stores what the filler finds without an edit", () => {
     const closed = repo().create(nvda).id;
     const open = repo().create({
