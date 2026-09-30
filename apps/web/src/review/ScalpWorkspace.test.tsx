@@ -393,6 +393,28 @@ describe("ScalpWorkspace levels", () => {
     );
   });
 
+  it("warns when the saved targets trim more than the position holds, as after a size edit", async () => {
+    stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 1 }],
+        scalp: {
+          ...STOCK,
+          targets: [
+            { price: 233, contracts: 1 },
+            { price: 234.5, contracts: 1 },
+          ],
+        },
+      },
+    });
+    renderWorkspace();
+    expect(
+      await screen.findByText(
+        "The targets trim 2 contracts; the position has 1. Lower a target's contracts or remove one.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("refuses a list that trims more than the position, sending nothing", async () => {
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
     renderWorkspace();

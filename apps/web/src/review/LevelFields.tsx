@@ -1,4 +1,4 @@
-import { LEVEL_BASES, type LevelBasis, type ScalpRisk, type TargetLevel } from "@tj/core";
+import { LEVEL_BASES, type LevelBasis, type ScalpRisk, type TargetLevel, trimProblem } from "@tj/core";
 import { type FocusEvent, type RefObject, useEffect, useRef, useState } from "react";
 import type { LineId } from "../chart/drag.js";
 import { type Levels, parseContracts, parsePrice, targetId } from "./levels.js";
@@ -20,6 +20,8 @@ export function LevelFields({ levels, risk = null }: { levels: Levels; risk?: Sc
     levels.switchBasis(next);
   };
   const runner = risk?.runner;
+  // Saved targets can trim more than the position after a size edit; every drag would then be refused.
+  const overTrimmed = trimProblem(levels.targets.saved, levels.size);
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-1">
@@ -68,6 +70,11 @@ export function LevelFields({ levels, risk = null }: { levels: Levels; risk?: Sc
       {levels.basis === "premium" && (
         <p className="max-w-60 text-[10px] text-muted">
           Premium levels aren't drawn yet: there's no option chart.
+        </p>
+      )}
+      {overTrimmed && !levels.problem && (
+        <p className="max-w-60 text-[11px] text-down">
+          {overTrimmed} Lower a target's contracts or remove one.
         </p>
       )}
       {levels.problem && <p className="text-[11px] text-down">{levels.problem}</p>}
