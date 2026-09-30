@@ -94,7 +94,8 @@ export function SettlePanel({
             {trade.underlying} closed at {usd(proposal.close)} on {dayText(expiry)}. Proposed exits at
             intrinsic value:
           </p>
-          <table className="num w-full border-collapse text-[11px]">
+          {/* Sized to its columns: stretched, the exits sat a page-width away from their legs. */}
+          <table className="num w-auto border-collapse text-[11px] [&_td+td]:pl-6 [&_th+th]:pl-6">
             <thead className="text-[9px] text-muted uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium">Leg</th>

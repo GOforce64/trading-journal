@@ -110,7 +110,15 @@ export function KeptHistogram({
   return (
     <ResponsiveContainer width="100%" height={150}>
       <BarChart data={data} margin={{ top: 14, right: 8, bottom: 0, left: 8 }}>
-        <XAxis dataKey="label" tick={TICK} interval={0} axisLine={false} tickLine={false} />
+        {/* Labels that would collide are dropped; every bar keeps its count, and its tooltip its range. */}
+        <XAxis
+          dataKey="label"
+          tick={TICK}
+          interval="preserveStartEnd"
+          minTickGap={4}
+          axisLine={false}
+          tickLine={false}
+        />
         <YAxis hide allowDecimals={false} />
         <Tooltip
           {...TOOLTIP}
