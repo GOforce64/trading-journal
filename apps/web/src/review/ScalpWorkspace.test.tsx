@@ -347,6 +347,38 @@ describe("ScalpWorkspace levels", () => {
     );
   });
 
+  it("keeps a typed target price when Tab moves to its contracts, and saves both on leaving the row", async () => {
+    const fetchMock = stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 3 }],
+        scalp: { ...STOCK, targets: [{ price: 234.5, contracts: 1 }] },
+      },
+    });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    fireEvent.change(field("T2 price"), { target: { value: "236" } });
+    act(() => field("T2 contracts").focus());
+    // Nothing is saved with the default 2 contracts: the row stays open for the count.
+    expect(patches(fetchMock)).toEqual([]);
+    expect(field("T2 price").value).toBe("236");
+    fireEvent.change(field("T2 contracts"), { target: { value: "1" } });
+    act(() => field("T2 contracts").blur());
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([
+        {
+          scalp: {
+            levelBasis: "stock",
+            targets: [
+              { price: 234.5, contracts: 1 },
+              { price: 236, contracts: 1 },
+            ],
+          },
+        },
+      ]),
+    );
+  });
+
   it("changes a target's contracts", async () => {
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
     renderWorkspace();

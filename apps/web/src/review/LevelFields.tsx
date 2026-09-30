@@ -161,9 +161,13 @@ function TargetRow({
   );
 }
 
-/** The target being added: its price, typed or clicked on the chart, and its contracts. */
+/**
+ * The target being added: its price, typed or clicked on the chart, and its contracts. Tab from the price to the
+ * contracts keeps the typed price; leaving the row saves the two together.
+ */
 function DraftRow({ levels }: { levels: Levels }) {
   const row = useRef<HTMLDivElement>(null);
+  const commitPrice = useRef<(() => void) | null>(null);
   const index = levels.targets.saved.length;
   const name = `T${index + 1}`;
   const contracts = levels.draft ?? levels.nextContracts;
@@ -178,10 +182,18 @@ function DraftRow({ levels }: { levels: Levels }) {
         levels={levels}
         startOpen
         within={row}
+        commit={commitPrice}
         onSave={(price) => levels.saveTargets([...levels.targets.saved, { price, contracts }])}
         onClose={() => levels.cancelDraft()}
       />
-      <ContractsInput name={`${name} contracts`} value={contracts} live onSave={levels.setDraft} />
+      <ContractsInput
+        name={`${name} contracts`}
+        value={contracts}
+        live
+        within={row}
+        onLeave={() => commitPrice.current?.()}
+        onSave={levels.setDraft}
+      />
     </div>
   );
 }
@@ -198,6 +210,7 @@ function PriceInput({
   levels,
   startOpen = false,
   within,
+  commit,
   onSave,
   onClose,
   onClear,
@@ -212,8 +225,10 @@ function PriceInput({
   levels: Levels;
   /** Opened by + Stop or + Target: empty and focused. */
   startOpen?: boolean;
-  /** A row whose other fields may take the focus without an empty field closing. */
+  /** A row whose other fields may take the focus without this field saving or closing. */
   within?: RefObject<HTMLElement | null>;
+  /** Set to save what's typed, for the row to call when the focus leaves it from another field. */
+  commit?: RefObject<(() => void) | null>;
   onSave(price: number): void;
   /** It closed without a save: Esc, left empty, or placing ended. */
   onClose?(): void;
@@ -258,13 +273,7 @@ function PriceInput({
     if (levels.placing === id) levels.setPlacing(null);
     onClose?.();
   };
-  // Enter and Esc only blur the field, so a save happens here, once.
-  const finish = (event: FocusEvent<HTMLInputElement>) => {
-    const typed = text?.trim() ?? null;
-    const wasEscaped = escaped.current;
-    escaped.current = false;
-    // Moving to the new target's own contracts field leaves its empty price field open.
-    if (!wasEscaped && !typed && within?.current?.contains(event.relatedTarget as Node | null)) return;
+  const settle = (typed: string | null, wasEscaped: boolean) => {
     if (wasEscaped || !typed) {
       close();
       return;
@@ -277,6 +286,21 @@ function PriceInput({
     close();
     if (price !== saved) onSave(price);
   };
+  // Enter and Esc only blur the field, so a save happens here, once.
+  const finish = (event: FocusEvent<HTMLInputElement>) => {
+    const typed = text?.trim() ?? null;
+    const wasEscaped = escaped.current;
+    escaped.current = false;
+    // Moving to the new target's own contracts field keeps what's typed, or leaves the empty field open.
+    if (!wasEscaped && within?.current?.contains(event.relatedTarget as Node | null)) return;
+    settle(typed, wasEscaped);
+  };
+  if (commit) {
+    commit.current = () => {
+      const typed = text?.trim() ?? null;
+      if (typed) settle(typed, false);
+    };
+  }
 
   return (
     <>
@@ -324,24 +348,31 @@ function ContractsInput({
   name,
   value,
   live = false,
+  within,
+  onLeave,
   onSave,
 }: {
   name: string;
   value: number;
   live?: boolean;
+  /** The row this field sits in; `onLeave` runs when the focus leaves it from here. */
+  within?: RefObject<HTMLElement | null>;
+  onLeave?(): void;
   onSave(contracts: number): void;
 }) {
   const [text, setText] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const escaped = useRef(false);
-  const finish = () => {
+  const finish = (event: FocusEvent<HTMLInputElement>) => {
     const typed = text?.trim() ?? "";
     const wasEscaped = escaped.current;
     escaped.current = false;
+    const left = !within?.current?.contains(event.relatedTarget as Node | null);
     if (wasEscaped || typed === "") {
       setText(null);
       setProblem(null);
+      if (left) onLeave?.();
       return;
     }
     const contracts = parseContracts(typed);
@@ -352,6 +383,7 @@ function ContractsInput({
     setText(null);
     setProblem(null);
     if (contracts !== value) onSave(contracts);
+    if (left) onLeave?.();
   };
   return (
     <>
