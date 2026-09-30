@@ -119,7 +119,11 @@ export function ReviewPanel({
       </div>
       <div className="mt-2 flex items-center gap-2 border-line border-t pt-2">
         {exclude}
-        {trade.review && (
+        {/* With setup, grade and stop set the scalp is out of the queue either way, so the button would do nothing. */}
+        {trade.review && trade.review.missing.length === 0 && (
+          <span className="ml-auto text-[11px] text-muted">Reviewed: setup, grade and stop are set.</span>
+        )}
+        {trade.review && trade.review.missing.length > 0 && (
           <button
             type="button"
             onClick={() => pick({ reviewed: trade.reviewedAt == null })}
