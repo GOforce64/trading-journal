@@ -1,4 +1,13 @@
-import { ALPACA_DELAY_MS, addDays, nyClock, nyDate, nyWallClock, type PriceBar, SESSION_END } from "@tj/core";
+import {
+  ALPACA_DELAY_MS,
+  addDays,
+  isTradingDay,
+  nyClock,
+  nyDate,
+  nyWallClock,
+  type PriceBar,
+  SESSION_END,
+} from "@tj/core";
 import { type BarTimeframe, createBarsRepo, type Db } from "@tj/db";
 import { tooRecent } from "@tj/market-data";
 import type { MarketData } from "./marketData.js";
@@ -80,7 +89,8 @@ export function createBarService({
       const finished = datesBetween(from, last).filter((date) => date < today);
       const known = repo.knownDays(symbol, "1m", finished);
       const missing = finished.filter((date) => !known.has(date));
-      const wantsToday = last === today && from <= today;
+      // A weekend or holiday has no session: nothing to fetch, and nothing partial about it.
+      const wantsToday = last === today && from <= today && isTradingDay(today);
       const sources = market?.sources() ?? null;
       if ((missing.length > 0 || wantsToday) && !sources)
         return { bars: [], partial: false, unavailable: NO_KEY };
@@ -89,8 +99,13 @@ export function createBarService({
       let partial = false;
       try {
         if (sources && missing.length > 0) {
+          // Just after midnight, the next midnight is inside Alpaca's 15-minute window, which it refuses.
           await fill(symbol, "1m", missing, (first, lastDay) =>
-            sources.history.minuteBars(symbol, nyWallClock(first, 0), nyWallClock(addDays(lastDay, 1), 0)),
+            sources.history.minuteBars(
+              symbol,
+              nyWallClock(first, 0),
+              Math.min(nyWallClock(addDays(lastDay, 1), 0), now() - ALPACA_DELAY_MS),
+            ),
           );
         }
         if (sources && wantsToday) {

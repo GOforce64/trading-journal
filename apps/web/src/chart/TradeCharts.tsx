@@ -1,4 +1,13 @@
-import { addDays, MAX_BAR_DAYS, nyDate, nyMinuteOfDay, type PriceBar, SESSION_END } from "@tj/core";
+import {
+  addDays,
+  isTradingDay,
+  MAX_BAR_DAYS,
+  nyDate,
+  nyMinuteOfDay,
+  PREMARKET_OPEN,
+  type PriceBar,
+  SESSION_END,
+} from "@tj/core";
 import { useMemo, useState } from "react";
 import { Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
@@ -35,7 +44,10 @@ export function TradeCharts({
   const symbol = trade.underlying;
   const firstDay = nyDate(trade.openedAt);
   const lastDay = trade.closedAt != null ? nyDate(trade.closedAt) : todayNy();
-  const live = lastDay === todayNy() && nyMinuteOfDay(Date.now()) < LIVE_UNTIL;
+  // Today's bars grow only on a session day, from the premarket open until 20:16.
+  const today = todayNy();
+  const clock = nyMinuteOfDay(Date.now());
+  const live = lastDay === today && isTradingDay(today) && clock >= PREMARKET_OPEN && clock < LIVE_UNTIL;
   // The warm-up week before the trade, but no more than the server serves: a trade held for months shows its last weeks.
   const weekBefore = addDays(firstDay, -7);
   const earliest = addDays(lastDay, -MAX_BAR_DAYS);

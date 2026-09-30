@@ -24,14 +24,14 @@ interface Answer {
   unavailable: { reason: string; message: string } | null;
 }
 
-function setup(history: Partial<BarHistory> = {}, withKey = true) {
+function setup(history: Partial<BarHistory> = {}, withKey = true, now = NOW) {
   const minuteBars = vi.fn(history.minuteBars ?? (async () => [FRIDAY, MONDAY, TODAY]));
   const dailyBars = vi.fn(history.dailyBars ?? (async () => []));
   const market = createMarketData(withKey ? { keyId: "PKTEST", secretKey: "s" } : null, {
     build: () => fakeSources({ history: { minuteBars, dailyBars } }),
     log: () => {},
   });
-  const app = testApp({ market, now: () => NOW });
+  const app = testApp({ market, now: () => now });
   const get = async (path: string) => {
     const res = await app.request(path, { headers: LOCAL });
     return { status: res.status, body: (await res.json()) as Answer };
@@ -75,6 +75,28 @@ describe("GET /api/bars/:symbol", () => {
     // The finished days came from the cache; today was asked for again.
     expect(minuteBars).toHaveBeenCalledTimes(3);
     expect(minuteBars).toHaveBeenLastCalledWith("NVDA", nyWallClock("2026-09-29", 0), NOW - 16 * 60_000);
+  });
+
+  it("asks for nothing of a weekend's today, and doesn't call it partial", async () => {
+    const saturday = Date.UTC(2026, 9, 3, 18, 0); // Sat Oct 3, 14:00 ET
+    const { minuteBars, get } = setup({ minuteBars: async () => [MONDAY] }, true, saturday);
+    const answer = await get("/api/bars/NVDA?from=2026-09-28&to=2026-10-03");
+    expect(answer.body).toMatchObject({ bars: [MONDAY], partial: false });
+    // One request, for the finished days; none for today, which has no session.
+    expect(minuteBars).toHaveBeenCalledTimes(1);
+    expect(minuteBars).toHaveBeenCalledWith(
+      "NVDA",
+      nyWallClock("2026-09-28", 0),
+      nyWallClock("2026-10-03", 0),
+    );
+  });
+
+  it("ends the finished days' request 16 minutes ago just after midnight, not at midnight", async () => {
+    const justAfter = Date.UTC(2026, 8, 30, 4, 5); // Wed Sep 30, 00:05 ET
+    const { minuteBars, get } = setup({ minuteBars: async () => [MONDAY] }, true, justAfter);
+    expect((await get("/api/bars/NVDA?from=2026-09-28&to=2026-09-29")).status).toBe(200);
+    // Ending at 00:00 would ask for minutes inside Alpaca's 15-minute window, which it refuses.
+    expect(minuteBars).toHaveBeenCalledWith("NVDA", nyWallClock("2026-09-28", 0), justAfter - 16 * 60_000);
   });
 
   it("stores nothing when Alpaca fails, so the days are asked for again", async () => {

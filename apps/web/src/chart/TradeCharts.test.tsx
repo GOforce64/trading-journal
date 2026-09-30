@@ -152,6 +152,38 @@ describe("TradeCharts", () => {
     expect(await screen.findByText("Alpaca's free data runs 15 minutes behind.")).toBeTruthy();
   });
 
+  it("doesn't refresh an open trade's chart every minute on a weekend", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.UTC(2026, 9, 3, 18, 0) }); // Sat Oct 3, 14:00 ET
+    const fetchMock = stub([answer(OK)]);
+    renderCharts({ ...TRADE, openedAt: nyWallClock("2026-10-02", 571), closedAt: null });
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    const minuteCalls = () =>
+      fetchMock.mock.calls.filter((call) => !String(call[0]).includes("/daily")).length;
+    expect(minuteCalls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(minuteCalls()).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it("fetches today's bars once more after 20:16, so a partial answer doesn't stay for good", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.UTC(2026, 8, 30, 0, 20) }); // Tue Sep 29, 20:20 ET
+    const fetchMock = stub([answer({ ...OK, partial: true }), answer(OK)]);
+    renderCharts({
+      ...TRADE,
+      openedAt: nyWallClock("2026-09-29", 571),
+      closedAt: nyWallClock("2026-09-29", 586),
+    });
+    expect(await screen.findByText("Alpaca's free data runs 15 minutes behind.")).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => expect(screen.queryByText("Alpaca's free data runs 15 minutes behind.")).toBeNull());
+    const minuteCalls = fetchMock.mock.calls.filter((call) => !String(call[0]).includes("/daily")).length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(fetchMock.mock.calls.filter((call) => !String(call[0]).includes("/daily")).length).toBe(
+      minuteCalls,
+    );
+    vi.useRealTimers();
+  });
+
   it("remembers a switch to 5m", async () => {
     stub([answer(OK)]);
     renderCharts();
