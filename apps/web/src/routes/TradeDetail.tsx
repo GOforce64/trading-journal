@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
+import { closeEstimate, type OptionQuote, pctKept, returnOnCost, round2 } from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
@@ -95,8 +95,13 @@ export function TradeDetail({
             <Money value={trade.netPnl} />
           )}
         </span>
-        <span className="text-[18px]">
-          <Pct value={metrics?.pnlPctOfCost ?? null} />
+        {/* A fly's P&L against max profit (its metrics need both wings, % kept doesn't); a scalp's return on cost. */}
+        <span data-testid="header-pct" className="text-[18px]">
+          <Pct
+            value={
+              trade.strategy === "scalp" ? returnOnCost(trade) : (metrics?.pnlPctOfCost ?? pctKept(trade))
+            }
+          />
         </span>
         <button
           type="button"

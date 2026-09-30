@@ -322,6 +322,24 @@ describe("TradeDetail", () => {
     expect(screen.getByTestId("tile-max-loss").textContent).toContain("2,008.00");
   });
 
+  it("shows a one-winged fly's P&L % in the header, as its % kept tile does", async () => {
+    const oneWing = {
+      ...trade,
+      ironFly: { ...trade.ironFly, callWingStrike: null },
+      metrics: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(oneWing), { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    renderDetail();
+    await waitFor(() => expect(screen.getByTestId("tile-kept")).toBeTruthy());
+    expect(screen.getByTestId("header-pct").textContent).toBe("+42.95%");
+  });
+
   it("shows the charts under the header", async () => {
     vi.stubGlobal(
       "fetch",
@@ -640,6 +658,13 @@ describe("TradeDetail for a scalp", () => {
     expect(screen.getByTestId("tile-fees").textContent).toContain("$2.26");
     expect(screen.getByTestId("tile-return").textContent).toContain("+21.10%");
     expect(screen.queryByTestId("tile-max-loss")).toBeNull();
+  });
+
+  it("shows a scalp's return on cost in the header, and keeps its contract on one line", async () => {
+    stubSynced(nvda);
+    renderDetail();
+    expect((await screen.findByTestId("header-pct")).textContent).toBe("+21.10%");
+    expect(screen.getByText("NVDA 232.5C").className).toContain("whitespace-nowrap");
   });
 
   it("lists every fill of a synced trade", async () => {
