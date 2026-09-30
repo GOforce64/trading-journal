@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewScalp } from "./NewScalp.js";
@@ -156,5 +156,26 @@ describe("NewScalp", () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-scalp"));
     const post = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ strategy: "scalp", netPnl: 44.74 });
+  });
+
+  it("refreshes the trade lists and the review queue, so the new scalp shows up in them", async () => {
+    stubApi({ id: "new-scalp" });
+    const listed = vi.fn(async () => []);
+    function Lists() {
+      useQuery({ queryKey: ["trades", { review: "pending" }], queryFn: listed });
+      return null;
+    }
+    const onCreated = vi.fn();
+    render(
+      <QueryClientProvider client={client()}>
+        <Lists />
+        <NewScalp onCreated={onCreated} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(listed).toHaveBeenCalledTimes(1));
+    typeNvda();
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(listed).toHaveBeenCalledTimes(2));
   });
 });
