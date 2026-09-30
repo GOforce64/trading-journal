@@ -421,7 +421,8 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           .select()
           .from(trades)
           .where(and(...conditions))
-          .orderBy(desc(trades.openedAt))
+          // Ties by id, as the web orders the review queue, so the server's queue matches it.
+          .orderBy(desc(trades.openedAt), desc(trades.id))
           // SQLite reads a negative LIMIT as no limit.
           .limit(filter.limit === null ? -1 : (filter.limit ?? 500))
           .all()

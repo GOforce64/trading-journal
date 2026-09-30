@@ -107,6 +107,12 @@ describe("trades repository", () => {
     expect(trades.list()[0]?.openedAt).toBe(5000);
   });
 
+  it("breaks a tie in open time by id, so the review queue's order never shuffles", () => {
+    const trades = repo();
+    const ids = Array.from({ length: 6 }, () => trades.create({ ...sampleFly, openedAt: 3000 }).id);
+    expect(trades.list().map((trade) => trade.id)).toEqual([...ids].sort().reverse());
+  });
+
   it("hides excluded trades unless asked for them", () => {
     const trades = repo();
     trades.create({ ...sampleFly, excluded: true, excludeReason: "test trade" });
