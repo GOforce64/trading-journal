@@ -129,6 +129,22 @@ describe("IntradayChart", () => {
   });
 });
 
+describe("IntradayChart cleanup", () => {
+  it("removes its chart and stops listening when the page leaves", () => {
+    // Placing the stop, so a listening chart would take Esc as cancel.
+    const edit = { placing: "stop", onPlace: vi.fn(), onDrag: vi.fn(), onDrop: vi.fn(), onCancel: vi.fn() };
+    const { unmount } = render(
+      <IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} lines={[]} editing={edit} />,
+    );
+    const removedBefore = library.removed;
+    unmount();
+    expect(library.removed).toBe(removedBefore + 1);
+    // Esc after leaving reaches nothing.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(edit.onCancel).not.toHaveBeenCalled();
+  });
+});
+
 describe("IntradayChart's legend", () => {
   it("lists two EMAs of the same length, each once, without React confusing them", () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

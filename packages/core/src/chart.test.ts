@@ -122,6 +122,19 @@ describe("aggregate", () => {
   });
 });
 
+describe("aggregate across the November clock change", () => {
+  it("keeps New York's slots when EDT ends overnight: Monday's 09:30 is still a 09:30 candle", () => {
+    // Clocks go back on Sun Nov 1 2026: Friday is UTC−4, Monday UTC−5.
+    const bars = [bar("2026-10-30", "09:30", 1, 1, 1, 1), bar("2026-11-02", "09:30", 2, 2, 2, 2)];
+    const candles = aggregate(bars, 60);
+    expect(candles.map((candle) => nyClock(candle.t))).toEqual([
+      { date: "2026-10-30", minute: 9 * 60 },
+      { date: "2026-11-02", minute: 9 * 60 },
+    ]);
+    expect(candles[1]?.t).toBe(Date.parse("2026-11-02T09:00:00-05:00"));
+  });
+});
+
 describe("ema", () => {
   it("smooths with α = 2 ÷ (length + 1), seeded with the first value, as TradingView's ta.ema", () => {
     // By hand, length 2 (α = 2/3): 1, 1.6667, 2.5556, 3.5185, 4.5062, 5.5021. Drawn from index 3 × 2 − 1 = 5.

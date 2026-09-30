@@ -49,6 +49,20 @@ describe("alpacaHistory.minuteBars", () => {
     expect(calls[1]?.url.searchParams.get("page_token")).toBe("abc");
   });
 
+  it("throws when a later page fails, rather than answering with the first page alone", async () => {
+    // A half-read range stored as complete would leave a gap in the cache for good.
+    const { fetch } = fakeFetch(
+      json({
+        bars: { NVDA: [raw("2026-09-28T13:30:00Z", 229.5, 229.6, 229.4, 229.5)] },
+        next_page_token: "abc",
+      }),
+      new Response("upstream down", { status: 502 }),
+    );
+    await expect(alpacaHistory(KEYS, { fetch }).minuteBars("NVDA", START, END)).rejects.toMatchObject({
+      status: 502,
+    });
+  });
+
   it("answers no bars for a symbol Alpaca doesn't carry", async () => {
     const { fetch } = fakeFetch(json({ message: "code=400, message=invalid symbol: SPX" }, 400));
     expect(await alpacaHistory(KEYS, { fetch }).minuteBars("SPX", START, END)).toEqual([]);
