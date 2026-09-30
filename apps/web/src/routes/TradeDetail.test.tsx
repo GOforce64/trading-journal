@@ -490,6 +490,28 @@ describe("TradeDetail move tiles", () => {
     expect(screen.getByTestId("tile-implied-move").textContent).toContain("needs the stock at entry");
   });
 
+  it("offers no Fill in missing for a price dated on a weekend, which can never fill", async () => {
+    // Opened on Saturday Sep 26 2026 (typed in by hand): there's no session to read a price from.
+    const saturday = {
+      ...noPrices,
+      openedAt: Date.UTC(2026, 8, 26, 16, 0),
+      closedAt: Date.UTC(2026, 8, 28, 14, 0),
+    };
+    const fetchMock = stubMoves(saturday);
+    renderDetail();
+    await waitFor(() =>
+      expect(screen.getByTestId("tile-stock").textContent).toContain(
+        "Not a trading day; type the moves in Edit.",
+      ),
+    );
+    // Once the key is known to be on, a fillable price would get its button by now.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/settings"))).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("button", { name: "Fill in missing" })).toBeNull();
+  });
+
   it("asks for a key, and offers no button, when none is set up", async () => {
     stubMoves(noPrices, { marketOn: false });
     renderDetail();

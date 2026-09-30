@@ -1,4 +1,4 @@
-import { type MoveValue, sessionMoment, type TradeMoves, tradeMoves } from "@tj/core";
+import { isTradingDay, type MoveValue, nyDate, sessionMoment, type TradeMoves, tradeMoves } from "@tj/core";
 import type { ReactNode } from "react";
 import type { TradeView } from "../api.js";
 import { Tile, usd } from "../components/ui.js";
@@ -59,10 +59,13 @@ export function MoveTiles({ trade }: { trade: TradeView }) {
   // Only the stock tile says why a price is missing; the others say what they need.
   const missingSide: PriceSide | null =
     stockAtEntry == null ? "entry" : !open && stockAtExit == null ? "exit" : null;
+  const missingAt = missingSide === "entry" ? trade.openedAt : (trade.closedAt ?? trade.openedAt);
+  // A price dated on a weekend or holiday has no session to be read from, so Fill in missing could never fill it.
+  const fillable = missingSide != null && isTradingDay(nyDate(sessionMoment(missingAt)));
   const missingNote =
     missingSide &&
     priceNote({
-      at: missingSide === "entry" ? trade.openedAt : (trade.closedAt ?? trade.openedAt),
+      at: missingAt,
       fetching,
       market,
       lastReason: lastReason(results, trade.id, missingSide),
@@ -112,7 +115,7 @@ export function MoveTiles({ trade }: { trade: TradeView }) {
         {open ? "open" : stockAtExit != null ? usd(stockAtExit) : "—"}
         <Working>
           {missingNote ?? readAt}
-          {missingSide && marketOn && !fetching && (
+          {fillable && marketOn && !fetching && (
             <button type="button" onClick={() => fill.mutate([trade.id])} className="ml-2 text-accent">
               Fill in missing
             </button>
