@@ -338,6 +338,20 @@ describe("EditTrade", () => {
     expect(JSON.parse(String(patch?.[1]?.body)).legs[0]).toMatchObject({ closePrice: 1.4, quantity: 2 });
   });
 
+  it("asks for no move data after saving a scalp, which only flies have", async () => {
+    const scalp = { ...trade, strategy: "scalp", underlying: "NVDA", ironFly: null, legs: [trade.legs[0]] };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(scalp), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    fireEvent.change(await screen.findByLabelText("Exit price"), { target: { value: "1.40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/moves/fill"))).toBe(false);
+  });
+
   it("keeps a synced scalp's seconds when saving an edit", async () => {
     // A fill at 09:31:05 prices R from 5 s into its minute bar; saving must not move it to 09:31:00.
     const opened = Date.UTC(2026, 8, 28, 13, 31, 5);

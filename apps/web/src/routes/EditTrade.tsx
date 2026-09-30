@@ -140,8 +140,8 @@ export function EditTrade({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trade", tradeId] });
       queryClient.invalidateQueries({ queryKey: ["trades"] });
-      // The saved times may have moved, which clears their prices.
-      fill.mutate([tradeId]);
+      // The saved times may have moved, which clears a fly's move prices. A scalp has none: its page fetches its own.
+      if (trade?.strategy === "iron_fly") fill.mutate([tradeId]);
       onSaved?.(tradeId);
     },
   });
