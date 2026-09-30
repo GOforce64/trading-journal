@@ -13,6 +13,7 @@ import { todayNy } from "../market.js";
 import { type Setup, useSetups } from "../review/data.js";
 import { FliesTab } from "./FliesTab.js";
 import { OverviewTab } from "./OverviewTab.js";
+import { ScalpsTab } from "./ScalpsTab.js";
 
 export interface AnalyticsProps {
   search: AnalyticsSearch;
@@ -46,16 +47,23 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
     <div className="flex flex-col gap-3">
       <FilterRow search={view} onSearch={onSearch} tickers={tickers} setups={setups ?? []} />
       <nav aria-label="Analytics tabs" className="flex gap-4 border-line border-b text-[12px]">
-        <TabButton active={search.tab !== "flies"} onClick={() => onSearch({ tab: undefined })}>
+        <TabButton active={search.tab === undefined} onClick={() => onSearch({ tab: undefined })}>
           Overview
+        </TabButton>
+        <TabButton active={search.tab === "scalps"} onClick={() => onSearch({ tab: "scalps" })}>
+          Scalps
         </TabButton>
         <TabButton active={search.tab === "flies"} onClick={() => onSearch({ tab: "flies" })}>
           Iron flies
         </TabButton>
       </nav>
-      {search.tab === "flies" ? (
+      {search.tab === "scalps" && (
+        <ScalpsTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
+      )}
+      {search.tab === "flies" && (
         <FliesTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
-      ) : (
+      )}
+      {search.tab === undefined && (
         <OverviewTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
       )}
     </div>
