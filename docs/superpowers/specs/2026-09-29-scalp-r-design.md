@@ -1,7 +1,7 @@
 # Scalp R — Design Spec
 
 - **Date:** 2026-09-29
-- **Status:** Draft, awaiting the user's review.
+- **Status:** Approved 2026-09-30. Plan: [2026-09-30-scalp-r.md](../plans/2026-09-30-scalp-r.md); the deviations it proposes are folded in here.
 - **Scope:** R for each scalp. It covers:
   - the stock price at entry, fetched and interpolated from minute bars;
   - implied volatility, solved from the entry premium;
@@ -32,7 +32,7 @@ A scalp is judged in R: what it made against what the stop put at risk. The user
 - **planned reward $288.61** over 2 targets, so **R:R 2.8**;
 - **MAE −0.12 (−0.06R)** and **MFE +2.38 (+1.30R)**.
 
-Dragging the stop to 228.00 updates the live line in the strip as the line moves. The Scalps list shows "+0.43R", and the Dashboard shows **Avg R**.
+Dragging the stop to 228.00 updates the live line in the strip as the line moves. The Scalps list shows "+0.43R" and a Return of "+21.10%", and the Dashboard shows **Avg R**.
 
 ### Out of scope
 - **The Scalps tab in Analytics:** time of day, hold time, breakdowns by setup, grade, mistake and emotion with R, and mistake cost. So are the Playbook's per-setup stat cards. Both are the second part.
@@ -55,6 +55,7 @@ Dragging the stop to 228.00 updates the live line in the strip as the line moves
 | Where R shows | The trade page (tiles, layout A of the mockups), a live line in the review strip, an R column in the lists, and an **Avg R** KPI now. |
 | Layout | **A:** an R row of tiles under the scalp tiles, plus a compact live "Risk · R · R:R" line with the overrides in the strip. |
 | Targets | **Multiple targets**, each trimming a whole number of **contracts**. Untrimmed contracts (the runner) count **at the last target**. |
+| The contract's % gain or loss (added 2026-09-30) | **Return on cost:** net P&L ÷ the premium paid (contracts × multiplier × entry premium), as the trade page's tile already shows. It moves into `core` and shows in the lists too (§10). |
 | Storage | Only the fetched stock prices are stored (`scalp_prices`). IV, the prices at the stop and targets, risk, reward, R, R:R and MAE/MFE are worked out on read by one pure function in `core`, which the server and the page share. |
 
 ---
@@ -81,7 +82,7 @@ Dragging the stop to 228.00 updates the live line in the strip as the line moves
 
 | Package | New or changed |
 |---|---|
-| `core` | `risk.ts`: `scalpRisk(...)` and its result, `stockAt(bar, at)` (the interpolation), `holdRange(bars, from, to)`. `stats.ts`: `r` on a stat trade, `avgR` and `rCount` in the summary. The patch schema's `scalp` gains `targets`, `stockEntryOverride` and `riskOverride`, and loses `targetPrice`. |
+| `core` | `risk.ts`: `scalpRisk(...)` and its result, `stockAt(bar, at)` (the interpolation), `holdRange(bars, from, to)`, and `returnOnCost(trade)`. `stats.ts`: `r` on a stat trade, `avgR` and `rCount` in the summary. The patch schema's `scalp` gains `targets`, `stockEntryOverride` and `riskOverride`, and loses `targetPrice`. |
 | `db` | Migration 0006: `scalp_targets`, `scalp_prices`, the two override columns, and `target_price` moved into T1 and dropped. The trades repository hydrates targets and prices, replaces targets, applies the trim rule, and clears stale prices. |
 | `server` | A scalp price filler over the bar service, `POST /api/risk/fill`, and `risk` on every trade. |
 | `web` | The R tile row, the live line and overrides in the strip, the target list and its lines on the chart, the R column, Avg R in the KPI strips, and calling the filler (after a sync, after a save, when a trade page opens). |
@@ -125,7 +126,7 @@ Dragging the stop to 228.00 updates the live line in the strip as the line moves
 - **The levels:** the basis, the stop, and the targets `[{ price, contracts }]`.
 - **The overrides:** `stockEntryOverride` and `riskOverride`.
 - **The prices:** `entryPrice`, `holdHigh` and `holdLow`.
-- A second stop argument, `liveStop?`, and a live targets list, `liveTargets?`, let the page price a line while it's being dragged.
+- A second argument, `live: { basis?, stop?, targets? }`, lets the page price the lines where they are while one is being dragged. The page passes its basis too, because a scalp with no levels yet uses the Settings default.
 
 ### 6.2 Rules
 
@@ -137,12 +138,13 @@ Dragging the stop to 228.00 updates the live line in the strip as the line moves
 4. **Premium basis:** the option at a level is the level itself.
 5. **Planned risk** = (entry premium − option at the stop) × contracts × multiplier.
    - A positive `riskOverride` replaces it ("typed").
-   - A computed risk of 0 or less means no risk:
-     - with an IV, the stop is on the wrong side;
-     - estimated without IV, the model can't price this option, and a typed planned risk is needed.
+   - **The stop's side** is decided first, by where it is. A call's stop at or above the stock at entry, a put's at or below it, or a premium stop at or above the entry premium, is `wrong_side`. With an IV, that's exactly a computed risk of 0 or less.
+   - A stop on the losing side that still prices at no risk is `cannot_price`: the estimate without IV can't price this option (out of the money), and a typed planned risk is needed.
 6. **Planned reward** = Σ over the targets of (option at the target − entry premium) × contracts trimmed × multiplier.
-   - **Runner:** contracts no target trims add (option at the last target − entry premium) × runner × multiplier.
-   - **A wrong-side target,** whose option price is at or below the entry premium, is flagged and adds nothing. The runner then counts at the last target that isn't on the wrong side.
+   - **Runner:** contracts no target trims add (option at the farthest target − entry premium) × runner × multiplier.
+     - The farthest is the target the option prices highest, whatever the list's order.
+     - So a line dragged past another prices right before the server reorders the list.
+   - **A wrong-side target,** at or behind the entry (the mirror of the stop's rule), is flagged and adds nothing. The runner then counts at the farthest target that isn't on the wrong side.
 7. **R:R** = planned reward ÷ planned risk. It's null without both.
 8. **R** = net P&L ÷ planned risk, for a closed trade with a planned risk. An open trade has no R.
 9. **MAE and MFE**, in stock dollars, need the hold range and the stock at entry:
@@ -158,15 +160,18 @@ interface ScalpRisk {
   basis: "stock" | "premium";
   /** Why there's no planned risk; null when there is one. */
   problem: "no_stop" | "no_stock_price" | "wrong_side" | "cannot_price" | "not_single_long" | null;
+  right: "C" | "P" | null;           // for the messages
+  entryPremium: number | null;
+  stop: number | null;
   stockAtEntry: { price: number; typed: boolean } | null;
   iv: number | null;                 // null on premium, or when estimated without IV
   estimated: boolean;                // priced without IV
-  minutesToExpiry: number;
+  minutesToExpiry: number | null;    // null for not_single_long
   optionAtStop: number | null;
   plannedRisk: number | null;
   riskTyped: boolean;
-  targets: { price: number; contracts: number; optionAt: number | null; wrongSide: boolean }[];
-  runner: { contracts: number; atTarget: number } | null;   // atTarget: 1-based
+  targets: { price: number; contracts: number; optionAt: number | null; wrongSide: boolean }[];  // in the order given
+  runner: { contracts: number; atTarget: number } | null;   // atTarget: 1-based, the farthest
   plannedReward: number | null;
   rewardRisk: number | null;
   r: number | null;
@@ -192,17 +197,20 @@ interface ScalpRisk {
 
 - **`stockAt(bar, at)`** = o + (c − o) × (the seconds of `at` into the bar's minute ÷ 60). A typed-in scalp's `openedAt` has no seconds, so it gets the bar's open.
 - **`holdRange(bars, from, to)`** gives the lowest low and highest high of the minute bars from `from`'s minute through `to`'s minute, inclusive.
-  - It's null unless the bar for `to`'s minute is present, because a closing minute Alpaca hasn't published yet would cut the range short.
+  - It's null until the bars reach `to`'s minute (a bar at or after it), because a closing minute Alpaca hasn't published yet would cut the range short. A quiet closing minute with no trades doesn't block it.
   - The entry minute includes the seconds before the fill, so MAE/MFE can be slightly overstated. The page doesn't claim otherwise.
 - **The filler,** `createScalpPriceFiller({ db, bars })`, works like move data's:
-  - `fill(tradeIds?)` looks at scalps with no `scalp_prices` row, or a closed scalp with no hold range.
-  - It reads the bar service's minute bars for the underlying from the entry date to the exit date (today for an open trade).
+  - `fill(tradeIds?)` looks at scalps with no entry price (no `scalp_prices` row, or one without it), or a closed scalp with no hold range.
+  - It reads the bar service's minute bars for the underlying from the entry date to the exit date. An open scalp reads only its entry day, since its range waits for the close.
   - It writes `entry_price` when the entry minute's bar exists, and `hold_high` and `hold_low` when `holdRange` answers.
   - It returns `{ filled, missing: [{ tradeId, reason: "no_bars" | "too_recent" }], unavailable: { reason: "no_key" | "unreachable", message } | null }`, spelled out inline for the RPC boundary.
 - **`POST /api/risk/fill { tradeIds? }`** runs it.
-  - The web calls it after an IBKR sync (for the trades it changed), after a scalp is saved, and when a scalp's trade page opens with prices missing.
-  - The chart has usually just cached those bars, so the last case costs no Alpaca request.
+  - The web calls it after an IBKR sync (for the trades it changed), and from a scalp's trade page whenever its prices are missing: when the page opens, and when an edit has cleared them. The edit form and New scalp both land on the trade page, so there's no separate call after a save.
+  - While Alpaca's delay holds a price back ("too recent"), the page asks again a minute later.
+  - The chart has usually just cached those bars, so a call from the trade page costs no Alpaca request.
 - **Staleness:** a patch that changes a scalp's underlying, or moves `openedAt` or `closedAt` to another minute, deletes its `scalp_prices` row in the same transaction.
+  - Minutes are compared as they are, not clamped to 09:31–16:00 like the flies' prices, because scalps read extended-hours bars.
+  - The IBKR sync's rewrite applies the same rule, as it does for the flies' prices. So a sync that closes an open scalp, or moves its times, makes the page fetch again.
 
 ---
 
@@ -216,11 +224,13 @@ interface ScalpRisk {
   `targetPrice` is removed.
 - **The server's checks:**
   - prices above 0 on the stock basis, 0 or more on premium, rounded to the cent;
-  - contracts are whole numbers of at least 1;
-  - Σ contracts ≤ the leg's size. Otherwise it answers 400, e.g. "The targets trim 3 contracts; the position has 2."
+  - contracts are whole numbers of at least 1, and there are at most 10 targets;
+  - Σ contracts ≤ the position's size. Otherwise it answers 400, e.g. "The targets trim 3 contracts; the position has 2."
+    - It's checked when a patch sends targets, so a stop or override edit still saves after a size edit left the stored targets over-trimmed.
+  - an override of 0 or less, or a stock target at 0, is refused with its reason (400), as the stop is;
   - The server stores the targets in §6.4's order.
 - **Switching the basis** clears the stop and every target, unless the same patch sets them (scalp-review spec §6.2).
-- **The IBKR sync** never writes `scalp_targets`, the overrides or `scalp_prices`. Only an edit does, and the staleness rule covers that.
+- **The IBKR sync** never writes `scalp_targets` or the overrides. It touches `scalp_prices` only to delete a stale row (§7).
 
 ---
 
@@ -239,14 +249,15 @@ It sits under the scalp tiles.
 | MFE | +2.38 | "+1.30R · stock high 233.21" |
 | Model | IV 70.4% | "stock 230.83 · 6 h 29 min left". Or "stock typed", or "no IV" on premium. |
 
-- **Under the row:** "Black-Scholes, the stock jumping straight to the stop. For 0DTE, time decay makes the real loss at the stop somewhat larger."
-- **Without a planned risk,** the tiles read "—", and one line gives the reason:
+- **The tiles read the server's `risk`**, which is what's saved. The strip's live line (§9.2) reads the page's, so it follows a drag.
+- **Under the row:** "Black-Scholes, the stock jumping straight to the stop. For 0DTE, time decay makes the real loss at the stop somewhat larger." Estimated without IV, it reads "Estimated without IV: the option at the stop is its intrinsic value there plus the time value paid at entry." A typed risk or the premium basis has no line.
+- **Without a planned risk,** Planned risk, R and R:R read "—", while MAE, MFE and Model show what they have. One line gives the reason:
 
   | Problem | Message |
   |---|---|
   | `no_stop` | "Set a stop in the review strip to get R." |
   | `no_stock_price` | "Fetching the stock price…", or the filler's message: no key, no bars, too recent. |
-  | `wrong_side` | "The stop is above the stock at entry (230.83), so this call can't lose there." Mirrored for puts. |
+  | `wrong_side` | "The stop is above the stock at entry (230.83), so this call can't lose there." Mirrored for puts, and "at" when equal. On premium: "The stop is at or above the entry premium (1.06), so it can't lose there." |
   | `cannot_price` | "The model can't price this option: type the planned risk." |
   | `not_single_long` | "R needs a single long option." |
 
@@ -255,6 +266,9 @@ It sits under the scalp tiles.
 - **Stop:** as today.
 - **Targets:** a list. Each row is **T1** [price] × [contracts] ✕.
   - **+ Target** opens a price field and arms the chart, like **+ Stop**. Its contracts field defaults to the contracts not yet trimmed, or 1.
+    - That field saves as it's typed, so a click on the chart with it focused uses it.
+    - Moving to it from the empty price field keeps the new row open.
+  - Switching the basis asks "Switching to premium clears the stop and targets." (or "to stock").
   - A wrong-side target shows "on the wrong side" under its row.
   - When contracts are left untrimmed, the list ends with "1 runner, counted at T2".
 - **The live line:** "Risk $104.05 · R +0.43 · R:R 2.8".
@@ -274,7 +288,10 @@ It sits under the scalp tiles.
 
 ## 10. Lists and Avg R
 
-- **The trades grid** (Journal, Scalps, Iron Flies) gains an **R** column, e.g. "+0.43R" or "−1.00R", coloured by sign. It reads "—" without an R.
+- **The trades grid** (Journal, Scalps, Iron Flies) gains an **R** column after Net P&L, e.g. "+0.43R" or "−1.00R", coloured by sign. It reads "—" without an R.
+- **The % column** shows a scalp's **return on cost**, net P&L ÷ the premium paid, e.g. "+21.10%" for the NVDA scalp. It used to read "—" for scalps. Flies keep their % of max profit kept.
+  - The header reads **Return** on Scalps, **% kept** on Iron Flies, and **Return / % kept** on the Journal, which lists both.
+  - The trade page's Return on cost tile and the lists share `returnOnCost` in `core`. It's null for an open trade, a fly, or anything but a single long option.
 - **Avg R** joins the KPI strips on the Dashboard and on Analytics Overview.
   - It's the mean R over the period's closed, counted trades that have an R, rounded to 0.01.
   - The small print says "over 7 scalps". With none, it reads "—".
@@ -311,6 +328,7 @@ It sits under the scalp tiles.
   - A wrong-side stop and a wrong-side target; both overrides; MAE and MFE for a call and a put; an open trade; `not_single_long`.
   - A property test: planned risk never decreases as a stock stop moves further from the entry.
   - `summarize`: `avgR` and `rCount`.
+  - `returnOnCost`: +21.10% for the NVDA scalp; null when open, for a fly, and for more than one leg or a short one.
 - **db:**
   - Migration 0006 turns an existing `target_price` into T1 of the full size.
   - Replacing targets; their price order; the over-trim refusal; a basis switch clearing targets.
@@ -326,7 +344,7 @@ It sits under the scalp tiles.
   - The overrides.
   - Adding, removing and dragging targets.
   - The runner line.
-  - The R column; Avg R on the Dashboard and Overview.
+  - The R column; the % column's return on cost and its header on the Journal and Scalps; Avg R on the Dashboard and Overview.
   - The seam test from the scalp review's final review, extended to targets.
 - **Live check:**
   - On a copy of the real journal, the Sep 28 NVDA scalp with a 229 stop and T1 233 ×1, T2 234.50 ×1. The tiles show §1's numbers.
@@ -354,5 +372,5 @@ It sits under the scalp tiles.
 
 ## 14. Open items
 
-1. **The second part:** the Scalps tab in Analytics (time of day, hold time, breakdowns with R, mistake cost) and the Playbook's per-setup stat cards.
+1. **The second part:** the Scalps tab in Analytics (time of day, hold time, breakdowns with R and return on cost, mistake cost) and the Playbook's per-setup stat cards.
 2. **The option-premium chart** (scalp-review spec §16, item 1), which also gives MAE/MFE in R on the premium basis.
