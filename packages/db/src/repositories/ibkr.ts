@@ -1,8 +1,17 @@
 import { type NewTrade, nyDate } from "@tj/core";
 import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import type { Db } from "../client.js";
-import { accounts, fills, ironFlyDetails, legs, scalpPrices, syncState, trades } from "../schema.js";
-import { stalePrices, staleScalpPrices } from "./trades.js";
+import {
+  accounts,
+  fills,
+  ironFlyDetails,
+  legs,
+  scalpDetails,
+  scalpPrices,
+  syncState,
+  trades,
+} from "../schema.js";
+import { staleEntryOverride, stalePrices, staleScalpPrices } from "./trades.js";
 
 export type FillRow = typeof fills.$inferSelect;
 
@@ -417,6 +426,13 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       // A close or a time the sync moved makes a scalp's fetched prices stale too (scalp-R spec §7).
       if (staleScalpPrices(existing, candidate.trade)) {
         db.delete(scalpPrices).where(eq(scalpPrices.tradeId, candidate.id)).run();
+      }
+      // And a stock at entry the user typed for the old entry minute.
+      if (staleEntryOverride(existing, candidate.trade)) {
+        db.update(scalpDetails)
+          .set({ stockEntryOverride: null })
+          .where(eq(scalpDetails.tradeId, candidate.id))
+          .run();
       }
       return "updated";
     },

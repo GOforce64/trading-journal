@@ -779,6 +779,23 @@ describe("the scalp review", () => {
     expect(repo().get(id)?.scalpPrices).toBeNull();
   });
 
+  it("drops a typed stock at entry when the ticker changes or the entry moves to another minute", () => {
+    const id = repo().create(nvda).id;
+    const typed = () => repo().update(id, { scalp: { levelBasis: "stock", stockEntryOverride: 231 } });
+    const override = () => repo().get(id)?.scalp?.stockEntryOverride;
+    typed();
+    repo().update(id, { openedAt: nvda.openedAt + 20_000, closedAt: (nvda.closedAt ?? 0) + 60_000 });
+    expect(override()).toBe(231);
+    repo().update(id, { openedAt: nvda.openedAt + 60_000 });
+    expect(override()).toBeNull();
+    typed();
+    repo().update(id, { underlying: "AMD" });
+    expect(override()).toBeNull();
+    // A new stock typed with the move stands.
+    repo().update(id, { underlying: "NVDA", scalp: { stockEntryOverride: 230.5 } });
+    expect(override()).toBe(230.5);
+  });
+
   it("compares a premarket scalp's times by the minute, not clamped to the session as a fly's are", () => {
     const seven = nyWallClock("2026-09-28", 7 * 60);
     const id = repo().create({ ...nvda, openedAt: seven, closedAt: seven + 600_000 }).id;

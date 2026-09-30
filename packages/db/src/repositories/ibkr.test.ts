@@ -276,6 +276,14 @@ describe("applying a synced trade", () => {
     expect(trades().get("trade-nvda")?.scalpPrices).toBeNull();
   });
 
+  it("drops a typed stock at entry when a sync moves the entry to another minute", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    trades().update("trade-nvda", { scalp: { levelBasis: "stock", stockEntryOverride: 231 } });
+    // Levels are review fields, not facts, so the sync still rewrites the trade.
+    expect(ibkr().apply(scalp({ openedAt: OPEN + 120_000 }), ACCOUNT.id)).toBe("updated");
+    expect(trades().get("trade-nvda")?.scalp?.stockEntryOverride).toBeNull();
+  });
+
   it("adds a new trade as the sync's, with its leg ids", () => {
     expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("added");
     const stored = trades().get("trade-nvda");

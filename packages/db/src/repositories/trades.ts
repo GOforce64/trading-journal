@@ -127,6 +127,17 @@ export function staleScalpPrices(
   );
 }
 
+/** A typed stock at entry goes stale with a new ticker, or an entry moved to another minute (scalp-R spec §7). */
+export function staleEntryOverride(
+  existing: TradeRow,
+  patch: Pick<TradePatch, "underlying" | "openedAt">,
+): boolean {
+  return (
+    (patch.underlying !== undefined && patch.underlying !== existing.underlying) ||
+    (patch.openedAt !== undefined && minuteOf(patch.openedAt) !== minuteOf(existing.openedAt))
+  );
+}
+
 const legKey = (leg: {
   right: string;
   strike: number;
@@ -484,6 +495,10 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         }
         if (staleScalpPrices(existing, patch)) {
           tx.delete(scalpPrices).where(eq(scalpPrices.tradeId, id)).run();
+        }
+        // Unless the same patch types a new one.
+        if (staleEntryOverride(existing, patch) && scalp?.stockEntryOverride === undefined) {
+          tx.update(scalpDetails).set({ stockEntryOverride: null }).where(eq(scalpDetails.tradeId, id)).run();
         }
         return requireRow(tx, id);
       });
