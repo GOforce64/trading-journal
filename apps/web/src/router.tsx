@@ -83,9 +83,20 @@ const ironFliesRoute = createRoute({
 const scalpsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/scalps",
-  component: () => (
-    <Scalps onOpenTrade={openTrade} onNewScalp={() => router.navigate({ to: "/scalps/new" })} />
-  ),
+  // The tab: `?tab=review` opens To review; All is the default, left out.
+  validateSearch: (raw: Record<string, unknown>): { tab?: "review" } =>
+    raw.tab === "review" ? { tab: "review" } : {},
+  component: function ScalpsRoute() {
+    const { tab } = scalpsRoute.useSearch();
+    return (
+      <Scalps
+        onOpenTrade={openTrade}
+        onNewScalp={() => router.navigate({ to: "/scalps/new" })}
+        tab={tab}
+        onTab={(next) => router.navigate({ to: "/scalps", search: next ? { tab: next } : {} })}
+      />
+    );
+  },
 });
 
 const newScalpRoute = createRoute({

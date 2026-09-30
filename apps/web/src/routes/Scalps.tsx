@@ -7,11 +7,20 @@ import { Journal } from "./Journal.js";
 export function Scalps({
   onOpenTrade,
   onNewScalp,
+  tab: urlTab,
+  onTab,
 }: {
   onOpenTrade?: (id: string) => void;
   onNewScalp?: () => void;
+  /** The tab from the URL (`?tab=review`); absent means All. */
+  tab?: "review";
+  /** Puts the tab in the URL. Without it the tab lives here. */
+  onTab?: (tab: "review" | undefined) => void;
 }) {
-  const [tab, setTab] = useState<"all" | "review">("all");
+  const [ownTab, setOwnTab] = useState<"all" | "review">("all");
+  const tab = onTab ? (urlTab ?? "all") : ownTab;
+  const setTab = (next: "all" | "review") =>
+    onTab ? onTab(next === "review" ? "review" : undefined) : setOwnTab(next);
   const waiting = usePendingReviews().data?.length ?? 0;
   return (
     <div className="flex flex-col gap-2">
