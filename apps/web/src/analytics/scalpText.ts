@@ -19,11 +19,12 @@ export function metricValue(row: GroupStats, metric: Metric): number | null {
 
 const TICK_CHARS = 12;
 
+/** A name cut to 12 characters for a chart's axis: "Earnings IV…". */
+export const shortLabel = (label: string) =>
+  label.length > TICK_CHARS ? `${label.slice(0, TICK_CHARS - 1)}…` : label;
+
 /** A bar's axis label, the name cut to 12 characters so neighbours don't overlap: "Earnings IV… · 12". */
-export function tickText(label: string, trades: number): string {
-  const short = label.length > TICK_CHARS ? `${label.slice(0, TICK_CHARS - 1)}…` : label;
-  return `${short} · ${trades}`;
-}
+export const tickText = (label: string, trades: number) => `${shortLabel(label)} · ${trades}`;
 
 /** A return on cost with its sign: 0.084 → "+8.4%", −0.03 → "−3.0%"; "—" without one. */
 export function returnText(value: number | null): string {

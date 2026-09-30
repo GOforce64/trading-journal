@@ -53,4 +53,36 @@ describe("MetricBars", () => {
     const single = render(<MetricBars rows={rows([{ net: 250 }])} metric="net" />);
     expect(bars(single.container)).toBe(1);
   });
+
+  it("gives each breakdown row its own band, so eleven labels never overlap", () => {
+    const tickers = [
+      "NVDA",
+      "SPY",
+      "QQQ",
+      "AMD",
+      "TSLA",
+      "META",
+      "AAPL",
+      "MSFT",
+      "AMZN",
+      "GOOG",
+      "Earnings IV crush",
+    ];
+    const { container } = render(
+      <MetricBars
+        rows={tickers.map((label, index) => ({ ...STATS, label, net: 95 - index * 20 }))}
+        metric="net"
+        layout="rows"
+      />,
+    );
+    expect(bars(container)).toBe(11);
+    const labels = [
+      ...container.querySelectorAll(".recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value"),
+    ];
+    expect(labels.map((label) => label.textContent)).toEqual([...tickers.slice(0, 10), "Earnings IV…"]);
+    const ys = labels.map((label) => Number(label.getAttribute("y")));
+    for (let index = 1; index < ys.length; index++) {
+      expect((ys[index] ?? 0) - (ys[index - 1] ?? 0)).toBeGreaterThanOrEqual(18);
+    }
+  });
 });

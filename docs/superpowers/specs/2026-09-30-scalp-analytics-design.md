@@ -164,7 +164,7 @@ Two charts side by side, each with one bar per bucket:
 - **The five main buckets always show**, so the axis never shifts. An empty one has no bar and a count of 0 under its label, e.g. "0–5 · 12".
 - **A bar's label** is cut to 12 characters, e.g. "Earnings IV… · 2", so neighbours don't overlap. Its tooltip keeps the full name.
 - **One toggle** above the charts, **Net / Avg R / Win %**, switches both of them and the breakdown's bars (§6.4). It's kept in the URL (`metric`).
-  - **Net:** the sum of net P&L. Bars are coloured by sign and hang from a zero line.
+  - **Net:** the sum of net P&L. Bars are coloured by sign and hang from a zero line. The axis always takes in zero, so bars that all share a sign still start from it.
   - **Avg R:** the mean R. A bucket with no R draws no bar.
   - **Win %:** in the accent colour, with a 50% reference line.
 - **The tooltip** on a bar shows everything, e.g. "0–5 min · 12 scalps · +$820 · +0.62R over 10 · win 66.7%".
@@ -175,7 +175,7 @@ Two charts side by side, each with one bar per bucket:
 - **One table** has the columns: the label · n · Win % · Net · Avg R · Avg return · PF.
   - Avg R reads "—" for a row with no R. Its tooltip says "over k of n".
   - Avg return reads "—" for a row without one.
-- **A bar chart beside the table** has one bar per row, in the table's order, and follows the §6.3 toggle.
+- **A bar chart beside the table** has one bar per row, in the table's order, and follows the §6.3 toggle. Its bars lie down, one 22 px band per row, with the name (cut to 12 characters, without the count the table already shows) beside each. So 11 tickers or a year of months never crowd an axis.
 
 | Dimension (`by`) | Rows | Order |
 |---|---|---|
@@ -357,6 +357,13 @@ Over a read-only copy of the real journal (42 flies, no scalps), migrated to 000
 - **The Playbook:** a card each for ORB breakout (−0.40R over 11 of 14, a falling red sparkline) and VWAP reclaim (+0.82R over 10 of 12, rising green). "14 trades →" opened `/analytics?tab=scalps&setup=<ORB's id>` with the Setup dropdown on ORB breakout and 14 scalps.
 - **Fixed from the check:** at 1024 px the card's "Avg return" label wrapped onto two lines, dropping its value below its neighbours'. The stats now spread by content, with their labels on one line (6e91a18).
 - **At 1024 px** nothing else overlaps. The Profit factor tile's label truncates to "PROFIT FACT…", as Overview's does.
+- **Fixed after the final review:**
+  - **Bars from a floating axis.** With every bar on one side of zero, Recharts fitted the axis to the data alone, so the smallest bar vanished and the zero line went (e0616de). Examples: a winning setup, or Book with only Live.
+  - **Crowded labels.** The breakdown's labels would overlap past about 4 rows at 1024 px, so its bars now lie down, one band per row.
+  - Both were re-checked at 1024 px:
+    - VWAP reclaim's all-positive hold chart draws every bar from zero;
+    - Book with only Live draws its single bar;
+    - by Ticker, each of the 4 rows has its own band.
 
 ---
 

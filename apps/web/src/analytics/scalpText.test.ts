@@ -1,6 +1,14 @@
 import type { GroupStats } from "@tj/core";
 import { describe, expect, it } from "vitest";
-import { coverageText, holdText, metricValue, returnText, rowSummary, tickText } from "./scalpText.js";
+import {
+  coverageText,
+  holdText,
+  metricValue,
+  returnText,
+  rowSummary,
+  shortLabel,
+  tickText,
+} from "./scalpText.js";
 
 const ROW: GroupStats = {
   trades: 12,
@@ -39,6 +47,8 @@ describe("tickText", () => {
     expect(tickText("0–5", 12)).toBe("0–5 · 12");
     expect(tickText("ORB breakout", 3)).toBe("ORB breakout · 3");
     expect(tickText("Earnings IV crush", 2)).toBe("Earnings IV… · 2");
+    expect(shortLabel("Earnings IV crush")).toBe("Earnings IV…");
+    expect(shortLabel("VWAP reclaim")).toBe("VWAP reclaim");
   });
 });
 

@@ -88,7 +88,7 @@ export function BreakdownPanel({
             ))}
           </tbody>
         </table>
-        <MetricBars rows={rows} metric={metric} />
+        <MetricBars rows={rows} metric={metric} layout="rows" />
       </div>
     </Section>
   );
