@@ -109,6 +109,14 @@ describe("SetupCards", () => {
     expect(onOpenSetup).toHaveBeenCalledWith("orb", "scalps");
   });
 
+  it("keeps each stat's label on one line, so a narrow card at 1024 px still lines them up", () => {
+    renderCards();
+    const orb = card("ORB breakout");
+    for (const label of ["Trades", "Win %", "Net", "Avg return"]) {
+      expect(orb.getByText(label).className).toContain("whitespace-nowrap");
+    }
+  });
+
   it("leaves the sparkline out with fewer than 2 points", () => {
     renderCards();
     const vwap = card("VWAP reclaim");

@@ -44,7 +44,7 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="text-[9px] text-muted uppercase tracking-wider">{label}</div>
+      <div className="whitespace-nowrap text-[9px] text-muted uppercase tracking-wider">{label}</div>
       <div className={`num text-[12px] ${className}`}>{children}</div>
     </div>
   );
@@ -86,7 +86,8 @@ function Card({
           label={fly ? "Cumulative net P&L" : "Cumulative R"}
         />
       </div>
-      <div className="mt-2 grid grid-cols-4 gap-1.5">
+      {/* Spread by content rather than four equal columns, which wrapped "Avg return" on a narrow card. */}
+      <div className="mt-2 flex justify-between gap-2">
         <Stat label="Trades">{card.trades}</Stat>
         <Stat label="Win %">{winRateText(card.winRate)}</Stat>
         <Stat label="Net" className={tone(card.net)}>
