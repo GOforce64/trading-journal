@@ -39,6 +39,8 @@ describe("summarize", () => {
       avgWin: 187.5,
       avgLoss: -183.33,
       maxDrawdown: -300,
+      avgR: null,
+      rCount: 0,
     });
   });
 
@@ -55,6 +57,17 @@ describe("summarize", () => {
     });
     const winners = closedTrades(FIXTURE.filter((trade) => (trade.netPnl ?? 0) > 0));
     expect(summarize(winners).profitFactor).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("averages R over the trades that have one, to 0.01", () => {
+    const withR = closedTrades([
+      makeTrade({ id: "a", risk: { r: 0.43 } }),
+      makeTrade({ id: "b", risk: { r: -1.07 } }),
+      makeTrade({ id: "c", risk: { r: null } }),
+      makeTrade({ id: "d" }),
+    ]);
+    expect(summarize(withR)).toMatchObject({ avgR: -0.32, rCount: 2 });
+    expect(summarize([])).toMatchObject({ avgR: null, rCount: 0 });
   });
 });
 

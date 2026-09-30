@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,14 +15,58 @@ function tempDir(): string {
 }
 
 describe("runMigrations", () => {
-  it("adds the scalp review's table and column", () => {
+  it("adds the scalp review's and scalp R's tables and columns", () => {
     const file = join(tempDir(), "journal.db");
     runMigrations(file, { migrationsFolder: MIGRATIONS });
     const db = openDatabase(file);
     const columns = (table: string) =>
       db.all<{ name: string }>(sql.raw(`pragma table_info(${table})`)).map((column) => column.name);
-    expect(columns("scalp_details")).toEqual(["trade_id", "level_basis", "stop_price", "target_price"]);
+    expect(columns("scalp_details")).toEqual([
+      "trade_id",
+      "level_basis",
+      "stop_price",
+      "stock_entry_override",
+      "risk_override",
+    ]);
+    expect(columns("scalp_targets")).toEqual(["trade_id", "position", "price", "contracts"]);
+    expect(columns("scalp_prices")).toEqual([
+      "trade_id",
+      "entry_price",
+      "hold_high",
+      "hold_low",
+      "fetched_at",
+    ]);
     expect(columns("trades")).toContain("reviewed_at");
+  });
+
+  it("turns a stored target into T1 trimming the whole position, then drops the column", () => {
+    const dir = tempDir();
+    // The migrations up to 0005, so the old column can be filled in first.
+    const before = join(dir, "migrations");
+    cpSync(MIGRATIONS, before, { recursive: true });
+    const journalFile = join(before, "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(journalFile, "utf8")) as { entries: { tag: string }[] };
+    journal.entries = journal.entries.filter((entry) => entry.tag !== "0006_scalp_r");
+    writeFileSync(journalFile, JSON.stringify(journal));
+    const file = join(dir, "journal.db");
+    runMigrations(file, { migrationsFolder: before });
+    const old = openDatabase(file);
+    old.run(sql`insert into trades (id, strategy, book, underlying, opened_at, created_at, updated_at)
+      values ('nvda', 'scalp', 'paper', 'NVDA', 1, 1, 1), ('amd', 'scalp', 'paper', 'AMD', 1, 1, 1)`);
+    old.run(sql`insert into legs (id, trade_id, "right", strike, expiry, quantity, open_price, created_at, updated_at)
+      values ('l1', 'nvda', 'C', 232.5, '2026-09-28', 2, 1.06, 1, 1)`);
+    old.run(sql`insert into scalp_details (trade_id, level_basis, stop_price, target_price)
+      values ('nvda', 'stock', 229, 234.5), ('amd', 'stock', 150, null)`);
+
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const db = openDatabase(file);
+    expect(db.all(sql`select trade_id, position, price, contracts from scalp_targets`)).toEqual([
+      { trade_id: "nvda", position: 1, price: 234.5, contracts: 2 },
+    ]);
+    expect(db.all(sql`select trade_id, stop_price from scalp_details order by trade_id`)).toEqual([
+      { trade_id: "amd", stop_price: 150 },
+      { trade_id: "nvda", stop_price: 229 },
+    ]);
   });
 
   it("creates the schema in a fresh database", () => {

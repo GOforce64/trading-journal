@@ -115,16 +115,51 @@ export const ironFlyDetails = sqliteTable("iron_fly_details", {
   sourceNotes: text("source_notes"),
 });
 
-/** A scalp's stop and target (scalp-review spec §5): one row per scalp, from its first level or basis. */
+/**
+ * A scalp's levels (scalp-review spec §5, scalp-R spec §5): one row per scalp, from its first level or basis. Its
+ * targets are in `scalp_targets`.
+ */
 export const scalpDetails = sqliteTable("scalp_details", {
   tradeId: text("trade_id")
     .primaryKey()
     .references(() => trades.id),
-  /** What both prices are measured on. */
+  /** What the stop and targets are measured on. */
   levelBasis: text("level_basis", { enum: ["stock", "premium"] }).notNull(),
   /** A stock price, or an option price per share. */
   stopPrice: real("stop_price"),
-  targetPrice: real("target_price"),
+  /** Typed over the fetched stock price at entry. */
+  stockEntryOverride: real("stock_entry_override"),
+  /** Typed over the model's planned risk, in dollars. */
+  riskOverride: real("risk_override"),
+});
+
+/** A scalp's profit targets (scalp-R spec §5), numbered from 1 in the order the trade reaches them. */
+export const scalpTargets = sqliteTable(
+  "scalp_targets",
+  {
+    tradeId: text("trade_id")
+      .notNull()
+      .references(() => trades.id),
+    position: integer("position").notNull(),
+    /** On the trade's basis. */
+    price: real("price").notNull(),
+    /** Whole contracts sold there. */
+    contracts: integer("contracts").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tradeId, table.position] })],
+);
+
+/** The stock prices a scalp's R needs (scalp-R spec §5). Only the price filler writes them; an edit deletes them. */
+export const scalpPrices = sqliteTable("scalp_prices", {
+  tradeId: text("trade_id")
+    .primaryKey()
+    .references(() => trades.id),
+  /** The stock at openedAt, interpolated by the second. */
+  entryPrice: real("entry_price"),
+  /** The stock's range from the entry minute through the exit minute. */
+  holdHigh: real("hold_high"),
+  holdLow: real("hold_low"),
+  fetchedAt: integer("fetched_at").notNull(),
 });
 
 export const tags = sqliteTable(

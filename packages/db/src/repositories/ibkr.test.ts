@@ -229,7 +229,7 @@ describe("storing fills", () => {
 });
 
 describe("applying a synced trade", () => {
-  it("keeps the review when it rewrites a scalp's facts", () => {
+  it("keeps the review, the targets, the overrides and the fetched prices when it rewrites a scalp's P&L", () => {
     ibkr().apply(scalp(), ACCOUNT.id);
     const taxonomy = createTaxonomyRepo(db);
     const setup = taxonomy.createSetup({ name: "ORB breakout", strategy: "scalp" }).id;
@@ -241,8 +241,14 @@ describe("applying a synced trade", () => {
       tagIds: [calm],
       notes: "clean break",
       reviewed: true,
-      scalp: { levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 },
+      scalp: {
+        levelBasis: "stock",
+        stopPrice: 231.8,
+        targets: [{ price: 234.5, contracts: 2 }],
+        riskOverride: 120,
+      },
     });
+    trades().setScalpPrices("trade-nvda", { entryPrice: 230.83, holdHigh: 233.21, holdLow: 230.71 }, 3_000);
     clock = 5_000;
     expect(ibkr().apply(scalp({ netPnl: 40.1 }), ACCOUNT.id)).toBe("updated");
     const stored = trades().get("trade-nvda");
@@ -253,8 +259,21 @@ describe("applying a synced trade", () => {
       tagIds: [calm],
       notes: "clean break",
       reviewedAt: 2_000,
+      scalpPrices: { entryPrice: 230.83, holdHigh: 233.21 },
     });
-    expect(stored?.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 });
+    expect(stored?.scalp).toMatchObject({
+      levelBasis: "stock",
+      stopPrice: 231.8,
+      targets: [{ price: 234.5, contracts: 2 }],
+      riskOverride: 120,
+    });
+  });
+
+  it("drops a scalp's fetched prices when a sync closes it, so the range is fetched too", () => {
+    ibkr().apply(scalp({ closedAt: null, netPnl: null }), ACCOUNT.id);
+    trades().setScalpPrices("trade-nvda", { entryPrice: 230.83, holdHigh: null, holdLow: null }, 3_000);
+    expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("updated");
+    expect(trades().get("trade-nvda")?.scalpPrices).toBeNull();
   });
 
   it("adds a new trade as the sync's, with its leg ids", () => {

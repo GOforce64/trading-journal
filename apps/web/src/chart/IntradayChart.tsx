@@ -13,14 +13,14 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type ChartEditing, inPane, type LevelKind, nearestLine, priceAt } from "./drag.js";
+import { type ChartEditing, inPane, type LineId, lineName, nearestLine, priceAt } from "./drag.js";
 import type { IntradayModel, LevelLine, Marker, Point } from "./model.js";
 import type { Toggle } from "./prefs.js";
 import { COLORS, chartOptions, EMA_COLORS, nyTimeText, seconds } from "./style.js";
 
-/** An extra horizontal line, such as the scalp review's stop or target. A line with an `id` can be dragged. */
+/** An extra horizontal line, such as the scalp review's stop or a target. A line with an `id` can be dragged. */
 export interface PriceLine {
-  id?: LevelKind;
+  id?: LineId;
   price: number;
   color: string;
   dashed: boolean;
@@ -43,7 +43,7 @@ interface Parts {
 
 /** A line being dragged: where it started, and where it is now (scalp-review spec §8.3). */
 interface Drag {
-  kind: LevelKind;
+  id: LineId;
   line: IPriceLine;
   from: number;
   price: number;
@@ -160,7 +160,7 @@ export function IntradayChart({
       if (price == null) return;
       drag.price = price;
       drag.line.applyOptions({ price });
-      current.current.editing?.onDrag(drag.kind, price);
+      current.current.editing?.onDrag(drag.id, price);
     }
     function release() {
       finish(true);
@@ -173,7 +173,7 @@ export function IntradayChart({
       window.removeEventListener("mouseup", release);
       chart.applyOptions({ handleScroll: true, handleScale: true });
       if (save && done.price !== done.from) {
-        current.current.editing?.onDrop(done.kind, done.price);
+        current.current.editing?.onDrop(done.id, done.price);
         return;
       }
       done.line.applyOptions({ price: done.from });
@@ -194,15 +194,15 @@ export function IntradayChart({
         return;
       }
       if (!onPlot) return;
-      const kind = nearestLine(grabbable(), y, toY);
-      const index = current.current.lines.findIndex((each) => each.id === kind);
+      const id = nearestLine(grabbable(), y, toY);
+      const index = current.current.lines.findIndex((each) => each.id === id);
       const line = parts.current?.priceLines[index];
       const from = current.current.lines[index]?.price;
-      if (!kind || !line || from === undefined) return;
+      if (!id || !line || from === undefined) return;
       event.preventDefault();
       event.stopPropagation();
       chart.applyOptions({ handleScroll: false, handleScale: false });
-      drag = { kind, line, from, price: from };
+      drag = { id, line, from, price: from };
       window.addEventListener("mousemove", follow);
       window.addEventListener("mouseup", release);
     }
@@ -342,7 +342,7 @@ export function IntradayChart({
           data-testid="placing-hint"
           className="pointer-events-none absolute top-6 left-1/2 z-10 -translate-x-1/2 rounded-sm border border-line bg-[#131722e6] px-2 py-0.5 text-[10px] text-fg"
         >
-          Click the chart to place the {editing.placing} · Esc to cancel
+          Click the chart to place {lineName(editing.placing)} · Esc to cancel
         </div>
       )}
       {candle && (

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, pctKept } from "@tj/core";
+import { closeEstimate, type OptionQuote, pctKept, returnOnCost } from "@tj/core";
 import { useState } from "react";
+import { rText } from "../analytics/format.js";
 import { api, type TradeView } from "../api.js";
 import { EstimatedPnl } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct } from "../components/ui.js";
@@ -47,6 +48,9 @@ const PRICE = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximum
 
 const NO_QUOTES = new Map<string, OptionQuote>();
 
+/** The % column's header: a scalp's return on the premium paid, a fly's share of max profit kept. */
+const PCT_HEADER = { scalp: "Return", iron_fly: "% kept" } as const;
+
 function LivePrice({ tradeId, quote }: { tradeId: string; quote?: { price: number; at: number } }) {
   if (!quote) return null;
   return (
@@ -58,6 +62,16 @@ function LivePrice({ tradeId, quote }: { tradeId: string; quote?: { price: numbe
       {PRICE.format(quote.price)}
     </span>
   );
+}
+
+/** A trade's R, coloured by its sign (scalp-R spec §10); "—" without one. */
+function RMultiple({ r }: { r: number | null }) {
+  if (r == null) return <span className="text-muted">—</span>;
+  const text = rText(r);
+  let tone = "text-muted";
+  if (text.startsWith("+")) tone = "text-up";
+  else if (text.startsWith("−")) tone = "text-down";
+  return <span className={tone}>{text}</span>;
 }
 
 export interface JournalProps {
@@ -119,7 +133,13 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
               <th className="w-36 text-left font-medium">Setup</th>
               <th className="text-left font-medium">Notes</th>
               <th className="w-28 text-right font-medium">Net P&amp;L</th>
-              <th className="w-28 text-right font-medium">% kept</th>
+              <th className="w-20 text-right font-medium">R</th>
+              <th
+                className="w-28 text-right font-medium"
+                title="Scalps: net P&L ÷ the premium paid. Iron flies: net P&L ÷ max profit."
+              >
+                {lockedFilter?.strategy ? PCT_HEADER[lockedFilter.strategy] : "Return / % kept"}
+              </th>
               <th className="w-12 text-right font-medium">Grade</th>
             </tr>
           </thead>
@@ -184,8 +204,11 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
                     <Money value={trade.netPnl} />
                   )}
                 </td>
-                <td className="text-right">
-                  <Pct value={pctKept(trade)} />
+                <td className="num text-right" data-testid={`r-${trade.id}`}>
+                  <RMultiple r={trade.risk?.r ?? null} />
+                </td>
+                <td className="text-right" data-testid={`pct-${trade.id}`}>
+                  <Pct value={trade.strategy === "scalp" ? returnOnCost(trade) : pctKept(trade)} />
                 </td>
                 <td className="num text-right text-muted">{trade.grade ?? "—"}</td>
               </tr>

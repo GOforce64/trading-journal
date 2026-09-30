@@ -34,7 +34,18 @@ function serve(scalp: Record<string, unknown> | null) {
     underlying: "NVDA",
     closedAt: 1,
     tagIds: [],
-    legs: [],
+    legs: [
+      {
+        id: "l1",
+        right: "C",
+        strike: 232.5,
+        expiry: "2026-09-28",
+        quantity: 3,
+        multiplier: 100,
+        openPrice: 1.06,
+        closePrice: 1.295,
+      },
+    ],
     scalp,
     review: { status: "pending", missing: ["setup", "grade", "stop"] },
   };
@@ -45,7 +56,15 @@ function serve(scalp: Record<string, unknown> | null) {
       if (String(init?.method).toUpperCase() === "PATCH") {
         const body = JSON.parse(String(init?.body)) as { scalp: Record<string, unknown> };
         patches.push(body);
-        stored = { ...stored, scalp: { ...(stored.scalp as object), ...body.scalp } };
+        // A first level creates the whole row, as the repository does.
+        const row = stored.scalp ?? {
+          tradeId: "t1",
+          stopPrice: null,
+          stockEntryOverride: null,
+          riskOverride: null,
+          targets: [],
+        };
+        stored = { ...stored, scalp: { ...(row as object), ...body.scalp } };
       }
       return new Response(JSON.stringify(stored), { headers: { "content-type": "application/json" } });
     }),
@@ -104,7 +123,14 @@ afterEach(() => {
 
 describe("a level field and the chart together", () => {
   it("lets a drag on the chart win over a focused field: it follows, and saves once, at the drop", async () => {
-    serve({ tradeId: "t1", levelBasis: "stock", stopPrice: 231.8, targetPrice: null });
+    serve({
+      tradeId: "t1",
+      levelBasis: "stock",
+      stopPrice: 231.8,
+      stockEntryOverride: null,
+      riskOverride: null,
+      targets: [],
+    });
     renderPage();
     const field = await screen.findByRole("textbox", { name: "Stop" });
     act(() => field.focus());
@@ -138,5 +164,57 @@ describe("a level field and the chart together", () => {
     act(() => stopField().blur());
     await waitFor(() => expect(stopField().value).toBe("229.00"));
     expect(patches).toEqual([{ scalp: { levelBasis: "stock", stopPrice: 229 } }]);
+  });
+
+  it("places a new target where the chart is clicked, with the contracts typed in its row", async () => {
+    serve({
+      tradeId: "t1",
+      levelBasis: "stock",
+      stopPrice: 231.8,
+      stockEntryOverride: null,
+      riskOverride: null,
+      targets: [{ price: 234.5, contracts: 1 }],
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    const contracts = screen.getByRole("textbox", { name: "T2 contracts" }) as HTMLInputElement;
+    expect(contracts.value).toBe("2");
+    // Leaving the empty price field for the contracts keeps the new row open.
+    act(() => contracts.focus());
+    fireEvent.change(contracts, { target: { value: "1" } });
+    press(chart(), { clientX: 100, clientY: yOf(236), button: 0 });
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches).toEqual([
+      {
+        scalp: {
+          levelBasis: "stock",
+          targets: [
+            { price: 234.5, contracts: 1 },
+            { price: 236, contracts: 1 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("drags a target on the chart and saves the list at the drop", async () => {
+    serve({
+      tradeId: "t1",
+      levelBasis: "stock",
+      stopPrice: 231.8,
+      stockEntryOverride: null,
+      riskOverride: null,
+      targets: [{ price: 234.5, contracts: 1 }],
+    });
+    renderPage();
+    await screen.findByRole("textbox", { name: "T1 price" });
+    press(chart(), { clientX: 100, clientY: yOf(234.5), button: 0 });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(235.5) });
+    fireEvent.mouseUp(window);
+    await waitFor(() =>
+      expect(patches).toEqual([
+        { scalp: { levelBasis: "stock", targets: [{ price: 235.5, contracts: 1 }] } },
+      ]),
+    );
   });
 });

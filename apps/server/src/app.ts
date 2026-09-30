@@ -15,9 +15,11 @@ import { importRoutes } from "./routes/import.js";
 import { marketRoutes } from "./routes/market.js";
 import { moveRoutes } from "./routes/moves.js";
 import { quoteRoutes } from "./routes/quotes.js";
+import { riskRoutes } from "./routes/risk.js";
 import { type SettingsDeps, settingsRoutes } from "./routes/settings.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { tradeRoutes } from "./routes/trades.js";
+import { createScalpPriceFiller } from "./scalpPrices.js";
 
 export interface AppDeps {
   db: Db;
@@ -40,6 +42,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 export function createApp(deps: AppDeps) {
   const { setups, tags } = taxonomyRoutes(deps.db, deps.now);
+  const bars = createBarService({ db: deps.db, market: deps.market, now: deps.now });
 
   const app = new Hono()
     // Blocks DNS rebinding: a page on the internet cannot talk to this server.
@@ -74,7 +77,8 @@ export function createApp(deps: AppDeps) {
     )
     .route("/api/quotes", quoteRoutes(deps.market))
     .route("/api/settings", settingsRoutes(deps.market, deps.settings))
-    .route("/api/bars", barRoutes(createBarService({ db: deps.db, market: deps.market, now: deps.now })))
+    .route("/api/bars", barRoutes(bars))
+    .route("/api/risk", riskRoutes(createScalpPriceFiller({ db: deps.db, bars, now: deps.now })))
     .route("/api", marketRoutes(deps.market));
 
   if (deps.webDir) {

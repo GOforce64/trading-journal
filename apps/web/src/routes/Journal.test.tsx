@@ -130,7 +130,7 @@ describe("Journal", () => {
     expect(screen.getByText("+$512.00")).toBeTruthy();
     // 512 of a 1,192 max profit (3.00 × 4 × 100 − 8).
     expect(screen.getByText("+42.95%")).toBeTruthy();
-    expect(screen.getByText("% kept")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Return / % kept" })).toBeTruthy();
     expect(screen.queryByText("Return on risk")).toBeNull();
     expect(screen.getByText("IRON FLY")).toBeTruthy();
   });
@@ -305,5 +305,53 @@ describe("Journal", () => {
     const row = await screen.findByTestId("row-t1");
     await waitFor(() => expect(row.textContent).toContain("ORB breakout"));
     expect(within(row).getByText("Waiting for review")).toBeTruthy();
+  });
+
+  it("shows each trade's R, coloured by its sign, and — without one", async () => {
+    stubApi({
+      trades: [
+        { ...trade, id: "s1", strategy: "scalp", risk: { r: 0.42997 } },
+        { ...trade, id: "s2", strategy: "scalp", risk: { r: -1 } },
+        { ...trade, id: "f1", risk: null },
+      ],
+    });
+    renderJournal();
+    const r = async (id: string) => (await screen.findByTestId(`r-${id}`)).firstElementChild;
+    expect((await r("s1"))?.textContent).toBe("+0.43R");
+    expect((await r("s1"))?.className).toContain("text-up");
+    expect((await r("s2"))?.textContent).toBe("−1.00R");
+    expect((await r("s2"))?.className).toContain("text-down");
+    expect((await r("f1"))?.textContent).toBe("—");
+    expect(screen.getByRole("columnheader", { name: "R" })).toBeTruthy();
+  });
+
+  it("shows a scalp's return on the premium paid, beside a fly's % kept", async () => {
+    const scalp = {
+      ...trade,
+      id: "s1",
+      strategy: "scalp",
+      underlying: "NVDA",
+      netPnl: 44.74,
+      fees: 2.26,
+      ironFly: null,
+      metrics: null,
+      legs: [
+        {
+          id: "l1",
+          right: "C",
+          strike: 232.5,
+          expiry: "2026-09-28",
+          quantity: 2,
+          multiplier: 100,
+          openPrice: 1.06,
+          closePrice: 1.295,
+        },
+      ],
+    };
+    stubApi({ trades: [trade, scalp] });
+    renderJournal();
+    // +$44.74 on 2 × 100 × 1.06 = $212 paid.
+    expect((await screen.findByTestId("pct-s1")).textContent).toBe("+21.10%");
+    expect(screen.getByTestId("pct-t1").textContent).toBe("+42.95%");
   });
 });

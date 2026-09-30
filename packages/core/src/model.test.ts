@@ -107,12 +107,30 @@ describe("tradePatchSchema for the scalp review", () => {
       reviewed: true,
     });
     expect(
-      tradePatchSchema.parse({ scalp: { levelBasis: "premium", stopPrice: 0, targetPrice: null } }).scalp,
-    ).toEqual({ levelBasis: "premium", stopPrice: 0, targetPrice: null });
+      tradePatchSchema.parse({ scalp: { levelBasis: "premium", stopPrice: 0, targets: [] } }).scalp,
+    ).toEqual({ levelBasis: "premium", stopPrice: 0, targets: [] });
   });
 
   it("refuses a negative price and an unknown basis", () => {
     expect(tradePatchSchema.safeParse({ scalp: { stopPrice: -1 } }).success).toBe(false);
     expect(tradePatchSchema.safeParse({ scalp: { levelBasis: "delta" } }).success).toBe(false);
+  });
+
+  it("takes targets of whole contracts, and the two typed overrides", () => {
+    const scalp = { targets: [{ price: 233, contracts: 1 }], stockEntryOverride: 230.83, riskOverride: null };
+    expect(tradePatchSchema.parse({ scalp }).scalp).toEqual(scalp);
+    for (const target of [
+      { price: 233, contracts: 0 },
+      { price: 233, contracts: 1.5 },
+      { price: -1, contracts: 1 },
+    ]) {
+      expect(tradePatchSchema.safeParse({ scalp: { targets: [target] } }).success).toBe(false);
+    }
+    const eleven = Array.from({ length: 11 }, (_, index) => ({ price: 233 + index, contracts: 1 }));
+    expect(tradePatchSchema.safeParse({ scalp: { targets: eleven } }).success).toBe(false);
+  });
+
+  it("no longer takes a single target price", () => {
+    expect(tradePatchSchema.parse({ scalp: { targetPrice: 234.5 } }).scalp).toEqual({});
   });
 });

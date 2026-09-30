@@ -7,6 +7,8 @@ import {
   newTradeSchema,
   type ReviewStatus,
   reviewStatus,
+  type ScalpRisk,
+  scalpRisk,
   tradePatchSchema,
 } from "@tj/core";
 import {
@@ -35,11 +37,13 @@ export interface TradeView extends TradeRecord {
   metrics: (IronFlyMetrics & IronFlyOutcome) | null;
   /** Whether the trade waits in the To review queue (scalp-review spec §6.1); null where the queue doesn't apply. */
   review: ReviewStatus | null;
+  /** A scalp's R (scalp-R spec §6), worked out on read; null for a fly. */
+  risk: ScalpRisk | null;
 }
 
-/** Metrics and the review status are derived on read, so a stored trade and its numbers can never drift apart. */
+/** Metrics, the review status and R are derived on read, so a stored trade and its numbers can never drift apart. */
 export function withMetrics(trade: TradeRecord): TradeView {
-  return { ...trade, metrics: flyMetrics(trade), review: reviewStatus(trade) };
+  return { ...trade, metrics: flyMetrics(trade), review: reviewStatus(trade), risk: scalpRisk(trade) };
 }
 
 function flyMetrics(trade: TradeRecord): TradeView["metrics"] {

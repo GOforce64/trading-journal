@@ -150,4 +150,53 @@ describe("Dashboard", () => {
     await waitFor(() => expect(kpi("net")).toContain("+$260.00"));
     expect(screen.queryByRole("region", { name: /To review/ })).toBeNull();
   });
+
+  it("shows Avg R over the period's scalps that have one, leaving excluded ones out", async () => {
+    stubTrades([
+      tradeRow({
+        id: "s1",
+        underlying: "NVDA",
+        strategy: "scalp",
+        opened: "2026-09-28 09:31",
+        closed: "2026-09-28 09:46",
+        netPnl: 44.74,
+        r: 0.43,
+      }),
+      tradeRow({
+        id: "s2",
+        underlying: "NVDA",
+        strategy: "scalp",
+        opened: "2026-09-29 09:40",
+        closed: "2026-09-29 09:50",
+        netPnl: -100,
+        r: -1.07,
+      }),
+      tradeRow({
+        id: "s3",
+        underlying: "AMD",
+        strategy: "scalp",
+        opened: "2026-09-29 10:00",
+        closed: "2026-09-29 10:10",
+        netPnl: 20,
+        r: 5,
+        excluded: true,
+      }),
+      tradeRow({
+        id: "a",
+        underlying: "AA",
+        opened: "2026-09-02 15:45",
+        closed: "2026-09-03 09:50",
+        netPnl: 100,
+      }),
+    ]);
+    renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("avg-r")).toBe("Avg R−0.32Rover 2 scalps"));
+  });
+
+  it("reads — for Avg R when nothing in the period has an R", async () => {
+    stubTrades(TRADES);
+    renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$260.00"));
+    expect(kpi("avg-r")).toBe("Avg R—");
+  });
 });

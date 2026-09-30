@@ -1,18 +1,41 @@
-import { type NewTrade, round2, sessionMoment, type TradePatch } from "@tj/core";
+import {
+  contractsHeld,
+  type NewTrade,
+  round2,
+  sessionMoment,
+  sortTargets,
+  type TargetLevel,
+  type TradePatch,
+  trimProblem,
+} from "@tj/core";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { Db } from "../client.js";
-import { ironFlyDetails, legs, scalpDetails, tags, trades, tradeTags } from "../schema.js";
+import {
+  ironFlyDetails,
+  legs,
+  scalpDetails,
+  scalpPrices,
+  scalpTargets,
+  tags,
+  trades,
+  tradeTags,
+} from "../schema.js";
 
 export type TradeRow = typeof trades.$inferSelect;
 export type LegRow = typeof legs.$inferSelect;
 export type IronFlyRow = typeof ironFlyDetails.$inferSelect;
 export type ScalpRow = typeof scalpDetails.$inferSelect;
+export type ScalpPricesRow = typeof scalpPrices.$inferSelect;
+/** A scalp's levels: its basis, stop and overrides, and its targets in the order the trade reaches them. */
+export type ScalpLevels = ScalpRow & { targets: TargetLevel[] };
 
 export interface TradeRecord extends TradeRow {
   legs: LegRow[];
   ironFly: IronFlyRow | null;
-  /** The scalp's stop and target (scalp-review spec §5); null until the first is set. */
-  scalp: ScalpRow | null;
+  /** The scalp's levels (scalp-review spec §5, scalp-R spec §5); null until the first is set. */
+  scalp: ScalpLevels | null;
+  /** The stock prices the filler fetched for a scalp (scalp-R spec §5); null until it has. */
+  scalpPrices: ScalpPricesRow | null;
   tagIds: string[];
 }
 
@@ -36,6 +59,14 @@ export interface PriceGap {
   missingEntry: boolean;
   /** Only a closed trade has an exit price to fetch. */
   missingExit: boolean;
+}
+
+/** A scalp the price filler should look at (scalp-R spec §7). */
+export interface ScalpPriceGap {
+  tradeId: string;
+  underlying: string;
+  openedAt: number;
+  closedAt: number | null;
 }
 
 /** The same minute reads the same bar, so only a change of minute makes a stored price stale (spec §5.4). */
@@ -80,6 +111,21 @@ const FLY_STRUCTURE = [
 
 /** The edit forms keep minutes, not seconds, so a time only changes when its minute does. */
 const minuteOf = (at: number | null | undefined) => (at == null ? null : Math.floor(at / 60_000));
+
+/**
+ * A scalp's fetched prices go stale with a new ticker, or a time moved to another minute (scalp-R spec §7). Minutes
+ * are compared as they are, not clamped to the session as a fly's are: scalps read extended-hours bars.
+ */
+export function staleScalpPrices(
+  existing: TradeRow,
+  patch: Pick<TradePatch, "underlying" | "openedAt" | "closedAt">,
+): boolean {
+  return (
+    (patch.underlying !== undefined && patch.underlying !== existing.underlying) ||
+    (patch.openedAt !== undefined && minuteOf(patch.openedAt) !== minuteOf(existing.openedAt)) ||
+    (patch.closedAt !== undefined && minuteOf(patch.closedAt) !== minuteOf(existing.closedAt))
+  );
+}
 
 const legKey = (leg: {
   right: string;
@@ -131,33 +177,81 @@ type DbLike = Db | Tx;
 /** A patch the review rules refuse (scalp-review spec §6.2). The route answers 400 with the message. */
 export class ReviewRuleError extends Error {}
 
+/** What a scalp holds: the long leg's right when it's one long option, and its contracts. */
+export interface ScalpPosition {
+  right: string | null;
+  size: number;
+}
+
+function positionOf(legList: readonly { right: string; quantity: number }[]): ScalpPosition {
+  const only = legList.length === 1 ? legList[0] : undefined;
+  return { right: only && only.quantity > 0 ? only.right : null, size: contractsHeld(legList) };
+}
+
 /**
- * A scalp's levels after a patch (scalp-review spec §6.2). The first write needs a basis. A new basis clears both
- * prices unless the patch sets them, because a stock level means nothing as a premium. Prices round to the cent.
+ * A scalp's levels after a patch (scalp-review spec §6.2, scalp-R spec §8). The first write needs a basis.
+ * - A new basis clears the stop and targets unless the patch sets them, because a stock level means nothing as a
+ *   premium. The overrides stay.
+ * - Prices round to the cent, and targets are kept in the order the trade reaches them.
+ * - Sent targets may trim no more than the position holds. Stored ones aren't checked again, so a size edit never
+ *   blocks a stop.
  */
 export function mergeLevels(
   tradeId: string,
-  existing: ScalpRow | null,
+  existing: ScalpLevels | null,
   patch: NonNullable<TradePatch["scalp"]>,
-): ScalpRow {
+  position: ScalpPosition,
+): ScalpLevels {
   const levelBasis = patch.levelBasis ?? existing?.levelBasis;
   if (!levelBasis) throw new ReviewRuleError("A scalp's first level needs a basis");
   const kept = existing?.levelBasis === levelBasis ? existing : null;
-  const price = (sent: number | null | undefined, stored: number | null) => {
-    const value = sent === undefined ? stored : sent;
-    if (value == null) return null;
+  const level = (value: number) => {
     if (levelBasis === "stock" && value <= 0) throw new ReviewRuleError("A stock price must be above 0");
     return round2(value);
+  };
+  const stop = patch.stopPrice === undefined ? (kept?.stopPrice ?? null) : patch.stopPrice;
+  let targets = kept?.targets ?? [];
+  if (patch.targets !== undefined) {
+    targets = patch.targets.map((target) => ({ price: level(target.price), contracts: target.contracts }));
+    const refused = trimProblem(targets, position.size);
+    if (refused) throw new ReviewRuleError(refused);
+  }
+  const override = (sent: number | null | undefined, stored: number | null, message: string) => {
+    const value = sent === undefined ? stored : sent;
+    if (value != null && value <= 0) throw new ReviewRuleError(message);
+    return value == null ? null : round2(value);
   };
   return {
     tradeId,
     levelBasis,
-    stopPrice: price(patch.stopPrice, kept?.stopPrice ?? null),
-    targetPrice: price(patch.targetPrice, kept?.targetPrice ?? null),
+    stopPrice: stop == null ? null : level(stop),
+    stockEntryOverride: override(
+      patch.stockEntryOverride,
+      existing?.stockEntryOverride ?? null,
+      "A stock price must be above 0",
+    ),
+    riskOverride: override(
+      patch.riskOverride,
+      existing?.riskOverride ?? null,
+      "A planned risk must be above 0",
+    ),
+    targets: sortTargets(targets, levelBasis, position.right),
   };
 }
 
 export function createTradesRepo(db: Db, now: () => number = Date.now) {
+  function levelsOf(conn: DbLike, tradeId: string): ScalpLevels | null {
+    const row = conn.select().from(scalpDetails).where(eq(scalpDetails.tradeId, tradeId)).get();
+    if (!row) return null;
+    const targets = conn
+      .select({ price: scalpTargets.price, contracts: scalpTargets.contracts })
+      .from(scalpTargets)
+      .where(eq(scalpTargets.tradeId, tradeId))
+      .orderBy(asc(scalpTargets.position))
+      .all();
+    return { ...row, targets };
+  }
+
   function hydrate(conn: DbLike, row: TradeRow): TradeRecord {
     return {
       ...row,
@@ -167,7 +261,8 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         .where(and(eq(legs.tradeId, row.id), isNull(legs.deletedAt)))
         .all(),
       ironFly: conn.select().from(ironFlyDetails).where(eq(ironFlyDetails.tradeId, row.id)).get() ?? null,
-      scalp: conn.select().from(scalpDetails).where(eq(scalpDetails.tradeId, row.id)).get() ?? null,
+      scalp: levelsOf(conn, row.id),
+      scalpPrices: conn.select().from(scalpPrices).where(eq(scalpPrices.tradeId, row.id)).get() ?? null,
       tagIds: conn
         .select({ tagId: tradeTags.tagId })
         .from(tradeTags)
@@ -347,16 +442,13 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       if (scalp && (patch.strategy ?? existing.strategy) !== "scalp") {
         throw new ReviewRuleError("Only a scalp has a stop and target");
       }
+      const record = hydrate(db, existing);
       const levels = scalp
-        ? mergeLevels(
-            id,
-            db.select().from(scalpDetails).where(eq(scalpDetails.tradeId, id)).get() ?? null,
-            scalp,
-          )
+        ? mergeLevels(id, record.scalp, scalp, positionOf(patch.legs ?? record.legs))
         : null;
       if (patch.tagIds) checkOneEmotion(patch.tagIds);
 
-      const factsEdited = changesFacts(hydrate(db, existing), patch);
+      const factsEdited = changesFacts(record, patch);
       return db.transaction((tx) => {
         tx.update(trades)
           .set({
@@ -370,14 +462,24 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           .run();
         writeChildren(tx, id, patch, timestamp);
         if (levels) {
+          const { targets, ...row } = levels;
           tx.insert(scalpDetails)
-            .values(levels)
-            .onConflictDoUpdate({ target: scalpDetails.tradeId, set: levels })
+            .values(row)
+            .onConflictDoUpdate({ target: scalpDetails.tradeId, set: row })
             .run();
+          tx.delete(scalpTargets).where(eq(scalpTargets.tradeId, id)).run();
+          for (const [index, target] of targets.entries()) {
+            tx.insert(scalpTargets)
+              .values({ tradeId: id, position: index + 1, ...target })
+              .run();
+          }
         }
         const cleared = stalePrices(existing, patch);
         if (Object.keys(cleared).length > 0) {
           tx.update(ironFlyDetails).set(cleared).where(eq(ironFlyDetails.tradeId, id)).run();
+        }
+        if (staleScalpPrices(existing, patch)) {
+          tx.delete(scalpPrices).where(eq(scalpPrices.tradeId, id)).run();
         }
         return requireRow(tx, id);
       });
@@ -454,6 +556,49 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
               .where(and(eq(ironFlyDetails.tradeId, tradeId), isNull(ironFlyDetails.underlyingPriceExit)))
               .run();
       return result.changes > 0;
+    },
+
+    /**
+     * Scalps missing a fetched price (scalp-R spec §7), oldest first: no stock at entry, or closed with no range yet.
+     * Excluded ones count.
+     */
+    missingScalpPrices(tradeIds?: readonly string[]): ScalpPriceGap[] {
+      if (tradeIds?.length === 0) return [];
+      const conditions = [
+        eq(trades.strategy, "scalp"),
+        isNull(trades.deletedAt),
+        or(isNull(scalpPrices.entryPrice), and(isNotNull(trades.closedAt), isNull(scalpPrices.holdHigh))),
+      ];
+      if (tradeIds) conditions.push(inArray(trades.id, [...tradeIds]));
+      return db
+        .select({
+          tradeId: trades.id,
+          underlying: trades.underlying,
+          openedAt: trades.openedAt,
+          closedAt: trades.closedAt,
+        })
+        .from(trades)
+        .leftJoin(scalpPrices, eq(scalpPrices.tradeId, trades.id))
+        .where(and(...conditions))
+        .orderBy(asc(trades.openedAt))
+        .all();
+    },
+
+    /** Stores what the filler found, keeping what an earlier run stored. Not a user edit: no timestamp moves. */
+    setScalpPrices(
+      tradeId: string,
+      found: { entryPrice: number | null; holdHigh: number | null; holdLow: number | null },
+      fetchedAt: number,
+    ): void {
+      const stored = db.select().from(scalpPrices).where(eq(scalpPrices.tradeId, tradeId)).get();
+      const row = {
+        tradeId,
+        entryPrice: found.entryPrice ?? stored?.entryPrice ?? null,
+        holdHigh: found.holdHigh ?? stored?.holdHigh ?? null,
+        holdLow: found.holdLow ?? stored?.holdLow ?? null,
+        fetchedAt,
+      };
+      db.insert(scalpPrices).values(row).onConflictDoUpdate({ target: scalpPrices.tradeId, set: row }).run();
     },
   };
 }

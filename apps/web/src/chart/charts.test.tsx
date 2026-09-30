@@ -166,8 +166,9 @@ describe("ChartToolbar", () => {
 });
 
 describe("IntradayChart editing the review's lines", () => {
-  const STOP = { id: "stop" as const, price: 231.8, color: "#ef5350", dashed: true, label: "STOP" };
-  const editing = (placing: "stop" | "target" | null = null) => ({
+  const STOP = { id: "stop", price: 231.8, color: "#ef5350", dashed: true, label: "STOP" };
+  const T1 = { id: "t1", price: 234.5, color: "#26a69a", dashed: true, label: "T1 ×1" };
+  const editing = (placing: string | null = null) => ({
     placing,
     onPlace: vi.fn(),
     onDrag: vi.fn(),
@@ -257,5 +258,26 @@ describe("IntradayChart editing the review's lines", () => {
     fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230) });
     expect(library.chartOptions).toEqual([]);
     expect(stopLine()?.price).toBe(231.8);
+  });
+
+  it("places a target by its id, naming it in the hint", () => {
+    const edit = editing("t2");
+    renderEditing(edit, [STOP, T1]);
+    expect(screen.getByTestId("placing-hint").textContent).toBe(
+      "Click the chart to place T2 · Esc to cancel",
+    );
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(236), button: 0 });
+    expect(edit.onPlace).toHaveBeenCalledWith("t2", 236);
+  });
+
+  it("drags a target's line by its id", () => {
+    const edit = editing();
+    renderEditing(edit, [STOP, T1]);
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(234.5), button: 0 });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(235.5) });
+    expect(edit.onDrag).toHaveBeenLastCalledWith("t1", 235.5);
+    fireEvent.mouseUp(window);
+    expect(edit.onDrop).toHaveBeenCalledWith("t1", 235.5);
+    expect(seriesOf("Candlestick")[0]?.priceLines[1]?.price).toBe(235.5);
   });
 });

@@ -43,6 +43,13 @@
       "when": 1790698967027,
       "tag": "0005_scalp_review",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790778719752,
+      "tag": "0006_scalp_r",
+      "breakpoints": true
     }
   ]
 }

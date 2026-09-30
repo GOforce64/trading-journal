@@ -155,12 +155,11 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **legs**: `trade_id`, `right` (C/P), `strike`, `expiry`, `multiplier`, `side` (long/short), `quantity`, `avg_open_price`, `avg_close_price`, `broker_conid`.
 - **fills**: `trade_id`, `leg_id`, `executed_at`, `side`, `quantity`, `price`, `commission`, `broker_exec_id`, `raw` (JSON of the source row, for audit). Fills are immutable facts.
 
-  IBKR sync is detailed in [2026-09-29-ibkr-flex-sync-design.md](2026-09-29-ibkr-flex-sync-design.md), which adds `broker_trade_id`, `conid`, the contract, `open_close`, `kind`, `origin` and `canceled` to `fills`, and `facts_edited_at` to `trades`. `sync_state` is keyed by source and keeps the last summary. `scalp_details` comes with R.
+  IBKR sync is detailed in [2026-09-29-ibkr-flex-sync-design.md](2026-09-29-ibkr-flex-sync-design.md), which adds `broker_trade_id`, `conid`, the contract, `open_close`, `kind`, `origin` and `canceled` to `fills`, and `facts_edited_at` to `trades`. `sync_state` is keyed by source and keeps the last summary. `scalp_details` is built by the scalp review and scalp R.
 - **scalp_details** (1:1 with trade):
-  - context: `direction` (long/short underlying; calls are long, puts short), `underlying_entry_price`, `underlying_exit_price`
-  - plan: `level_basis` (`stock` | `premium`), `stop_price`, `target_price`, built by the scalp review ([2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md)). The risk-model and outcome columns come with R.
-  - risk model: `iv_at_entry`, `delta_at_entry`, `gamma_at_entry`, `est_option_price_at_stop`, `risk_override`, `risk_free_rate_used`
-  - outcome: `mae_underlying`, `mfe_underlying`, `mae_r`, `mfe_r`, `minutes_after_open`, `hold_seconds`
+  - context: the stock at entry and its range over the hold are in `scalp_prices` (`entry_price`, `hold_high`, `hold_low`), fetched from minute bars ([2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md)). Calls count as long the stock, puts as short.
+  - plan: `level_basis` (`stock` | `premium`), `stop_price`, `stock_entry_override` and `risk_override`, with the targets as rows of `scalp_targets` (`position`, `price`, `contracts`).
+  - risk model and outcome: worked out on read by `scalpRisk` in `core`, never stored. That's IV at entry, the option at the stop and at each target, planned risk and reward, R, R:R, and MAE/MFE in stock dollars and in R. Minutes after open and hold time come with the scalp analytics.
   - missed trades only: `planned_entry_at`, `planned_entry_price`, `planned_exit_at`, `planned_exit_price`, `skip_reason`
 - **iron_fly_details** (1:1 with trade). All fields are nullable, because historical imports will be incomplete:
   - structure: `body_put_strike`, `body_call_strike` (equal for a standard fly, different for a broken one), `put_wing_strike`, `call_wing_strike`, `contracts`, `credit` (per share). **Wings do not have to be the same width**, so put-side and call-side risk are tracked separately.
@@ -290,18 +289,18 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **Model:** European Black-Scholes with no dividends, used as the approximation for short-dated American equity options. The limitation is documented in the UI tooltip and the README.
 - **Inputs at entry:**
   - the leg's average entry price;
-  - the underlying price at entry: the close of the 1m bar containing the first entry fill, overridable;
+  - the underlying price at entry: interpolated by the second inside the 1m bar holding the first entry fill, open + (close − open) × seconds ÷ 60, overridable;
   - the strike;
   - time to expiry to the minute, to 16:00 ET on expiry day (critical for 0DTE);
-  - the risk-free rate from settings (stored on the trade).
-- **IV solve:** Newton-Raphson on vega, falling back to bisection, bounded to [1%, 500%]. If the price is below intrinsic value or the solve fails, the trade is flagged **risk needs manual input**.
+  - a fixed 4% risk-free rate.
+- **IV solve:** bisection on [1%, 1000%]. With nothing to solve for (the price at intrinsic value, or no time left), the option at the stop is estimated as its intrinsic value there plus the time value at entry, and labelled so. A typed planned risk still overrides it.
 - **Estimated option price at stop:** a full Black-Scholes reprice with S = stop level, the same IV and the same time to expiry (the "instant move" assumption). The UI notes that for 0DTE, time decay makes the real loss at the stop somewhat larger.
-- **Planned risk ($)** = (avg entry price − est. price at stop) × contracts × multiplier. `risk_override` replaces it when set. Targets give **planned reward** and **planned R:R** the same way.
+- **Planned risk ($)** = (avg entry price − est. price at stop) × contracts × multiplier. `risk_override` replaces it when set. Targets are a list, each trimming whole contracts; contracts no target trims count at the farthest one. They give **planned reward** and **planned R:R** the same way.
 - **R-multiple** = net P&L ÷ planned risk.
 - **A stop on the premium:** a trade's levels can be option prices instead (scalp-review spec §15). Planned risk is then (entry − stop premium) × contracts × multiplier, with no model.
-- **MAE/MFE:** from the 1m bars between first entry and last exit, the worst and best underlying excursion against the trade direction. Stored in dollars of underlying and in R units (÷ |entry − stop|).
-- Also stored per trade: **minutes after open** (first entry − 09:30 ET), **hold time**, and **option cost** (avg entry × contracts × multiplier).
-- `core/pricing` exists since move data: bisection on [1%, 1000%] with a fixed 4% rate. Phase 2 adds Newton-Raphson and the rate setting.
+- **MAE/MFE:** from the 1m bars between first entry and last exit, the worst and best underlying excursion against the trade direction. Worked out on read, in dollars of underlying and in R units (÷ |entry − stop|).
+- With the scalp analytics: **minutes after open** (first entry − 09:30 ET), **hold time**, and **option cost** (avg entry × contracts × multiplier).
+- `core/pricing` exists since move data: bisection on [1%, 1000%] with a fixed 4% rate. R for each scalp ([2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md)) needed neither Newton-Raphson nor a rate setting.
 
 ### 8.4 Missed trades
 
@@ -425,7 +424,7 @@ Each phase ends usable, and each gets its own implementation plan.
 **Phase 2: Scalps**
 1. IBKR Flex sync (live + paper), deterministic IDs, fill grouping, review queue (done for paper: plus the scalp form, the Scalps page and the scalp trade page; the review queue moves to item 3).
 2. Market data module (Massive), bar cache, trade chart with markers, stop/target lines, indicators and levels.
-3. The scalp review (stops and targets, setups, tags, grades, the queue and the Playbook page): done, [2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md). Then the Black-Scholes and IV risk engine, R-multiples, MAE/MFE and time-of-day analytics.
+3. The scalp review (stops and targets, setups, tags, grades, the queue and the Playbook page): done, [2026-09-29-scalp-review-design.md](2026-09-29-scalp-review-design.md). R for each scalp (the stop repriced by Black-Scholes, planned risk and reward over several targets, R, MAE/MFE and Avg R): done, [2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md). Then the Scalps tab in Analytics (time of day, breakdowns with R, mistake cost) and the Playbook's stat cards.
 4. Screenshots.
 5. Missed trades with chart marking.
 6. Iron fly backfill: derive `actual_move_pct` from daily bars where missing.

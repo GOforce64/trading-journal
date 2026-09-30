@@ -9,7 +9,7 @@ import { ScalpWorkspace } from "./ScalpWorkspace.js";
 /** Every `lines` array the chart was handed, to see a redraw. */
 const drawn = vi.hoisted(() => [] as unknown[]);
 
-// The chart has its own tests; this stand-in shows its lines and can place, drag and drop the stop.
+// The chart has its own tests; this stand-in shows its lines and can place, drag and drop them.
 vi.mock("../chart/TradeCharts.js", () => ({
   TradeCharts: ({
     levels,
@@ -17,20 +17,33 @@ vi.mock("../chart/TradeCharts.js", () => ({
     levels?: { lines: { label: string; price: number }[]; editing: ChartEditing };
   }) => {
     drawn.push(levels?.lines);
+    const edit = levels?.editing;
     return (
       <div data-testid="trade-charts">
         <span data-testid="chart-lines">
           {levels?.lines.map((line) => `${line.label} ${line.price}`).join(", ")}
         </span>
-        <span data-testid="chart-placing">{levels?.editing.placing ?? "none"}</span>
-        <button type="button" onClick={() => levels?.editing.onPlace("stop", 231.8)}>
+        <span data-testid="chart-placing">{edit?.placing ?? "none"}</span>
+        <button type="button" onClick={() => edit?.onPlace("stop", 231.8)}>
           chart: place the stop
         </button>
-        <button type="button" onClick={() => levels?.editing.onDrag("stop", 230.9)}>
+        <button type="button" onClick={() => edit?.onDrag("stop", 230.9)}>
           chart: drag the stop
         </button>
-        <button type="button" onClick={() => levels?.editing.onDrop("stop", 230.5)}>
+        <button type="button" onClick={() => edit?.onDrop("stop", 230.5)}>
           chart: drop the stop
+        </button>
+        <button type="button" onClick={() => edit?.onPlace("t2", 233)}>
+          chart: place T2
+        </button>
+        <button type="button" onClick={() => edit?.onDrag("t1", 233.5)}>
+          chart: drag T1
+        </button>
+        <button type="button" onClick={() => edit?.onDrop("t1", 235)}>
+          chart: drop T1
+        </button>
+        <button type="button" onClick={() => edit?.onDrag("stop", 228)}>
+          chart: drag the stop to 228
         </button>
       </div>
     );
@@ -42,6 +55,17 @@ vi.mock("./ReviewPanel.js", () => ({
   ReviewPanel: ({ levels }: { levels?: ReactNode }) => <div data-testid="review-panel">{levels}</div>,
 }));
 
+const LEG = {
+  id: "l1",
+  right: "C",
+  strike: 232.5,
+  expiry: "2026-09-28",
+  quantity: 2,
+  multiplier: 100,
+  openPrice: 1.06,
+  closePrice: 1.295,
+};
+const PRICES = { tradeId: "t1", entryPrice: 230.83, holdHigh: 233.21, holdLow: 230.71, fetchedAt: 1 };
 const SCALP = {
   id: "t1",
   strategy: "scalp",
@@ -57,14 +81,39 @@ const SCALP = {
   excluded: false,
   reviewedAt: null,
   tagIds: [],
-  legs: [],
+  legs: [LEG],
   fills: [],
   ironFly: null,
   scalp: null,
+  scalpPrices: PRICES,
   metrics: null,
   review: { status: "pending", missing: ["setup", "grade", "stop"] },
+  risk: null,
 };
-const STOCK = { tradeId: "t1", levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 };
+const STOCK = {
+  tradeId: "t1",
+  levelBasis: "stock",
+  stopPrice: 231.8,
+  stockEntryOverride: null,
+  riskOverride: null,
+  targets: [{ price: 234.5, contracts: 2 }],
+};
+/** The spec's worked example: in at 09:31:05, out at 09:46:12, stop 229, T1 233 ×1, T2 234.50 ×1. */
+const WORKED = {
+  ...SCALP,
+  openedAt: Date.UTC(2026, 8, 28, 13, 31, 5),
+  closedAt: Date.UTC(2026, 8, 28, 13, 46, 12),
+  scalpPrices: { ...PRICES, entryPrice: 230.78 + (231.355 - 230.78) * (5 / 60) },
+  scalp: {
+    ...STOCK,
+    stopPrice: 229,
+    targets: [
+      { price: 233, contracts: 1 },
+      { price: 234.5, contracts: 1 },
+    ],
+  },
+};
+const liveRisk = () => screen.getByTestId("live-risk").textContent;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -72,6 +121,7 @@ const json = (body: unknown, status = 200) =>
 /** Answers the trade, an empty queue, and patches. */
 function stubApi({ trade = SCALP as unknown, patch = () => json(trade) } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes("/api/risk/fill")) return json({ filled: 0, missing: [], unavailable: null });
     if (String(init?.method).toUpperCase() === "PATCH") return patch();
     return json(String(input).includes("review=pending") ? [] : trade);
   });
@@ -103,7 +153,7 @@ function renderWorkspace() {
   );
 }
 
-const field = (name: "Stop" | "Target") => screen.getByRole("textbox", { name }) as HTMLInputElement;
+const field = (name: string) => screen.getByRole("textbox", { name }) as HTMLInputElement;
 
 beforeEach(() => {
   drawn.length = 0;
@@ -114,14 +164,15 @@ afterEach(() => {
 });
 
 describe("ScalpWorkspace levels", () => {
-  it("draws a saved stock stop and target, and shows them in the fields", async () => {
+  it("draws a saved stop and target, and shows them in the fields", async () => {
     stubApi({ trade: { ...SCALP, scalp: STOCK } });
     renderWorkspace();
     await waitFor(() =>
-      expect(screen.getByTestId("chart-lines").textContent).toBe("STOP 231.8, TARGET 234.5"),
+      expect(screen.getByTestId("chart-lines").textContent).toBe("STOP 231.8, T1 ×2 234.5"),
     );
     expect(field("Stop").value).toBe("231.80");
-    expect(field("Target").value).toBe("234.50");
+    expect(field("T1 price").value).toBe("234.50");
+    expect(field("T1 contracts").value).toBe("2");
   });
 
   it("+ Stop opens the field and arms the chart, and a click on the chart saves the stop there", async () => {
@@ -179,7 +230,7 @@ describe("ScalpWorkspace levels", () => {
   });
 
   it("takes 0 on the premium basis, and draws no premium lines", async () => {
-    const premium = { ...STOCK, levelBasis: "premium", stopPrice: 0.8, targetPrice: null };
+    const premium = { ...STOCK, levelBasis: "premium", stopPrice: 0.8, targets: [] };
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: premium } });
     renderWorkspace();
     const stop = await screen.findByRole("textbox", { name: "Stop" });
@@ -201,9 +252,9 @@ describe("ScalpWorkspace levels", () => {
     fireEvent.change(stop, { target: { value: "230" } });
     fireEvent.keyDown(stop, { key: "Escape" });
     expect(field("Stop").value).toBe("231.80");
-    fireEvent.click(screen.getByRole("button", { name: "Clear target" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove T1" }));
     await waitFor(() =>
-      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", targetPrice: null } }]),
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", targets: [] } }]),
     );
   });
 
@@ -213,7 +264,7 @@ describe("ScalpWorkspace levels", () => {
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
     renderWorkspace();
     fireEvent.click(await screen.findByRole("button", { name: "Premium" }));
-    expect(confirm).toHaveBeenCalledWith("Switching to premium clears the stop and target.");
+    expect(confirm).toHaveBeenCalledWith("Switching to premium clears the stop and targets.");
     expect(patches(fetchMock)).toEqual([]);
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Premium" }));
@@ -260,5 +311,188 @@ describe("ScalpWorkspace levels", () => {
       bar.compareDocumentPosition(screen.getByTestId("trade-charts")) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(bar.textContent).toContain("1 of 1");
+  });
+
+  it("asks for the scalp's stock prices when its page opens without them", async () => {
+    const fetchMock = stubApi({ trade: { ...SCALP, scalpPrices: null } });
+    renderWorkspace();
+    await waitFor(() => {
+      const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/risk/fill"));
+      expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["t1"] });
+    });
+  });
+
+  it("+ Target opens the next target with the contracts left, arms the chart, and a click saves the list", async () => {
+    const fetchMock = stubApi({
+      trade: { ...SCALP, scalp: { ...STOCK, targets: [{ price: 234.5, contracts: 1 }] } },
+    });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    expect(document.activeElement).toBe(field("T2 price"));
+    expect(field("T2 contracts").value).toBe("1");
+    expect(screen.getByTestId("chart-placing").textContent).toBe("t2");
+    fireEvent.click(screen.getByRole("button", { name: "chart: place T2" }));
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([
+        {
+          scalp: {
+            levelBasis: "stock",
+            targets: [
+              { price: 234.5, contracts: 1 },
+              { price: 233, contracts: 1 },
+            ],
+          },
+        },
+      ]),
+    );
+  });
+
+  it("changes a target's contracts", async () => {
+    const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
+    renderWorkspace();
+    const contracts = await screen.findByRole("textbox", { name: "T1 contracts" });
+    act(() => contracts.focus());
+    fireEvent.change(contracts, { target: { value: "1" } });
+    fireEvent.blur(contracts);
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([
+        { scalp: { levelBasis: "stock", targets: [{ price: 234.5, contracts: 1 }] } },
+      ]),
+    );
+  });
+
+  it("refuses a list that trims more than the position, sending nothing", async () => {
+    const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    fireEvent.change(field("T2 price"), { target: { value: "236" } });
+    fireEvent.keyDown(field("T2 price"), { key: "Enter" });
+    expect(await screen.findByText("The targets trim 3 contracts; the position has 2.")).toBeTruthy();
+    expect(patches(fetchMock)).toEqual([]);
+  });
+
+  it("follows a target's drag in its field, and saves the list once at the drop", async () => {
+    const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "chart: drag T1" }));
+    await waitFor(() => expect(field("T1 price").value).toBe("233.50"));
+    expect(patches(fetchMock)).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "chart: drop T1" }));
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([
+        { scalp: { levelBasis: "stock", targets: [{ price: 235, contracts: 2 }] } },
+      ]),
+    );
+  });
+
+  it("counts untrimmed contracts as a runner at the farthest target, and flags a target on the wrong side", async () => {
+    stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 3 }],
+        scalp: {
+          ...STOCK,
+          stopPrice: 229,
+          targets: [
+            { price: 230, contracts: 1 },
+            { price: 234.5, contracts: 1 },
+          ],
+        },
+      },
+    });
+    renderWorkspace();
+    expect(await screen.findByText("1 runner, counted at T2")).toBeTruthy();
+    expect(screen.getAllByText("on the wrong side")).toHaveLength(1);
+  });
+});
+
+describe("ScalpWorkspace R", () => {
+  it("shows the live line, and it follows a drag of the stop before anything is saved", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toBe("Risk $104.05 · R +0.43 · R:R 2.8"));
+    fireEvent.click(screen.getByRole("button", { name: "chart: drag the stop to 228" }));
+    await waitFor(() => expect(liveRisk()).toBe("Risk $141.22 · R +0.32 · R:R 2.0"));
+    expect(patches(fetchMock)).toEqual([]);
+  });
+
+  it("gives the reason instead without a planned risk", async () => {
+    stubApi({ trade: { ...WORKED, scalp: null } });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toBe("Set a stop in the review strip to get R."));
+  });
+
+  it("types the stock at entry, refusing 0", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Type the stock at entry" }));
+    const stock = field("Stock at entry");
+    expect(stock.value).toBe("230.83");
+    fireEvent.change(stock, { target: { value: "0" } });
+    fireEvent.blur(stock);
+    expect(screen.getByText("A stock price must be above 0")).toBeTruthy();
+    fireEvent.change(stock, { target: { value: "231" } });
+    fireEvent.keyDown(stock, { key: "Enter" });
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", stockEntryOverride: 231 } }]),
+    );
+  });
+
+  it("shows a typed stock price, and ✕ goes back to the fetched one", async () => {
+    const fetchMock = stubApi({ trade: { ...WORKED, scalp: { ...WORKED.scalp, stockEntryOverride: 231 } } });
+    renderWorkspace();
+    expect(await screen.findByText("231.00")).toBeTruthy();
+    expect(screen.getAllByText("(typed)")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Use the fetched stock price" }));
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", stockEntryOverride: null } }]),
+    );
+  });
+
+  it("types a planned risk in dollars, refusing 0, and a typed one replaces the model", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Type the planned risk" }));
+    const risk = field("Planned risk");
+    expect(risk.value).toBe("104.05");
+    fireEvent.change(risk, { target: { value: "0" } });
+    fireEvent.blur(risk);
+    expect(screen.getByText("A planned risk must be above 0")).toBeTruthy();
+    fireEvent.change(risk, { target: { value: "120" } });
+    fireEvent.keyDown(risk, { key: "Enter" });
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", riskOverride: 120 } }]),
+    );
+  });
+
+  it("types nothing when ✎ is followed by a click away, so the model keeps pricing the risk", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Type the planned risk" }));
+    fireEvent.blur(field("Planned risk"));
+    fireEvent.click(screen.getByRole("button", { name: "Type the stock at entry" }));
+    fireEvent.blur(field("Stock at entry"));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Stock at entry" })).toBeNull());
+    expect(patches(fetchMock)).toEqual([]);
+    expect(screen.queryByText("(typed)")).toBeNull();
+  });
+
+  it("prices a typed planned risk, with ✕ to go back to the model", async () => {
+    const fetchMock = stubApi({ trade: { ...WORKED, scalp: { ...WORKED.scalp, riskOverride: 120 } } });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toBe("Risk $120.00 · R +0.37 · R:R 2.4"));
+    expect(screen.getByText("$120.00")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use the model's planned risk" }));
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", riskOverride: null } }]),
+    );
+  });
+
+  it("prices from a typed stock at entry when none was fetched", async () => {
+    stubApi({
+      trade: { ...WORKED, scalpPrices: null, scalp: { ...WORKED.scalp, stockEntryOverride: 230.83 } },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(liveRisk()).toMatch(/^Risk \$104\.\d\d · R \+0\.43 · R:R 2\.8$/));
   });
 });

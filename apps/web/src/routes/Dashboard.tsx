@@ -11,7 +11,7 @@ import { useState } from "react";
 import { filterTrades, useAllTrades } from "../analytics/data.js";
 import { shiftMonth } from "../analytics/dates.js";
 import { EquityCurve } from "../analytics/EquityCurve.js";
-import { profitFactorText, segmentClass, winRateText } from "../analytics/format.js";
+import { profitFactorText, rText, segmentClass, winRateText } from "../analytics/format.js";
 import { KpiStrip } from "../analytics/KpiStrip.js";
 import { PnlCalendar } from "../analytics/PnlCalendar.js";
 import { Section } from "../analytics/Section.js";
@@ -139,6 +139,15 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
             id: "expectancy",
             label: "Expectancy",
             value: summary.expectancy == null ? "—" : <Money value={summary.expectancy} />,
+          },
+          {
+            id: "avg-r",
+            label: "Avg R",
+            value: summary.avgR == null ? "—" : rText(summary.avgR),
+            sub:
+              summary.rCount > 0
+                ? `over ${summary.rCount} scalp${summary.rCount === 1 ? "" : "s"}`
+                : undefined,
           },
           { id: "trades", label: "Trades", value: summary.trades },
           {

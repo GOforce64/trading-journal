@@ -2,6 +2,7 @@ import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/
 import { useEffect, useRef } from "react";
 import { api } from "./api.js";
 import { useFillMoves } from "./moves.js";
+import { useFillScalpPrices } from "./review/prices.js";
 
 type SyncResponse = Awaited<ReturnType<typeof api.api.ibkr.sync.$post>>;
 /** What one IBKR sync did (spec §8.2). */
@@ -32,11 +33,12 @@ export function useIbkrStatus() {
 
 /**
  * Runs a sync: the button passes `false`, opening the app passes `true`. Afterwards the trade lists refetch,
- * and trades the sync added or changed get their stock prices (move data), as after a save.
+ * and trades the sync added or changed get their stock prices (move data, and a scalp's R), as after a save.
  */
 export function useIbkrSync() {
   const queryClient = useQueryClient();
   const fill = useFillMoves();
+  const fillPrices = useFillScalpPrices();
   return useMutation({
     mutationKey: SYNC_KEY,
     mutationFn: async (auto: boolean): Promise<SyncSummary> => {
@@ -50,7 +52,10 @@ export function useIbkrSync() {
         queryClient.invalidateQueries({ queryKey: ["trades"] }),
         queryClient.invalidateQueries({ queryKey: ["trade"] }),
       ]);
-      if (summary.changedTradeIds.length > 0) fill.mutate(summary.changedTradeIds);
+      if (summary.changedTradeIds.length > 0) {
+        fill.mutate(summary.changedTradeIds);
+        fillPrices.mutate(summary.changedTradeIds);
+      }
     },
   });
 }
