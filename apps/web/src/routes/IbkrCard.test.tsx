@@ -90,6 +90,16 @@ describe("IbkrCard", () => {
     expect(screen.getByText("917 fills before the start date, 3 stock rows ignored.")).toBeTruthy();
   });
 
+  it("groups identical skipped trades into one line with a count, so React never sees one key twice", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const twice = { reason: "duplicate", ticker: "AA", openedAt: Date.UTC(2026, 8, 28, 17, 52) };
+    stub(status({ lastSummary: summary({ skipped: [twice, twice] }) }));
+    renderCard();
+    expect(await screen.findByText(/AA · Sep 28, 13:52 — already in the journal ×2/)).toBeTruthy();
+    expect(errors.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(false);
+    errors.mockRestore();
+  });
+
   it("shows an error the last run ended with", async () => {
     const message =
       "IBKR rejected the token (Token has expired.). It may have expired: tokens last up to a year. Generate a new one in Client Portal and save it in Settings.";
