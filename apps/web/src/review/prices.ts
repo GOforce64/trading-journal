@@ -13,6 +13,7 @@ export const RETRY_MS = 60_000;
 
 export const PRICE_COPY = {
   fetching: "Fetching the stock price…",
+  failed: "Couldn't fetch the stock price: trying again in a minute.",
   no_bars: "Alpaca has no stock price for the entry minute: type the stock at entry.",
   too_recent: "Alpaca shares prices 15 minutes late: trying again in a minute.",
 } as const;
@@ -44,23 +45,41 @@ export function needsPrices(trade: Pick<TradeView, "strategy" | "closedAt" | "sc
   return prices == null || prices.entryPrice == null || (trade.closedAt != null && prices.holdHigh == null);
 }
 
-function useFillResults(): PriceFillResult[] {
-  return useMutationState({
-    filters: { mutationKey: PRICE_FILL_KEY, status: "success" },
-    select: (mutation) => mutation.state.data as PriceFillResult,
-  });
+/** A finished fill: the ids it asked for, and its answer, or null when the request itself failed. */
+interface FillOutcome {
+  tradeIds: readonly string[];
+  result: PriceFillResult | null;
 }
 
-/** The newest finished fill's word on this scalp: why it lacks a price, or the whole run's trouble. */
+function useFillResults(): FillOutcome[] {
+  return useMutationState({
+    filters: { mutationKey: PRICE_FILL_KEY },
+    select: (mutation) => ({
+      status: mutation.state.status,
+      tradeIds: (mutation.state.variables as string[] | undefined) ?? [],
+      result: mutation.state.status === "success" ? (mutation.state.data as PriceFillResult) : null,
+    }),
+  }).filter((outcome) => outcome.status === "success" || outcome.status === "error");
+}
+
+/**
+ * The newest finished fill's word on this scalp: why it lacks a price, the whole run's trouble, or "failed" when the
+ * request asking for it failed (a 500, the network).
+ */
 function lastWord(
-  results: readonly PriceFillResult[],
+  outcomes: readonly FillOutcome[],
   tradeId: string,
-): PriceReason | { message: string } | null {
-  for (let index = results.length - 1; index >= 0; index--) {
-    const result = results[index];
-    const found = result?.missing.find((gap) => gap.tradeId === tradeId);
+): PriceReason | "failed" | { message: string } | null {
+  for (let index = outcomes.length - 1; index >= 0; index--) {
+    const outcome = outcomes[index];
+    if (!outcome) continue;
+    if (!outcome.result) {
+      if (outcome.tradeIds.includes(tradeId)) return "failed";
+      continue;
+    }
+    const found = outcome.result.missing.find((gap) => gap.tradeId === tradeId);
     if (found) return found.reason;
-    if (result?.unavailable) return { message: result.unavailable.message };
+    if (outcome.result.unavailable) return { message: outcome.result.unavailable.message };
   }
   return null;
 }
@@ -76,6 +95,7 @@ export function usePriceNote(tradeId: string): string {
 /** Why a closed scalp's MAE and MFE wait for the hold's range, in the tiles' small print (scalp-R spec §9.1). */
 export const RANGE_COPY = {
   fetching: "fetching the stock's range…",
+  failed: "couldn't fetch the stock's range",
   too_recent: "waits for Alpaca's 15-minute delay",
   no_bars: "Alpaca has no bars for the hold",
   unavailable: "needs the stock's range",
@@ -97,7 +117,9 @@ export function useAutoFillPrices(trade: TradeView): void {
   const { mutate } = useFillScalpPrices();
   const needs = needsPrices(trade);
   const results = useFillResults();
-  const waiting = lastWord(results, trade.id) === "too_recent";
+  // Alpaca's delay held the price back, or the request failed: either way, ask again a minute later.
+  const word = lastWord(results, trade.id);
+  const waiting = word === "too_recent" || word === "failed";
   // The trade this page last asked for, so StrictMode's second run asks nothing.
   const asked = useRef<string | null>(null);
 

@@ -108,6 +108,21 @@ describe("useAutoFillPrices", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
+  it("says a failed fetch failed instead of fetching for ever, and asks again a minute later", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage(scalp("t1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("note").textContent).toBe(
+        "Couldn't fetch the stock price: trying again in a minute.",
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
   it("gives the reason Alpaca has no bar, or the server's own message", async () => {
     stubFill((tradeIds) => ({
       filled: 0,
