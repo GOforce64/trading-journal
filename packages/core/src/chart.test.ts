@@ -160,6 +160,17 @@ describe("vwap", () => {
   });
 });
 
+describe("half days", () => {
+  const FRIDAY = "2026-11-27"; // the day after Thanksgiving: the session ends at 13:00
+  const bars = [bar(FRIDAY, "12:59", 10, 11, 9, 10, 100), bar(FRIDAY, "13:00", 20, 21, 19, 20, 100)];
+
+  it("tints candles from 13:00 as extended hours, and leaves them out of VWAP and the daily candle", () => {
+    expect(aggregate(bars, 1).map((candle) => candle.extended)).toEqual([false, true]);
+    expect(vwap(bars, aggregate(bars, 1))).toEqual([10, null]);
+    expect(dailyFromMinutes(bars, FRIDAY)).toMatchObject({ o: 10, h: 11, l: 9, c: 10 });
+  });
+});
+
 describe("sessionLevels", () => {
   it("reads the premarket high and low of the day, and the prior session's regular high and low", () => {
     const bars = [
@@ -182,6 +193,16 @@ describe("sessionLevels", () => {
     const bars = [
       bar("2026-11-27", "09:30", 70, 71, 69, 70),
       bar("2026-11-27", "12:59", 70, 73, 70, 72),
+      bar("2026-11-30", "09:00", 72, 72, 72, 72),
+    ];
+    expect(sessionLevels(bars, "2026-11-30")).toMatchObject({ pdHigh: 73, pdLow: 69 });
+  });
+
+  it("leaves a half day's after hours out of its range, from 13:00", () => {
+    const bars = [
+      bar("2026-11-27", "09:30", 70, 71, 69, 70),
+      bar("2026-11-27", "12:59", 70, 73, 70, 72),
+      bar("2026-11-27", "14:00", 72, 80, 60, 72), // after the 13:00 close: extended hours
       bar("2026-11-30", "09:00", 72, 72, 72, 72),
     ];
     expect(sessionLevels(bars, "2026-11-30")).toMatchObject({ pdHigh: 73, pdLow: 69 });
