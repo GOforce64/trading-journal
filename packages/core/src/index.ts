@@ -10,6 +10,7 @@ export * from "./position.js";
 export * from "./pricing.js";
 export * from "./review.js";
 export * from "./risk.js";
+export * from "./scalpStats.js";
 export * from "./settle.js";
 export * from "./splits.js";
 export * from "./stats.js";
