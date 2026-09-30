@@ -5,6 +5,14 @@ import { type Metric, metricValue, rowSummary, tickText } from "./scalpText.js";
 
 const ACCENT = "#5b8cff";
 const LINE = "#2a2e39";
+/**
+ * Net and R always take in zero: an axis fitted to the data alone starts at its lowest value, so with every bar on
+ * one side the smallest draws no bar and the rest lose their proportions. Win % runs 0–100%.
+ */
+const WITH_ZERO: [(low: number) => number, (high: number) => number] = [
+  (low) => Math.min(0, low),
+  (high) => Math.max(0, high),
+];
 
 export interface MetricRow extends GroupStats {
   label: string;
@@ -36,7 +44,7 @@ export function MetricBars({
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
         <XAxis dataKey="tick" tick={TICK} interval={0} axisLine={false} tickLine={false} />
-        <YAxis hide domain={metric === "win" ? [0, 1] : ["auto", "auto"]} />
+        <YAxis hide domain={metric === "win" ? [0, 1] : WITH_ZERO} />
         {metric === "win" ? (
           <ReferenceLine y={0.5} stroke={LINE} strokeDasharray="3 3" />
         ) : (
