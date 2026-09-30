@@ -6,6 +6,7 @@ import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../compon
 import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
+import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
@@ -144,7 +145,10 @@ export function TradeDetail({
           </Tile>
         </div>
       ) : (
-        <ScalpTiles trade={trade} />
+        <>
+          <ScalpTiles trade={trade} />
+          <RiskTiles trade={trade} />
+        </>
       )}
 
       {trade.strategy === "iron_fly" && <MoveTiles trade={trade} />}

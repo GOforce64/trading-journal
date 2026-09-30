@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { scalpRisk } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TradeDetail } from "./TradeDetail.js";
 
@@ -689,6 +690,16 @@ describe("TradeDetail for a scalp", () => {
     await screen.findByTestId("tile-contract");
     expect(screen.queryByRole("button", { name: "Use IBKR's numbers" })).toBeNull();
     expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/ibkr/status"))).toBe(false);
+  });
+
+  it("puts the R row under the scalp's own tiles", async () => {
+    const scalp = { ...nvda, scalp: null, scalpPrices: null };
+    stubSynced({ ...scalp, risk: scalpRisk(scalp) });
+    renderDetail();
+    const contract = await screen.findByTestId("tile-contract");
+    const risk = screen.getByTestId("tile-planned-risk");
+    expect(contract.compareDocumentPosition(risk) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("risk-reason").textContent).toBe("Set a stop in the review strip to get R.");
   });
 });
 
