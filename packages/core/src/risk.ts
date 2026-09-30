@@ -235,9 +235,21 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
     optionAt: optionAt(target.price),
     wrongSide: start != null && !gains(target.price),
   }));
+  // Targets trim only the contracts held, nearest first: a size edit can leave the saved ones trimming more (§8).
+  const trimmed = new Array<number>(levels.length).fill(0);
+  let left = leg.quantity;
+  for (const { index } of sortTargets(
+    levels.map((target, index) => ({ price: target.price, index })),
+    basis,
+    right,
+  )) {
+    const contracts = Math.min(levels[index]?.contracts ?? 0, left);
+    trimmed[index] = contracts;
+    left -= contracts;
+  }
   const priced = targets.flatMap((target, index) =>
     !target.wrongSide && target.optionAt != null
-      ? [{ index, optionAt: target.optionAt, contracts: target.contracts }]
+      ? [{ index, optionAt: target.optionAt, contracts: trimmed[index] ?? 0 }]
       : [],
   );
   let plannedReward: number | null = null;
@@ -245,7 +257,6 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
   if (priced.length > 0) {
     let reward = 0;
     for (const target of priced) reward += (target.optionAt - premium) * target.contracts * leg.multiplier;
-    const left = leg.quantity - levels.reduce((sum, target) => sum + target.contracts, 0);
     if (left > 0) {
       // The farthest target prices highest, whatever the list's order while a line is dragged.
       const last = priced.reduce((best, target) => (target.optionAt >= best.optionAt ? target : best));

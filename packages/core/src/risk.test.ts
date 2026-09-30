@@ -178,6 +178,28 @@ describe("scalpRisk", () => {
     expect(risk).toMatchObject({ plannedReward: 478.97, runner: { contracts: 1, atTarget: 1 } });
   });
 
+  it("rewards only the contracts held, nearest target first, when a size edit left the targets trimming more", () => {
+    // 2 held; T1 233 ×1 and T2 234.50 ×2 trim 3, so T2 gets the 1 left: the worked example's reward.
+    const over = scalpRisk(
+      nvda(
+        {},
+        {
+          targets: [
+            { price: 234.5, contracts: 2 },
+            { price: 233, contracts: 1 },
+          ],
+        },
+      ),
+    );
+    expect(over).toMatchObject({ plannedReward: 288.61, runner: null });
+    // 1 held; T1 233 ×2 counts once.
+    const one = scalpRisk(
+      nvda({ legs: [leg({ quantity: 1 })] }, { targets: [{ price: 233, contracts: 2 }] }),
+    );
+    const atT1 = one?.targets[0]?.optionAt ?? Number.NaN;
+    expect(one).toMatchObject({ plannedReward: round2((atT1 - 1.06) * 100), runner: null });
+  });
+
   it("flags a target on the wrong side and leaves it out of the reward", () => {
     const risk = scalpRisk(
       nvda(

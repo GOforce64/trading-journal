@@ -465,6 +465,18 @@ describe("ScalpWorkspace R", () => {
     );
   });
 
+  it("types nothing when ✎ is followed by a click away, so the model keeps pricing the risk", async () => {
+    const fetchMock = stubApi({ trade: WORKED });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "Type the planned risk" }));
+    fireEvent.blur(field("Planned risk"));
+    fireEvent.click(screen.getByRole("button", { name: "Type the stock at entry" }));
+    fireEvent.blur(field("Stock at entry"));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Stock at entry" })).toBeNull());
+    expect(patches(fetchMock)).toEqual([]);
+    expect(screen.queryByText("(typed)")).toBeNull();
+  });
+
   it("prices a typed planned risk, with ✕ to go back to the model", async () => {
     const fetchMock = stubApi({ trade: { ...WORKED, scalp: { ...WORKED.scalp, riskOverride: 120 } } });
     renderWorkspace();

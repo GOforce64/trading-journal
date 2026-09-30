@@ -92,7 +92,8 @@ function Override({
     const entered = text?.trim() ?? "";
     const wasEscaped = escaped.current;
     escaped.current = false;
-    if (wasEscaped || entered === "") {
+    // The value ✎ filled in, left as it was, types nothing: the fetched price or the model keeps working.
+    if (wasEscaped || entered === "" || entered === start) {
       setText(null);
       setProblem(null);
       return;
