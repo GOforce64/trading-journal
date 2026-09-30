@@ -64,7 +64,14 @@ const SCALP = {
   metrics: null,
   review: { status: "pending", missing: ["setup", "grade", "stop"] },
 };
-const STOCK = { tradeId: "t1", levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 };
+const STOCK = {
+  tradeId: "t1",
+  levelBasis: "stock",
+  stopPrice: 231.8,
+  stockEntryOverride: null,
+  riskOverride: null,
+  targets: [{ price: 234.5, contracts: 2 }],
+};
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -179,7 +186,7 @@ describe("ScalpWorkspace levels", () => {
   });
 
   it("takes 0 on the premium basis, and draws no premium lines", async () => {
-    const premium = { ...STOCK, levelBasis: "premium", stopPrice: 0.8, targetPrice: null };
+    const premium = { ...STOCK, levelBasis: "premium", stopPrice: 0.8, targets: [] };
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: premium } });
     renderWorkspace();
     const stop = await screen.findByRole("textbox", { name: "Stop" });
@@ -203,7 +210,7 @@ describe("ScalpWorkspace levels", () => {
     expect(field("Stop").value).toBe("231.80");
     fireEvent.click(screen.getByRole("button", { name: "Clear target" }));
     await waitFor(() =>
-      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", targetPrice: null } }]),
+      expect(patches(fetchMock)).toEqual([{ scalp: { levelBasis: "stock", targets: [] } }]),
     );
   });
 

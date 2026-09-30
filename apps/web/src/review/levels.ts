@@ -1,10 +1,10 @@
-import { type LevelBasis, round2 } from "@tj/core";
+import { contractsHeld, type LevelBasis, round2 } from "@tj/core";
 import { useMemo, useState } from "react";
 import type { TradeView } from "../api.js";
 import type { ChartEditing, LevelKind } from "../chart/drag.js";
 import type { PriceLine } from "../chart/IntradayChart.js";
 import { COLORS } from "../chart/style.js";
-import { useSaveTrade } from "./data.js";
+import { type TradePatchBody, useSaveTrade } from "./data.js";
 import { useDefaultBasis } from "./prefs.js";
 
 const KINDS: readonly LevelKind[] = ["stop", "target"];
@@ -51,16 +51,21 @@ export function useLevels(trade: TradeView): Levels {
   const edited = (kind: LevelKind) => setChartEdits((counts) => ({ ...counts, [kind]: counts[kind] + 1 }));
   const basis = trade.scalp?.levelBasis ?? defaultBasis;
   const stop = trade.scalp?.stopPrice ?? null;
-  const target = trade.scalp?.targetPrice ?? null;
+  const target = trade.scalp?.targets[0]?.price ?? null;
 
-  const write = (body: { levelBasis?: LevelBasis; stopPrice?: number | null; targetPrice?: number | null }) =>
+  const write = (body: NonNullable<TradePatchBody["scalp"]>) =>
     mutation.mutate(
       // The basis goes with every write, because the first one creates the row (spec §6.2).
       { scalp: { levelBasis: basis, ...body } },
       { onError: () => setRedraw((count) => count + 1), onSettled: () => setMoved(null) },
     );
+  // Until the target list (scalp-R Task 6): the one target is T1, trimming the whole position.
   const save = (kind: LevelKind, price: number | null) =>
-    write(kind === "stop" ? { stopPrice: price } : { targetPrice: price });
+    write(
+      kind === "stop"
+        ? { stopPrice: price }
+        : { targets: price == null ? [] : [{ price, contracts: Math.max(1, contractsHeld(trade.legs)) }] },
+    );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: redraw asks for a fresh array after a refused save
   const lines = useMemo<PriceLine[]>(

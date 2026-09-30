@@ -3,9 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IronFlyDetailsInput, NewTrade } from "@tj/core";
+import { nyWallClock } from "@tj/core";
+import { asc } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
+import { scalpTargets } from "../schema.js";
 import { createTaxonomyRepo } from "./taxonomy.js";
 import { createTradesRepo, ReviewRuleError } from "./trades.js";
 
@@ -477,17 +480,25 @@ describe("the scalp review", () => {
       tradeId: id,
       levelBasis: "stock",
       stopPrice: 231.8,
-      targetPrice: null,
+      stockEntryOverride: null,
+      riskOverride: null,
+      targets: [],
     });
   });
 
-  it("merges a partial patch, keeping the other level", () => {
+  it("merges a partial patch, keeping the other levels", () => {
     const id = repo().create(nvda).id;
     repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231.8 } });
-    repo().update(id, { scalp: { targetPrice: 234.5 } });
-    expect(repo().get(id)?.scalp).toMatchObject({ stopPrice: 231.8, targetPrice: 234.5 });
+    repo().update(id, { scalp: { targets: [{ price: 234.5, contracts: 2 }] } });
+    expect(repo().get(id)?.scalp).toMatchObject({
+      stopPrice: 231.8,
+      targets: [{ price: 234.5, contracts: 2 }],
+    });
     repo().update(id, { scalp: { stopPrice: null } });
-    expect(repo().get(id)?.scalp).toMatchObject({ stopPrice: null, targetPrice: 234.5 });
+    expect(repo().get(id)?.scalp).toMatchObject({
+      stopPrice: null,
+      targets: [{ price: 234.5, contracts: 2 }],
+    });
   });
 
   it("needs a basis for the first level, and writes nothing without one", () => {
@@ -496,17 +507,25 @@ describe("the scalp review", () => {
     expect(repo().get(id)).toMatchObject({ scalp: null, grade: null });
   });
 
-  it("clears both levels when the basis changes, unless the patch sets them", () => {
+  it("clears the stop and targets when the basis changes, unless the patch sets them, and keeps the overrides", () => {
     const id = repo().create(nvda).id;
-    repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231.8, targetPrice: 234.5 } });
+    repo().update(id, {
+      scalp: {
+        levelBasis: "stock",
+        stopPrice: 231.8,
+        targets: [{ price: 234.5, contracts: 1 }],
+        stockEntryOverride: 230.83,
+      },
+    });
     repo().update(id, { scalp: { levelBasis: "premium" } });
     expect(repo().get(id)?.scalp).toMatchObject({
       levelBasis: "premium",
       stopPrice: null,
-      targetPrice: null,
+      targets: [],
+      stockEntryOverride: 230.83,
     });
     repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 231 } });
-    expect(repo().get(id)?.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231, targetPrice: null });
+    expect(repo().get(id)?.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231, targets: [] });
   });
 
   it("refuses 0 on the stock basis, and takes it on premium", () => {
@@ -548,5 +567,203 @@ describe("the scalp review", () => {
     ).toEqual(both);
     expect(() => repo().update(id, { tagIds: [calm, rushed] })).toThrow("A trade has at most one emotion");
     expect(repo().get(id)?.tagIds.sort()).toEqual(both);
+  });
+
+  it("keeps targets in the order the trade reaches them, numbered from 1 on every save", () => {
+    const id = repo().create(nvda).id;
+    repo().update(id, {
+      scalp: {
+        levelBasis: "stock",
+        targets: [
+          { price: 234.5, contracts: 1 },
+          { price: 233, contracts: 1 },
+        ],
+      },
+    });
+    expect(repo().get(id)?.scalp?.targets).toEqual([
+      { price: 233, contracts: 1 },
+      { price: 234.5, contracts: 1 },
+    ]);
+    const rows = () =>
+      db
+        .select({ position: scalpTargets.position, price: scalpTargets.price })
+        .from(scalpTargets)
+        .orderBy(asc(scalpTargets.position))
+        .all();
+    expect(rows()).toEqual([
+      { position: 1, price: 233 },
+      { position: 2, price: 234.5 },
+    ]);
+    repo().update(id, { scalp: { targets: [{ price: 240, contracts: 2 }] } });
+    expect(rows()).toEqual([{ position: 1, price: 240 }]);
+    repo().update(id, { scalp: { targets: [] } });
+    expect(rows()).toEqual([]);
+
+    const put = repo().create({
+      ...nvda,
+      legs: [
+        {
+          right: "P",
+          strike: 229,
+          expiry: "2026-09-28",
+          quantity: 2,
+          multiplier: 100,
+          openPrice: 1.06,
+          closePrice: 1.295,
+        },
+      ],
+    }).id;
+    repo().update(put, {
+      scalp: {
+        levelBasis: "stock",
+        targets: [
+          { price: 228, contracts: 1 },
+          { price: 229.5, contracts: 1 },
+        ],
+      },
+    });
+    expect(
+      repo()
+        .get(put)
+        ?.scalp?.targets.map((target) => target.price),
+    ).toEqual([229.5, 228]);
+    repo().update(put, {
+      scalp: {
+        levelBasis: "premium",
+        targets: [
+          { price: 2.5, contracts: 1 },
+          { price: 1.8, contracts: 1 },
+        ],
+      },
+    });
+    expect(
+      repo()
+        .get(put)
+        ?.scalp?.targets.map((target) => target.price),
+    ).toEqual([1.8, 2.5]);
+  });
+
+  it("refuses targets that trim more than the position, or a stock target at 0, keeping the list", () => {
+    const id = repo().create(nvda).id;
+    repo().update(id, { scalp: { levelBasis: "stock", targets: [{ price: 233, contracts: 2 }] } });
+    expect(() =>
+      repo().update(id, {
+        scalp: {
+          targets: [
+            { price: 233, contracts: 2 },
+            { price: 234.5, contracts: 1 },
+          ],
+        },
+      }),
+    ).toThrow("The targets trim 3 contracts; the position has 2.");
+    expect(() => repo().update(id, { scalp: { targets: [{ price: 0, contracts: 1 }] } })).toThrow(
+      "A stock price must be above 0",
+    );
+    expect(repo().get(id)?.scalp?.targets).toEqual([{ price: 233, contracts: 2 }]);
+  });
+
+  it("still saves a stop after a size edit left the saved targets trimming too much", () => {
+    const id = repo().create(nvda).id;
+    repo().update(id, { scalp: { levelBasis: "stock", targets: [{ price: 233, contracts: 2 }] } });
+    repo().update(id, {
+      legs: [
+        {
+          right: "C",
+          strike: 232.5,
+          expiry: "2026-09-28",
+          quantity: 1,
+          multiplier: 100,
+          openPrice: 1.06,
+          closePrice: 1.295,
+        },
+      ],
+    });
+    repo().update(id, { scalp: { stopPrice: 229, riskOverride: 60 } });
+    expect(repo().get(id)?.scalp).toMatchObject({
+      stopPrice: 229,
+      riskOverride: 60,
+      targets: [{ price: 233, contracts: 2 }],
+    });
+    expect(() => repo().update(id, { scalp: { targets: [{ price: 233, contracts: 2 }] } })).toThrow(
+      "The targets trim 2 contracts; the position has 1.",
+    );
+  });
+
+  it("stores the typed overrides to the cent, clears them with null, and refuses 0 or less", () => {
+    const id = repo().create(nvda).id;
+    repo().update(id, { scalp: { levelBasis: "stock", stockEntryOverride: 230.834, riskOverride: 120 } });
+    expect(repo().get(id)?.scalp).toMatchObject({ stockEntryOverride: 230.83, riskOverride: 120 });
+    repo().update(id, { scalp: { riskOverride: null } });
+    expect(repo().get(id)?.scalp).toMatchObject({ stockEntryOverride: 230.83, riskOverride: null });
+    expect(() => repo().update(id, { scalp: { stockEntryOverride: 0 } })).toThrow(
+      "A stock price must be above 0",
+    );
+    expect(() => repo().update(id, { scalp: { riskOverride: -5 } })).toThrow(
+      "A planned risk must be above 0",
+    );
+  });
+
+  it("lists scalps missing a fetched price, oldest first, and stores what the filler finds without an edit", () => {
+    const closed = repo().create(nvda).id;
+    const open = repo().create({
+      ...nvda,
+      openedAt: nvda.openedAt + 60_000,
+      closedAt: null,
+      netPnl: null,
+    }).id;
+    repo().create(sampleFly);
+    const gaps = () =>
+      repo()
+        .missingScalpPrices()
+        .map((gap) => gap.tradeId);
+    expect(gaps()).toEqual([closed, open]);
+    expect(repo().missingScalpPrices([open])).toEqual([
+      { tradeId: open, underlying: "NVDA", openedAt: nvda.openedAt + 60_000, closedAt: null },
+    ]);
+    expect(repo().missingScalpPrices([])).toEqual([]);
+
+    clock = 2_000;
+    repo().setScalpPrices(open, { entryPrice: 230.83, holdHigh: null, holdLow: null }, 2_000);
+    repo().setScalpPrices(closed, { entryPrice: 230.83, holdHigh: null, holdLow: null }, 2_000);
+    // A closed scalp waits for its range; an open one has what it can have.
+    expect(gaps()).toEqual([closed]);
+    repo().setScalpPrices(closed, { entryPrice: null, holdHigh: 233.21, holdLow: 230.71 }, 3_000);
+    expect(gaps()).toEqual([]);
+    expect(repo().get(closed)).toMatchObject({
+      editedAt: 1_000,
+      updatedAt: 1_000,
+      scalpPrices: {
+        tradeId: closed,
+        entryPrice: 230.83,
+        holdHigh: 233.21,
+        holdLow: 230.71,
+        fetchedAt: 3_000,
+      },
+    });
+  });
+
+  it("drops a scalp's fetched prices when its ticker changes or a time moves to another minute", () => {
+    const id = repo().create(nvda).id;
+    const fetched = () =>
+      repo().setScalpPrices(id, { entryPrice: 230.83, holdHigh: 233.21, holdLow: 230.71 }, 2_000);
+    fetched();
+    repo().update(id, { openedAt: nvda.openedAt + 20_000, grade: "B" });
+    expect(repo().get(id)?.scalpPrices).not.toBeNull();
+    repo().update(id, { openedAt: nvda.openedAt + 60_000 });
+    expect(repo().get(id)?.scalpPrices).toBeNull();
+    fetched();
+    repo().update(id, { closedAt: (nvda.closedAt ?? 0) + 60_000 });
+    expect(repo().get(id)?.scalpPrices).toBeNull();
+    fetched();
+    repo().update(id, { underlying: "AMD" });
+    expect(repo().get(id)?.scalpPrices).toBeNull();
+  });
+
+  it("compares a premarket scalp's times by the minute, not clamped to the session as a fly's are", () => {
+    const seven = nyWallClock("2026-09-28", 7 * 60);
+    const id = repo().create({ ...nvda, openedAt: seven, closedAt: seven + 600_000 }).id;
+    repo().setScalpPrices(id, { entryPrice: 229.1, holdHigh: 229.5, holdLow: 228.9 }, 2_000);
+    repo().update(id, { openedAt: seven + 3_600_000, closedAt: seven + 4_200_000 });
+    expect(repo().get(id)?.scalpPrices).toBeNull();
   });
 });

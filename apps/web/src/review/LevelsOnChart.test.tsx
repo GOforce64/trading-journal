@@ -45,7 +45,15 @@ function serve(scalp: Record<string, unknown> | null) {
       if (String(init?.method).toUpperCase() === "PATCH") {
         const body = JSON.parse(String(init?.body)) as { scalp: Record<string, unknown> };
         patches.push(body);
-        stored = { ...stored, scalp: { ...(stored.scalp as object), ...body.scalp } };
+        // A first level creates the whole row, as the repository does.
+        const row = stored.scalp ?? {
+          tradeId: "t1",
+          stopPrice: null,
+          stockEntryOverride: null,
+          riskOverride: null,
+          targets: [],
+        };
+        stored = { ...stored, scalp: { ...(row as object), ...body.scalp } };
       }
       return new Response(JSON.stringify(stored), { headers: { "content-type": "application/json" } });
     }),
@@ -104,7 +112,14 @@ afterEach(() => {
 
 describe("a level field and the chart together", () => {
   it("lets a drag on the chart win over a focused field: it follows, and saves once, at the drop", async () => {
-    serve({ tradeId: "t1", levelBasis: "stock", stopPrice: 231.8, targetPrice: null });
+    serve({
+      tradeId: "t1",
+      levelBasis: "stock",
+      stopPrice: 231.8,
+      stockEntryOverride: null,
+      riskOverride: null,
+      targets: [],
+    });
     renderPage();
     const field = await screen.findByRole("textbox", { name: "Stop" });
     act(() => field.focus());

@@ -115,12 +115,26 @@ export const newTradeSchema = newTradeShape
     path: ["ironFly"],
   });
 
-/** A scalp's stop and target (scalp-review spec §6.2). Merged into what's stored; the basis rules apply on write. */
+/** A profit target on the trade's basis, trimming whole contracts (scalp-R spec §8). */
+export const scalpTargetSchema = z.object({
+  price: z.number().min(0),
+  contracts: z.number().int().min(1),
+});
+
+/**
+ * A scalp's levels (scalp-review spec §6.2, scalp-R spec §8), merged into what's stored. The repository checks the
+ * rest on write: a stock price above 0, an override above 0, and the targets trimming no more than the position.
+ */
 export const scalpLevelsPatchSchema = z
   .object({
     levelBasis: z.enum(LEVEL_BASES),
     stopPrice: z.number().min(0).nullable(),
-    targetPrice: z.number().min(0).nullable(),
+    /** The whole list; [] clears it. */
+    targets: z.array(scalpTargetSchema).max(10),
+    /** Typed over the fetched stock price at entry. */
+    stockEntryOverride: z.number().nullable(),
+    /** Typed over the model's planned risk, in dollars. */
+    riskOverride: z.number().nullable(),
   })
   .partial();
 

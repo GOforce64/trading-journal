@@ -42,7 +42,11 @@ const fly = {
 interface Reviewed {
   id: string;
   review: { status: string; missing: string[] } | null;
-  scalp: { levelBasis: string; stopPrice: number | null; targetPrice: number | null } | null;
+  scalp: {
+    levelBasis: string;
+    stopPrice: number | null;
+    targets: { price: number; contracts: number }[];
+  } | null;
   reviewedAt: number | null;
 }
 
@@ -90,7 +94,7 @@ describe("the scalp review API", () => {
     expect(res.status).toBe(200);
     const body = await readJson<Reviewed>(res);
     expect(body.review).toEqual({ status: "done", missing: [] });
-    expect(body.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231.8, targetPrice: null });
+    expect(body.scalp).toMatchObject({ levelBasis: "stock", stopPrice: 231.8, targets: [] });
   });
 
   it("lists the queue oldest first: every pending scalp, and nothing else", async () => {
