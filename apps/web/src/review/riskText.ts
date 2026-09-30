@@ -23,8 +23,15 @@ export interface RiskTileTrade {
   scalpPrices: { holdHigh: number | null; holdLow: number | null } | null;
 }
 
-/** What each tile of the R row says (scalp-R spec §9.1). */
-export function riskTileText(risk: ScalpRisk, trade: RiskTileTrade): Record<RiskTileKey, TileText> {
+/**
+ * What each tile of the R row says (scalp-R spec §9.1). `rangeNote` says why a closed scalp's MAE and MFE wait for
+ * the hold's range, such as Alpaca's 15-minute delay.
+ */
+export function riskTileText(
+  risk: ScalpRisk,
+  trade: RiskTileTrade,
+  rangeNote = "needs the stock's range",
+): Record<RiskTileKey, TileText> {
   const open = trade.closedAt == null;
   const planned = risk.plannedRisk;
 
@@ -51,7 +58,7 @@ export function riskTileText(risk: ScalpRisk, trade: RiskTileTrade): Record<Risk
   const high = `stock high ${trade.scalpPrices?.holdHigh?.toFixed(2)}`;
   const put = risk.right === "P";
   const excursion = (move: Excursion | null, sign: "−" | "+", where: string): TileText => {
-    if (!move) return { value: "—", working: open ? "open" : "needs the stock's range" };
+    if (!move) return { value: "—", working: open ? "open" : rangeNote };
     const signed = (text: string) => (Number(text) === 0 ? text : `${sign}${text}`);
     const value = signed(move.stock.toFixed(2));
     return { value, working: move.r == null ? where : `${signed(move.r.toFixed(2))}R · ${where}` };

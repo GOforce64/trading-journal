@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { TradeView } from "../api.js";
 import { Tile } from "../components/ui.js";
-import { usePriceNote } from "./prices.js";
+import { usePriceNote, useRangeNote } from "./prices.js";
 import { modelNote, problemText, type RiskTileKey, riskTileText } from "./riskText.js";
 
 /** The small print under a tile's value. */
@@ -24,9 +24,10 @@ const TILES: { key: RiskTileKey; label: string; testId: string }[] = [
  */
 export function RiskTiles({ trade }: { trade: TradeView }) {
   const note = usePriceNote(trade.id);
+  const rangeNote = useRangeNote(trade.id);
   const risk = trade.risk;
   if (!risk) return null;
-  const text = riskTileText(risk, trade);
+  const text = riskTileText(risk, trade, rangeNote);
   const reason = risk.plannedRisk == null ? problemText(risk, note) : null;
   const footnote = modelNote(risk);
   return (

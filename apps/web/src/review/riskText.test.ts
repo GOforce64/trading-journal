@@ -91,6 +91,13 @@ describe("riskTileText", () => {
     expect(none.model).toEqual({ value: "—", working: "no stock price · 6 h 29 min left" });
     expect(tiles({}, { levelBasis: "premium", stopPrice: 0.6, targets: [] }).model.value).toBe("no IV");
   });
+
+  it("gives the range's note in MAE and MFE while a closed scalp waits for it", () => {
+    const trade = nvda({ scalpPrices: { entryPrice: 230.83, holdHigh: null, holdLow: null } });
+    const text = riskTileText(trade.risk, trade.trade, "waits for Alpaca's 15-minute delay");
+    expect(text.mae).toEqual({ value: "—", working: "waits for Alpaca's 15-minute delay" });
+    expect(riskTileText(trade.risk, trade.trade).mfe.working).toBe("needs the stock's range");
+  });
 });
 
 describe("modelNote", () => {

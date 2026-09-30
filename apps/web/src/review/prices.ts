@@ -73,6 +73,22 @@ export function usePriceNote(tradeId: string): string {
   return typeof word === "string" ? PRICE_COPY[word] : word.message;
 }
 
+/** Why a closed scalp's MAE and MFE wait for the hold's range, in the tiles' small print (scalp-R spec §9.1). */
+export const RANGE_COPY = {
+  fetching: "fetching the stock's range…",
+  too_recent: "waits for Alpaca's 15-minute delay",
+  no_bars: "Alpaca has no bars for the hold",
+  unavailable: "needs the stock's range",
+} as const;
+
+/** The range's word for this scalp: fetching, held back by Alpaca's delay, or missing. */
+export function useRangeNote(tradeId: string): string {
+  const fetching = useIsMutating({ mutationKey: PRICE_FILL_KEY }) > 0;
+  const word = lastWord(useFillResults(), tradeId);
+  if (fetching || word == null) return RANGE_COPY.fetching;
+  return typeof word === "string" ? RANGE_COPY[word] : RANGE_COPY.unavailable;
+}
+
 /**
  * Fetches a scalp's missing prices when its page opens and whenever an edit clears them (scalp-R spec §7), once each,
  * StrictMode included. While Alpaca's delay holds a price back, it asks again a minute later.
