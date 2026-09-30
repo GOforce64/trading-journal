@@ -4,14 +4,8 @@ import { api, type TradeView } from "../api.js";
 import { Money, Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
-import { netWorking, settleProposal } from "../settle.js";
+import { dayText, netWorking, noCloseReason, settleProposal } from "../settle.js";
 
-const dayText = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
 const legName = (leg: { quantity: number; right: string }) =>
   `${leg.quantity < 0 ? "Short" : "Long"} ${leg.right === "C" ? "call" : "put"}`;
 
@@ -77,10 +71,7 @@ export function SettlePanel({
   });
 
   if (!expiry) return null;
-  const reason =
-    close.data?.unavailable?.message ??
-    (close.isError ? "Alpaca didn't answer, so type the exits in Edit." : null) ??
-    `Alpaca has no close for ${trade.underlying} on ${dayText(expiry)}, so type the exits in Edit.`;
+  const reason = noCloseReason(trade.underlying, expiry, close, ", so type the exits in Edit");
 
   return (
     <Panel title="Settle at expiry">

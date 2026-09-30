@@ -4,7 +4,7 @@ import { api, type TradeView } from "../api.js";
 import { Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
-import { settleProposal } from "../settle.js";
+import { dayText, noCloseReason, settleProposal } from "../settle.js";
 import { IronFlyForm, type IronFlyFormValues, type LegFields, type OverrideKey } from "./IronFlyForm.js";
 import { ScalpForm, type ScalpFormValues } from "./ScalpForm.js";
 
@@ -189,7 +189,15 @@ export function EditTrade({
       {proposal && (
         <p className="text-[11px] text-muted">
           Exits proposed at intrinsic value from {trade.underlying}'s {usd(proposal.close)} close on{" "}
-          {proposal.expiry}. Check them and the fees, then save.
+          {dayText(proposal.expiry)}. Check them and the fees, then save.
+        </p>
+      )}
+      {/* Asked to settle, with nothing to propose: say why, rather than show the plain form. */}
+      {settle && !proposal && (
+        <p className="text-[11px] text-muted">
+          {expiry
+            ? noCloseReason(trade.underlying, expiry, close, ": type the exits below")
+            : "Nothing to settle: every leg has its exit, or the open legs expire on different dates."}
         </p>
       )}
       <IronFlyForm

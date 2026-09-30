@@ -256,6 +256,8 @@ describe("EditTrade", () => {
     await waitFor(() =>
       expect((screen.getByLabelText("Short put exit") as HTMLInputElement).value).toBe("0.29"),
     );
+    // The date as the Settle panel writes it.
+    expect(screen.getByText(/close on Sep 25\. Check them and the fees, then save\./)).toBeTruthy();
     expect((screen.getByLabelText("Short call exit") as HTMLInputElement).value).toBe("0");
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
@@ -263,6 +265,34 @@ describe("EditTrade", () => {
     const body = JSON.parse(String(patch?.[1]?.body));
     expect(body.closedAt).toBe(Date.UTC(2026, 8, 25, 20, 0));
     expect(body.netPnl).toBe(433);
+  });
+
+  it("says why nothing is proposed when asked to settle without a close", async () => {
+    const expired = {
+      ...trade,
+      underlying: "BB",
+      closedAt: null,
+      netPnl: null,
+      legs: trade.legs.map((leg) => ({ ...leg, expiry: "2026-09-25", closePrice: null })),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const body = String(input).includes("/api/close/")
+          ? { symbol: "BB", date: "2026-09-25", close: null, unavailable: null }
+          : expired;
+        return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EditTrade tradeId="t1" settle />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByText("Alpaca has no close for BB on Sep 25: type the exits below."),
+    ).toBeTruthy();
   });
 
   it("edits a scalp in the scalp form, and says a synced trade's edits are kept", async () => {

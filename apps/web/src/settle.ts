@@ -9,6 +9,26 @@ import {
 } from "@tj/core";
 import type { TradeView } from "./api.js";
 
+/** A date as the settle panel and notes write it: "Sep 25". */
+export const dayText = (date: string) =>
+  new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/** Why no exits could be proposed at expiry, with `then` saying what to do: ", so type the exits in Edit". */
+export function noCloseReason(
+  underlying: string,
+  expiry: string,
+  close: { data?: { unavailable?: { message: string } | null } | null; isError: boolean },
+  then: string,
+): string {
+  if (close.data?.unavailable) return close.data.unavailable.message;
+  if (close.isError) return `Alpaca didn't answer${then}.`;
+  return `Alpaca has no close for ${underlying} on ${dayText(expiry)}${then}.`;
+}
+
 export type SettledTradeLeg = TradeView["legs"][number] & { closePrice: number };
 
 export interface SettleProposal {
