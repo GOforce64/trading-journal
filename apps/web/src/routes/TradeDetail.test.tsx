@@ -630,9 +630,22 @@ const nvda = {
 function stubSynced(
   body: unknown,
   keptEdits: { tradeId: string; ticker: string; netPnl: number | null }[] = [],
+  reset: unknown = { status: "ok", error: null, changedTradeIds: ["nvda"] },
 ) {
+  // After a reset the trade comes back unmarked, as the server leaves it.
+  let handedBack = false;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/reset")) {
+      // A real reset runs a whole sync: long enough to see "Asking IBKR…".
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      handedBack = true;
+    }
+    if (handedBack && url.includes("/api/trades/")) {
+      return new Response(JSON.stringify({ ...(body as object), factsEditedAt: null }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
     const payload = url.includes("/api/ibkr/status")
       ? {
           configured: true,
@@ -643,8 +656,10 @@ function stubSynced(
           lastSummary: { keptEdits },
         }
       : url.includes("/reset")
-        ? { status: "ok" }
-        : body;
+        ? reset
+        : url.includes("/fill")
+          ? { filled: 0, missing: [], unavailable: null }
+          : body;
     return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -733,11 +748,31 @@ describe("TradeDetail for a scalp", () => {
       ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Use IBKR's numbers" }));
+    expect(await screen.findByRole("button", { name: "Asking IBKR…" })).toBeTruthy();
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/ibkr/trades/nvda/reset")),
       ).toBe(true),
     );
+    // The rewritten trade gets its stock prices again, as after a sync.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/risk/fill"))).toBe(true),
+    );
+  });
+
+  it("says so when handing a trade back to IBKR ran into a failed sync", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
+      status: "error",
+      error: { kind: "unreachable", message: "IBKR didn't answer." },
+      changedTradeIds: [],
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
+    expect(
+      await screen.findByText(
+        "Handed back to IBKR, but the sync failed: IBKR didn't answer. The next sync brings IBKR's numbers.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows no banner, and asks nothing of IBKR, on a synced trade the user hasn't changed", async () => {
