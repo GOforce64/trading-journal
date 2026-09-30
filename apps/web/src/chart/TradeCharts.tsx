@@ -76,7 +76,8 @@ export function TradeCharts({
     </Panel>
   );
   if (!TICKER.test(symbol)) return message(`No stock bars for ${symbol}.`);
-  if (minute.isError) {
+  // A failed live refresh keeps the chart that's drawn (below); only a first load that failed shows this.
+  if (minute.isError && !minute.data) {
     return (
       <Panel title="Chart">
         <div className="flex items-center gap-2">
@@ -115,8 +116,14 @@ export function TradeCharts({
         hiddenEmas={hiddenEmas}
         onFit={() => setFitKey((key) => key + 1)}
       />
-      {minute.data?.partial && (
-        <p className="text-[10px] text-muted">Alpaca's free data runs 15 minutes behind.</p>
+      {minute.isError ? (
+        <p className="text-[10px] text-down">
+          Couldn't refresh the chart: Alpaca didn't answer. Trying again in a minute.
+        </p>
+      ) : (
+        minute.data?.partial && (
+          <p className="text-[10px] text-muted">Alpaca's free data runs 15 minutes behind.</p>
+        )
       )}
       <div className="grid gap-2 min-[1100px]:grid-cols-[2fr_1fr]">
         <IntradayChart
@@ -126,15 +133,26 @@ export function TradeCharts({
           lines={levels?.lines}
           editing={levels?.editing}
         />
-        {dayChart.candles.length > 0 ? (
+        {/* Only once the daily bars are in: before, today's candle alone would stand for the whole chart. */}
+        {daily.isSuccess && !daily.data.unavailable && dayChart.candles.length > 0 ? (
           <DailyChart model={dayChart} show={prefs.show} fitKey={fitKey} />
+        ) : daily.isError ? (
+          <div className="flex items-center justify-center gap-2 self-center">
+            <p className="text-down">Couldn't load the daily chart: Alpaca didn't answer.</p>
+            <button
+              type="button"
+              aria-label="Retry the daily chart"
+              onClick={() => daily.refetch()}
+              className="rounded-sm border border-line px-2 py-0.5 text-fg hover:border-accent"
+            >
+              Retry
+            </button>
+          </div>
         ) : (
           <p className="self-center text-center text-muted">
             {daily.isPending
               ? "Loading the daily chart…"
-              : daily.isError
-                ? "Alpaca didn't answer. Try again."
-                : (daily.data?.unavailable?.message ?? `No daily bars for ${symbol}.`)}
+              : (daily.data?.unavailable?.message ?? `No daily bars for ${symbol}.`)}
           </p>
         )}
       </div>

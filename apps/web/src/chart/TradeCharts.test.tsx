@@ -146,6 +146,36 @@ describe("TradeCharts", () => {
     expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
   });
 
+  it("says why the daily chart is missing, with Retry, instead of a one-candle chart from minute bars", async () => {
+    const fetchMock = stub(
+      [answer(OK)],
+      answer({ error: "unreachable", message: "Alpaca didn't answer. Try again." }, 502),
+    );
+    renderCharts();
+    expect(await screen.findByText("Couldn't load the daily chart: Alpaca didn't answer.")).toBeTruthy();
+    expect(screen.queryByTestId("daily-chart")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry the daily chart" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter((call) => String(call[0]).includes("/daily"))).toHaveLength(2),
+    );
+  });
+
+  it("keeps a drawn chart when a live refresh fails, saying so above it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.UTC(2026, 8, 29, 18, 0) }); // Tue Sep 29, 14:00 ET
+    stub([
+      answer({ ...OK, partial: true }),
+      answer({ error: "unreachable", message: "Alpaca didn't answer. Try again." }, 502),
+    ]);
+    renderCharts({ ...TRADE, openedAt: nyWallClock("2026-09-29", 571), closedAt: null });
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(
+      await screen.findByText("Couldn't refresh the chart: Alpaca didn't answer. Trying again in a minute."),
+    ).toBeTruthy();
+    expect(screen.getByTestId("intraday-chart")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
   it("notes that today's bars run 15 minutes behind", async () => {
     stub([answer({ ...OK, partial: true })]);
     renderCharts();
