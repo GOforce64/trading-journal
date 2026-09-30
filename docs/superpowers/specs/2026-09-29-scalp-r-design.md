@@ -372,7 +372,7 @@ It sits under the scalp tiles.
 
 ## 14. Open items
 
-1. **The second part:** the Scalps tab in Analytics (time of day, hold time, breakdowns with R and return on cost, mistake cost) and the Playbook's per-setup stat cards.
+1. **The second part:** built in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-analytics-design.md), with the backfill (the plan's deferred minor #9).
 2. **The option-premium chart** (scalp-review spec §16, item 1), which also gives MAE/MFE in R on the premium basis.
 
 ### Live check (2026-09-30)

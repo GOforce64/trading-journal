@@ -299,7 +299,7 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 - **R-multiple** = net P&L ÷ planned risk.
 - **A stop on the premium:** a trade's levels can be option prices instead (scalp-review spec §15). Planned risk is then (entry − stop premium) × contracts × multiplier, with no model.
 - **MAE/MFE:** from the 1m bars between first entry and last exit, the worst and best underlying excursion against the trade direction. Worked out on read, in dollars of underlying and in R units (÷ |entry − stop|).
-- With the scalp analytics: **minutes after open** (first entry − 09:30 ET), **hold time**, and **option cost** (avg entry × contracts × multiplier).
+- Built in the scalp analytics ([2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-analytics-design.md)): **minutes after open** (first entry − 09:30 ET), **hold time**, and **option cost** (entry premium × contracts × multiplier).
 - `core/pricing` exists since move data: bisection on [1%, 1000%] with a fixed 4% rate. R for each scalp ([2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md)) needed neither Newton-Raphson nor a rate setting.
 
 ### 8.4 Missed trades
@@ -327,11 +327,13 @@ Detailed for iron flies in [2026-09-27-analytics-and-dashboard-design.md](2026-0
 - Analytics filters live on the page for now, not in a global bar;
 - CSV export is deferred.
 
-- **Tagging:** a setup (playbook page with per-setup stat cards), mistake tags, one emotion tag, grade A–F, and Markdown notes. All are editable inline from the trade page and the journal grid. Built in the scalp-review spec: edited from the trade page, not inline in the grid. The grid shows the setup. The Playbook page manages setups and tags, and its stat cards come with R.
+Scalps are detailed in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-analytics-design.md): the Scalps tab shows one breakdown at a time, mistake cost adds an avg-R dumbbell, and the Setups tab is dropped in favour of the Playbook's stat cards.
+
+- **Tagging:** a setup (playbook page with per-setup stat cards), mistake tags, one emotion tag, grade A–F, and Markdown notes. All are editable inline from the trade page and the journal grid. Built in the scalp-review spec: edited from the trade page, not inline in the grid. The grid shows the setup. The Playbook page manages setups and tags, and its stat cards are built in the scalp-analytics spec.
 - **Global filter bar** (persisted in the URL): book (Live / Paper / Missed, multi-select), strategy, account, date range, ticker, setup, tag, and **include excluded**.
 - **Two separate surfaces:**
   - the **Dashboard** is the landing page: how the current period is going, recent trades, and anything sitting in the review queue;
-  - **Analytics** is its own page for aggregated stats, with tabs for **Overview, Scalps, Iron flies, Missed and Setups**, the global filter bar applied across all of them, and CSV export of any table it shows.
+  - **Analytics** is its own page for aggregated stats, with tabs for **Overview, Scalps and Iron flies** (Missed to come), the global filter bar applied across all of them, and CSV export of any table it shows.
 - **Dashboard and Analytics Overview share these:**
   - KPIs: net P&L, win rate, profit factor, expectancy ($/trade), avg R, trade count, max drawdown;
   - equity curve with drawdown shading;
