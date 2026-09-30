@@ -12,7 +12,7 @@ import {
   useFilling,
   useFillMoves,
   useFillResults,
-  useMarketOn,
+  useMarketState,
 } from "../moves.js";
 
 const IV_BLANK = {
@@ -48,7 +48,8 @@ function ivWorking(moves: TradeMoves): string {
 export function MoveTiles({ trade }: { trade: TradeView }) {
   const moves = tradeMoves(trade);
   const fetching = useFilling();
-  const marketOn = useMarketOn();
+  const market = useMarketState();
+  const marketOn = market === "on";
   const results = useFillResults();
   const fill = useFillMoves();
   const { impliedMove, actualMove, moveRatio, ivBefore, ivAfter, stockAtEntry, stockAtExit } = moves;
@@ -63,7 +64,7 @@ export function MoveTiles({ trade }: { trade: TradeView }) {
     priceNote({
       at: missingSide === "entry" ? trade.openedAt : (trade.closedAt ?? trade.openedAt),
       fetching,
-      marketOn,
+      market,
       lastReason: lastReason(results, trade.id, missingSide),
       now: Date.now(),
     });

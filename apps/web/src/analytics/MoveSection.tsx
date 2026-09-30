@@ -1,5 +1,13 @@
 import { ivCrushHistogram, type MoveRow, movePoints, moveRatioBuckets, type RatioSummary } from "@tj/core";
-import { fillFailure, fillSummary, MOVE_COPY, useFilling, useFillMoves, useMarketOn } from "../moves.js";
+import {
+  fillFailure,
+  fillSummary,
+  MARKET_COPY,
+  MOVE_COPY,
+  useFilling,
+  useFillMoves,
+  useMarketState,
+} from "../moves.js";
 import { dollars } from "./format.js";
 import { CrushHistogram, MoveScatter } from "./MoveCharts.js";
 import { Section } from "./Section.js";
@@ -60,7 +68,8 @@ export function MoveSection({
   const points = movePoints(flies);
   const ratios = moveRatioBuckets(flies);
   const crush = ivCrushHistogram(flies);
-  const marketOn = useMarketOn();
+  const market = useMarketState();
+  const marketOn = market === "on";
   const fetching = useFilling();
   const fill = useFillMoves();
 
@@ -74,7 +83,7 @@ export function MoveSection({
           <button
             type="button"
             disabled={!marketOn || fetching}
-            title={marketOn ? undefined : MOVE_COPY.noKey}
+            title={market === "on" ? undefined : MARKET_COPY[market]}
             onClick={() => fill.mutate(undefined)}
             className="rounded-sm border border-accent bg-[#2962ff1a] px-2 py-0.5 text-fg disabled:opacity-50"
           >

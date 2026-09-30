@@ -8,7 +8,7 @@ const note = (overrides: Partial<Parameters<typeof priceNote>[0]> = {}) =>
   priceNote({
     at: THURSDAY_CLOSE,
     fetching: false,
-    marketOn: true,
+    market: "on",
     lastReason: null,
     now: LATER,
     ...overrides,
@@ -29,8 +29,11 @@ describe("priceNote", () => {
     );
   });
 
-  it("asks for a key when none is set up", () => {
-    expect(note({ marketOn: false })).toBe("Add an Alpaca key in Settings to fetch stock prices.");
+  it("asks for a key when none is set up, and says so while the key is still being checked or was refused", () => {
+    expect(note({ market: "off" })).toBe("Add an Alpaca key in Settings to fetch stock prices.");
+    expect(note({ market: "loading" })).toBe("Checking the Alpaca key…");
+    expect(note({ market: "error" })).toBe("Alpaca refused the key: check it in Settings.");
+    expect(note({ market: "unknown" })).toBe("Couldn't check the Alpaca key: reload to try again.");
   });
 
   it("passes on the last fill's reason, or says the price hasn't been fetched", () => {

@@ -424,7 +424,10 @@ describe("Analytics Iron flies: move data", () => {
     renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
     const button = await screen.findByRole("button", { name: "Fill in missing" });
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.getAttribute("title")).toBe("Add an Alpaca key in Settings to fetch stock prices.");
+    // "Checking the Alpaca key…" until the settings answer; then why.
+    await waitFor(() =>
+      expect(button.getAttribute("title")).toBe("Add an Alpaca key in Settings to fetch stock prices."),
+    );
   });
 
   it("says so when Fill in missing failed", async () => {

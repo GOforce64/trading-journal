@@ -77,9 +77,14 @@ export function useFillResults(): FillResult[] {
   });
 }
 
-/** Whether a working Alpaca key is set up, from the Settings status. */
-export function useMarketOn(): boolean {
-  const { data } = useQuery({
+/**
+ * The Alpaca key's state, from the Settings status: on, off (none set up), error (Alpaca refused it), loading while
+ * the status is fetched, and unknown when it couldn't be.
+ */
+export type MarketState = "on" | "off" | "error" | "loading" | "unknown";
+
+export function useMarketState(): MarketState {
+  const { data, isPending, isError } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => {
       const res = await api.api.settings.$get();
@@ -87,8 +92,21 @@ export function useMarketOn(): boolean {
       return res.json();
     },
   });
-  return data?.marketData?.state === "on";
+  if (isPending) return "loading";
+  if (isError) return "unknown";
+  return data?.marketData?.state ?? "off";
 }
+
+/** Whether a working Alpaca key is set up. */
+export const useMarketOn = (): boolean => useMarketState() === "on";
+
+/** Why no stock price can be fetched, for each key state but on. */
+export const MARKET_COPY: Record<Exclude<MarketState, "on">, string> = {
+  off: "Add an Alpaca key in Settings to fetch stock prices.",
+  error: "Alpaca refused the key: check it in Settings.",
+  loading: "Checking the Alpaca key…",
+  unknown: "Couldn't check the Alpaca key: reload to try again.",
+};
 
 /** Why the newest fill that tried this trade's price for that side couldn't fill it. */
 export function lastReason(
@@ -107,18 +125,18 @@ export interface PriceNoteInput {
   /** When the price should have been read: the trade's openedAt or closedAt. */
   at: number;
   fetching: boolean;
-  marketOn: boolean;
+  market: MarketState;
   lastReason: MissingReason | null;
   now: number;
 }
 
 /** Why a stock price is missing, in the trade page's words (spec §9.2). */
-export function priceNote({ at, fetching, marketOn, lastReason: reason, now }: PriceNoteInput): string {
+export function priceNote({ at, fetching, market, lastReason: reason, now }: PriceNoteInput): string {
   if (fetching) return MOVE_COPY.fetching;
   const moment = sessionMoment(at);
   if (!isTradingDay(nyDate(moment))) return MOVE_COPY.no_session;
   if (moment > now - ALPACA_DELAY_MS) return MOVE_COPY.too_recent;
-  if (!marketOn) return MOVE_COPY.noKey;
+  if (market !== "on") return MARKET_COPY[market];
   return reason ? MOVE_COPY[reason] : MOVE_COPY.notFetched;
 }
 
