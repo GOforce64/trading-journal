@@ -45,8 +45,34 @@ function shownAtOnce(body: TradePatchBody) {
 }
 
 /**
- * Saves part of a trade (scalp-review spec §7.3). The review's fields change on the page at once and go back if
- * the server refuses. Afterwards the trade, the lists and the queue refetch, after a refusal too.
+ * The levels a save sends, shown at once too, so a second edit before the refetch (a blur then ✕, two drops) builds
+ * on the first instead of the list last fetched. The server's rules: a basis change clears the stop and targets
+ * unless the same save sets them, and the typed overrides stay.
+ */
+function levelsShownAtOnce(before: TradeDetailView, body: TradePatchBody) {
+  const patch = body.scalp;
+  const basis = patch?.levelBasis ?? before.scalp?.levelBasis;
+  if (!patch || !basis) return {};
+  const kept = before.scalp?.levelBasis === basis ? before.scalp : null;
+  return {
+    scalp: {
+      tradeId: before.id,
+      levelBasis: basis,
+      stopPrice: patch.stopPrice !== undefined ? patch.stopPrice : (kept?.stopPrice ?? null),
+      targets: patch.targets ?? kept?.targets ?? [],
+      stockEntryOverride:
+        patch.stockEntryOverride !== undefined
+          ? patch.stockEntryOverride
+          : (before.scalp?.stockEntryOverride ?? null),
+      riskOverride:
+        patch.riskOverride !== undefined ? patch.riskOverride : (before.scalp?.riskOverride ?? null),
+    },
+  };
+}
+
+/**
+ * Saves part of a trade (scalp-review spec §7.3). The review's fields and levels change on the page at once and go
+ * back if the server refuses. Afterwards the trade, the lists and the queue refetch, after a refusal too.
  */
 export function useSaveTrade(tradeId: string) {
   const queryClient = useQueryClient();
@@ -60,7 +86,13 @@ export function useSaveTrade(tradeId: string) {
     onMutate: async (body) => {
       await queryClient.cancelQueries({ queryKey: key });
       const before = queryClient.getQueryData<TradeDetailView>(key);
-      if (before) queryClient.setQueryData(key, { ...before, ...shownAtOnce(body) });
+      if (before) {
+        queryClient.setQueryData(key, {
+          ...before,
+          ...shownAtOnce(body),
+          ...levelsShownAtOnce(before, body),
+        });
+      }
       return { before };
     },
     onError: (_error, _body, context) => {

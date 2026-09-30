@@ -379,6 +379,41 @@ describe("ScalpWorkspace levels", () => {
     );
   });
 
+  it("builds a second edit on the first while the first is still saving", async () => {
+    let answer: () => void = () => {};
+    const trade = {
+      ...SCALP,
+      legs: [{ ...LEG, quantity: 3 }],
+      scalp: {
+        ...STOCK,
+        targets: [
+          { price: 233, contracts: 1 },
+          { price: 234.5, contracts: 1 },
+        ],
+      },
+    };
+    const fetchMock = stubApi({
+      trade,
+      patch: () =>
+        new Promise<Response>((resolve) => {
+          answer = () => resolve(json(trade));
+        }) as unknown as Response,
+    });
+    renderWorkspace();
+    const contracts = await screen.findByRole("textbox", { name: "T1 contracts" });
+    act(() => contracts.focus());
+    fireEvent.change(contracts, { target: { value: "2" } });
+    act(() => contracts.blur());
+    await waitFor(() => expect(patches(fetchMock)).toHaveLength(1));
+    // Before the first save answers, T2 goes: the list sent keeps T1's new contracts.
+    fireEvent.click(screen.getByRole("button", { name: "Remove T2" }));
+    await waitFor(() => expect(patches(fetchMock)).toHaveLength(2));
+    expect(patches(fetchMock)[1]).toEqual({
+      scalp: { levelBasis: "stock", targets: [{ price: 233, contracts: 2 }] },
+    });
+    act(() => answer());
+  });
+
   it("changes a target's contracts", async () => {
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
     renderWorkspace();
