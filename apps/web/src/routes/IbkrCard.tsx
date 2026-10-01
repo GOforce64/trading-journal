@@ -21,7 +21,6 @@ function ignoredLine(ignored: SyncSummary["ignored"]): string | null {
   return parts.length > 0 ? `${parts.join(", ")} ignored.` : null;
 }
 
-/** The IBKR sync on Import / Sync: what the last run did, and a button to run one (spec §9.2). */
 /** Identical skipped trades (same ticker, time and reason) as one line with a count: they have no ids of their own. */
 function groupSkipped<S extends { ticker: string; openedAt: number; reason: string }>(skipped: readonly S[]) {
   const groups = new Map<string, { key: string; skip: S; count: number }>();
@@ -34,6 +33,7 @@ function groupSkipped<S extends { ticker: string; openedAt: number; reason: stri
   return [...groups.values()];
 }
 
+/** The IBKR sync on Import / Sync: what the last run did, and a button to run one (spec §9.2). */
 export function IbkrCard() {
   const status = useIbkrStatus();
   const sync = useIbkrSync();

@@ -35,7 +35,7 @@ function KeptEdits({ tradeId, onOutcome }: { tradeId: string; onOutcome: (outcom
       onOutcome(
         summary.status === "ok"
           ? null
-          : `Handed back to IBKR, but the sync failed: ${summary.error?.message ?? "it didn't run"} The next sync brings IBKR's numbers.`,
+          : `Handed back to IBKR, but the sync failed: ${summary.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
       );
       await afterSync(summary);
     },

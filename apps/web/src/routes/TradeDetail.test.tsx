@@ -775,6 +775,21 @@ describe("TradeDetail for a scalp", () => {
     ).toBeTruthy();
   });
 
+  it("says so in a sentence of its own when the sync didn't run at all", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
+      status: "not_configured",
+      error: null,
+      changedTradeIds: [],
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
+    expect(
+      await screen.findByText(
+        "Handed back to IBKR, but the sync failed: it didn't run. The next sync brings IBKR's numbers.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("shows no banner, and asks nothing of IBKR, on a synced trade the user hasn't changed", async () => {
     const fetchMock = stubSynced(nvda);
     renderDetail();
