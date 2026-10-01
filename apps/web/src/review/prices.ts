@@ -8,6 +8,8 @@ export type PriceFillResult = Awaited<ReturnType<PriceFillResponse["json"]>>;
 type PriceReason = PriceFillResult["missing"][number]["reason"];
 
 export const PRICE_FILL_KEY = ["fill-scalp-prices"];
+/** The filler takes at most this many ids a request. */
+const BATCH = 1000;
 /** How long to wait before asking again for a price Alpaca's delay held back. */
 export const RETRY_MS = 60_000;
 
@@ -24,9 +26,22 @@ export function useFillScalpPrices() {
   return useMutation({
     mutationKey: PRICE_FILL_KEY,
     mutationFn: async (tradeIds: string[]): Promise<PriceFillResult> => {
-      const res = await api.api.risk.fill.$post({ json: { tradeIds } });
-      if (!res.ok) throw new Error(`fetching the stock price failed: ${res.status}`);
-      return res.json();
+      // The server takes 1,000 ids a request; a longer list, such as a first sync's, goes in batches answered as one.
+      let merged: PriceFillResult = { filled: 0, missing: [], unavailable: null };
+      for (let start = 0; start < tradeIds.length; start += BATCH) {
+        const res = await api.api.risk.fill.$post({
+          json: { tradeIds: tradeIds.slice(start, start + BATCH) },
+        });
+        if (!res.ok) throw new Error(`fetching the stock price failed: ${res.status}`);
+        const result = await res.json();
+        merged = {
+          filled: merged.filled + result.filled,
+          missing: [...merged.missing, ...result.missing],
+          unavailable: result.unavailable,
+        };
+        if (result.unavailable) break;
+      }
+      return merged;
     },
     // On the hook rather than on mutate, so it still runs after the page that asked has moved on. A run that
     // stored nothing (Alpaca's delay held every price back) changes no trade, so nothing refetches.
@@ -151,9 +166,6 @@ export const BACKFILL_COPY = {
   failed: "Couldn't fetch stock prices: reload to try again.",
 } as const;
 
-/** The filler takes at most this many ids a request. */
-const BATCH = 1000;
-
 export interface BackfillState {
   /** How many scalps a fill is running for; 0 when none is. */
   fetching: number;
@@ -177,14 +189,12 @@ export function useBackfillPrices(trades: readonly TradeView[] | undefined): Bac
       setState({ fetching: ids.length, problem: null });
       let problem: string | null = null;
       const later: string[] = [];
-      for (let start = 0; start < ids.length && problem == null; start += BATCH) {
-        try {
-          const result = await mutateAsync(ids.slice(start, start + BATCH));
-          if (result.unavailable) problem = BACKFILL_COPY[result.unavailable.reason];
-          for (const gap of result.missing) if (gap.reason === "too_recent") later.push(gap.tradeId);
-        } catch {
-          problem = BACKFILL_COPY.failed;
-        }
+      try {
+        const result = await mutateAsync(ids);
+        if (result.unavailable) problem = BACKFILL_COPY[result.unavailable.reason];
+        for (const gap of result.missing) if (gap.reason === "too_recent") later.push(gap.tradeId);
+      } catch {
+        problem = BACKFILL_COPY.failed;
       }
       setState({ fetching: 0, problem });
       setRecent(later);

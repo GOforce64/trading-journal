@@ -3,7 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TradeView } from "../api.js";
-import { needsPrices, useAutoFillPrices, useBackfillPrices, usePriceNote } from "./prices.js";
+import {
+  needsPrices,
+  useAutoFillPrices,
+  useBackfillPrices,
+  useFillScalpPrices,
+  usePriceNote,
+} from "./prices.js";
 
 const FULL = { entryPrice: 230.83, holdHigh: 233.21, holdLow: 230.71 };
 const scalp = (id: string, scalpPrices: unknown = null, closedAt: number | null = 2) =>
@@ -50,6 +56,26 @@ const filledAll = () => ({ filled: 1, missing: [], unavailable: null });
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("useFillScalpPrices", () => {
+  it("sends a long list, such as a first sync's changed trades, in requests of at most 1,000 ids", async () => {
+    const fetchMock = stubFill((tradeIds) => ({ filled: tradeIds.length, missing: [], unavailable: null }));
+    const hook: { fill?: ReturnType<typeof useFillScalpPrices> } = {};
+    function Probe() {
+      hook.fill = useFillScalpPrices();
+      return null;
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Probe />
+      </QueryClientProvider>,
+    );
+    const ids = Array.from({ length: 1001 }, (_, index) => `t${index}`);
+    const result = await hook.fill?.mutateAsync(ids);
+    expect(bodies(fetchMock).map((body) => body.tradeIds.length)).toEqual([1000, 1]);
+    expect(result).toEqual({ filled: 1001, missing: [], unavailable: null });
+  });
 });
 
 describe("needsPrices", () => {
