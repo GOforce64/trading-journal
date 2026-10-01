@@ -1,12 +1,13 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDatabase, runMigrations } from "@tj/db";
 import { type AppDeps, createApp } from "./app.js";
 import type { MarketSources } from "./marketData.js";
 
-const MIGRATIONS = fileURLToPath(new URL("../../../packages/db/migrations", import.meta.url));
+// Not `new URL(…, import.meta.url)`: under the web tests Vite rewrites that into an asset URL.
+const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), "../../../packages/db/migrations");
 
 /** Passes the server's Host check. */
 export const LOCAL = { host: "localhost" };
