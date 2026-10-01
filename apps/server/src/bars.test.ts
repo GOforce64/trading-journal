@@ -91,6 +91,15 @@ describe("GET /api/bars/:symbol", () => {
     );
   });
 
+  it("asks for nothing of a session day's today before the premarket opens at 04:00, and doesn't call it partial", async () => {
+    const early = Date.UTC(2026, 8, 30, 6, 0); // Wed Sep 30, 02:00 ET
+    const { minuteBars, get } = setup({ minuteBars: async () => [MONDAY] }, true, early);
+    const answer = await get("/api/bars/NVDA?from=2026-09-28&to=2026-09-30");
+    expect(answer.body).toMatchObject({ bars: [MONDAY], partial: false });
+    // Only the finished days: today has no bars before 04:00, and a partial answer would be refetched every minute.
+    expect(minuteBars).toHaveBeenCalledTimes(1);
+  });
+
   it("ends the finished days' request 16 minutes ago just after midnight, not at midnight", async () => {
     const justAfter = Date.UTC(2026, 8, 30, 4, 5); // Wed Sep 30, 00:05 ET
     const { minuteBars, get } = setup({ minuteBars: async () => [MONDAY] }, true, justAfter);

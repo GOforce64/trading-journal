@@ -5,6 +5,7 @@ import {
   nyClock,
   nyDate,
   nyWallClock,
+  PREMARKET_OPEN,
   type PriceBar,
   SESSION_END,
 } from "@tj/core";
@@ -89,8 +90,10 @@ export function createBarService({
       const finished = datesBetween(from, last).filter((date) => date < today);
       const known = repo.knownDays(symbol, "1m", finished);
       const missing = finished.filter((date) => !known.has(date));
-      // A weekend or holiday has no session: nothing to fetch, and nothing partial about it.
-      const wantsToday = last === today && from <= today && isTradingDay(today);
+      // A weekend or holiday has no session, and a session day none before the premarket opens: nothing to fetch,
+      // and nothing partial about it.
+      const wantsToday =
+        last === today && from <= today && isTradingDay(today) && nyClock(now()).minute >= PREMARKET_OPEN;
       const sources = market?.sources() ?? null;
       if ((missing.length > 0 || wantsToday) && !sources)
         return { bars: [], partial: false, unavailable: NO_KEY };
