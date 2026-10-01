@@ -379,6 +379,23 @@ describe("ScalpWorkspace levels", () => {
     );
   });
 
+  it("drops the new target on Esc in its contracts field, as Esc in its price field does", async () => {
+    const fetchMock = stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 3 }],
+        scalp: { ...STOCK, targets: [{ price: 234.5, contracts: 1 }] },
+      },
+    });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    fireEvent.change(field("T2 price"), { target: { value: "236" } });
+    act(() => field("T2 contracts").focus());
+    fireEvent.keyDown(field("T2 contracts"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "T2 price" })).toBeNull());
+    expect(patches(fetchMock)).toEqual([]);
+  });
+
   it("builds a second edit on the first while the first is still saving", async () => {
     let answer: () => void = () => {};
     const trade = {

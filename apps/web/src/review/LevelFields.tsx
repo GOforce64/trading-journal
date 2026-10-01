@@ -170,7 +170,7 @@ function TargetRow({
 
 /**
  * The target being added: its price, typed or clicked on the chart, and its contracts. Tab from the price to the
- * contracts keeps the typed price; leaving the row saves the two together.
+ * contracts keeps the typed price; leaving the row saves the two together, and Esc in either field drops it.
  */
 function DraftRow({ levels }: { levels: Levels }) {
   const row = useRef<HTMLDivElement>(null);
@@ -199,6 +199,7 @@ function DraftRow({ levels }: { levels: Levels }) {
         live
         within={row}
         onLeave={() => commitPrice.current?.()}
+        onCancel={() => levels.cancelDraft()}
         onSave={levels.setDraft}
       />
     </div>
@@ -357,6 +358,7 @@ function ContractsInput({
   live = false,
   within,
   onLeave,
+  onCancel,
   onSave,
 }: {
   name: string;
@@ -365,6 +367,8 @@ function ContractsInput({
   /** The row this field sits in; `onLeave` runs when the focus leaves it from here. */
   within?: RefObject<HTMLElement | null>;
   onLeave?(): void;
+  /** Esc: drops what the row was adding, as Esc in its price field does, instead of leaving it. */
+  onCancel?(): void;
   onSave(contracts: number): void;
 }) {
   const [text, setText] = useState<string | null>(null);
@@ -379,7 +383,8 @@ function ContractsInput({
     if (wasEscaped || typed === "") {
       setText(null);
       setProblem(null);
-      if (left) onLeave?.();
+      if (wasEscaped && onCancel) onCancel();
+      else if (left) onLeave?.();
       return;
     }
     const contracts = parseContracts(typed);
