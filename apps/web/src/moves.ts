@@ -5,16 +5,19 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { isTradingDay, nyDate, sessionMoment } from "@tj/core";
+import { ALPACA_DELAY_MS, isTradingDay, nyDate, sessionMoment } from "@tj/core";
 import { api, type FillResult } from "./api.js";
 
 export type PriceSide = FillResult["missing"][number]["side"];
 export type MissingReason = FillResult["missing"][number]["reason"];
 
 export const FILL_KEY = ["fill-moves"];
+/** The most ids the fill endpoint takes a request. */
+const FILL_BATCH = 1000;
 
-/** Alpaca's free plan shares SIP prices 15 minutes after the fact; the server waits a minute more. */
-const RECENT_MS = 16 * 60_000;
+/** Why a fill failed, for the pages that started it. */
+export const fillFailure = (error: unknown, hint = "") =>
+  `Couldn't fetch stock prices: ${error instanceof Error ? error.message : String(error)}.${hint}`;
 
 export const MOVE_COPY = {
   noKey: "Add an Alpaca key in Settings to fetch stock prices.",
@@ -34,9 +37,24 @@ export function useFillMoves() {
   return useMutation({
     mutationKey: FILL_KEY,
     mutationFn: async (tradeIds?: string[]): Promise<FillResult> => {
-      const res = await api.api.moves.fill.$post({ json: tradeIds ? { tradeIds } : {} });
-      if (!res.ok) throw new Error(`fill failed: ${res.status}`);
-      return res.json();
+      const post = async (json: { tradeIds?: string[] }) => {
+        const res = await api.api.moves.fill.$post({ json });
+        if (!res.ok) throw new Error(`the server answered ${res.status}`);
+        return res.json();
+      };
+      if (!tradeIds) return post({});
+      // The server takes 1,000 ids a request; a bigger import goes in batches, answered as one.
+      let merged: FillResult = { filled: 0, missing: [], unavailable: null };
+      for (let start = 0; start < tradeIds.length; start += FILL_BATCH) {
+        const result = await post({ tradeIds: tradeIds.slice(start, start + FILL_BATCH) });
+        merged = {
+          filled: merged.filled + result.filled,
+          missing: [...merged.missing, ...result.missing],
+          unavailable: result.unavailable,
+        };
+        if (result.unavailable) break;
+      }
+      return merged;
     },
     // On the hook rather than on mutate, so it still runs after the page that saved has moved on.
     onSettled: () =>
@@ -59,9 +77,14 @@ export function useFillResults(): FillResult[] {
   });
 }
 
-/** Whether a working Alpaca key is set up, from the Settings status. */
-export function useMarketOn(): boolean {
-  const { data } = useQuery({
+/**
+ * The Alpaca key's state, from the Settings status: on, off (none set up), error (Alpaca refused it), loading while
+ * the status is fetched, and unknown when it couldn't be.
+ */
+export type MarketState = "on" | "off" | "error" | "loading" | "unknown";
+
+export function useMarketState(): MarketState {
+  const { data, isPending, isError } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => {
       const res = await api.api.settings.$get();
@@ -69,8 +92,21 @@ export function useMarketOn(): boolean {
       return res.json();
     },
   });
-  return data?.marketData?.state === "on";
+  if (isPending) return "loading";
+  if (isError) return "unknown";
+  return data?.marketData?.state ?? "off";
 }
+
+/** Whether a working Alpaca key is set up. */
+export const useMarketOn = (): boolean => useMarketState() === "on";
+
+/** Why no stock price can be fetched, for each key state but on. */
+export const MARKET_COPY: Record<Exclude<MarketState, "on">, string> = {
+  off: "Add an Alpaca key in Settings to fetch stock prices.",
+  error: "Alpaca refused the key: check it in Settings.",
+  loading: "Checking the Alpaca key…",
+  unknown: "Couldn't check the Alpaca key: reload to try again.",
+};
 
 /** Why the newest fill that tried this trade's price for that side couldn't fill it. */
 export function lastReason(
@@ -89,18 +125,18 @@ export interface PriceNoteInput {
   /** When the price should have been read: the trade's openedAt or closedAt. */
   at: number;
   fetching: boolean;
-  marketOn: boolean;
+  market: MarketState;
   lastReason: MissingReason | null;
   now: number;
 }
 
 /** Why a stock price is missing, in the trade page's words (spec §9.2). */
-export function priceNote({ at, fetching, marketOn, lastReason: reason, now }: PriceNoteInput): string {
+export function priceNote({ at, fetching, market, lastReason: reason, now }: PriceNoteInput): string {
   if (fetching) return MOVE_COPY.fetching;
   const moment = sessionMoment(at);
   if (!isTradingDay(nyDate(moment))) return MOVE_COPY.no_session;
-  if (moment > now - RECENT_MS) return MOVE_COPY.too_recent;
-  if (!marketOn) return MOVE_COPY.noKey;
+  if (moment > now - ALPACA_DELAY_MS) return MOVE_COPY.too_recent;
+  if (market !== "on") return MARKET_COPY[market];
   return reason ? MOVE_COPY[reason] : MOVE_COPY.notFetched;
 }
 

@@ -107,17 +107,19 @@ describe("runMigrations", () => {
     );
   });
 
-  it("keeps only the most recent backups", () => {
+  it("keeps only the most recent pre-migration backups, leaving other files alone", () => {
     const dir = tempDir();
     const file = join(dir, "journal.db");
     const backupDir = join(dir, "backups");
     runMigrations(file, { migrationsFolder: MIGRATIONS });
     runMigrations(file, { migrationsFolder: MIGRATIONS, backupDir });
-    for (let index = 0; index < 4; index++) {
-      writeFileSync(join(backupDir, `journal-old-${index}.db`), "x");
+    writeFileSync(join(backupDir, "journal-before-notes-merge.db"), "x");
+    for (let index = 0; index < 3; index++) {
+      runMigrations(file, { migrationsFolder: MIGRATIONS, backupDir, keepBackups: 2 });
     }
-    runMigrations(file, { migrationsFolder: MIGRATIONS, backupDir, keepBackups: 2 });
-    expect(readdirSync(backupDir).filter((name) => name.endsWith(".db"))).toHaveLength(2);
+    const names = readdirSync(backupDir);
+    expect(names.filter((name) => name.startsWith("journal-migration-"))).toHaveLength(2);
+    expect(names).toContain("journal-before-notes-merge.db");
   });
 
   it("adds the fills and sync_state tables, and the facts_edited_at column", () => {

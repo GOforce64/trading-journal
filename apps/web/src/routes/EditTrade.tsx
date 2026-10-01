@@ -1,25 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type MoveValue, settleExpiry, tradeMoves } from "@tj/core";
 import { api, type TradeView } from "../api.js";
-import { Panel } from "../components/ui.js";
+import { Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
-import { settleProposal } from "../settle.js";
+import { dayText, noCloseReason, settleProposal } from "../settle.js";
 import { IronFlyForm, type IronFlyFormValues, type LegFields, type OverrideKey } from "./IronFlyForm.js";
 import { ScalpForm, type ScalpFormValues } from "./ScalpForm.js";
 
-/** datetime-local wants local wall-clock text, not an ISO instant. */
+/**
+ * datetime-local wants local wall-clock text, not an ISO instant. Seconds are kept when there are any: a synced
+ * scalp's fill at 09:31:05 prices R from 5 s into its minute, and a save must not move it to 09:31:00.
+ */
 function toLocalInput(epochMs: number | null): string {
   if (epochMs == null) return "";
   const date = new Date(epochMs);
   const pad = (value: number) => String(value).padStart(2, "0");
+  const seconds = date.getSeconds() === 0 ? "" : `:${pad(date.getSeconds())}`;
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
     date.getMinutes(),
-  )}`;
+  )}${seconds}`;
 }
 
 const asText = (value: number | null | undefined): string => (value == null ? "" : String(value));
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 function legFields(legs: TradeView["legs"], right: "C" | "P", short: boolean): LegFields {
   const leg = legs.find((candidate) => candidate.right === right && candidate.quantity < 0 === short);
@@ -137,8 +140,8 @@ export function EditTrade({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trade", tradeId] });
       queryClient.invalidateQueries({ queryKey: ["trades"] });
-      // The saved times may have moved, which clears their prices.
-      fill.mutate([tradeId]);
+      // The saved times may have moved, which clears a fly's move prices. A scalp has none: its page fetches its own.
+      if (trade?.strategy === "iron_fly") fill.mutate([tradeId]);
       onSaved?.(tradeId);
     },
   });
@@ -186,7 +189,15 @@ export function EditTrade({
       {proposal && (
         <p className="text-[11px] text-muted">
           Exits proposed at intrinsic value from {trade.underlying}'s {usd(proposal.close)} close on{" "}
-          {proposal.expiry}. Check them and the fees, then save.
+          {dayText(proposal.expiry)}. Check them and the fees, then save.
+        </p>
+      )}
+      {/* Asked to settle, with nothing to propose: say why, rather than show the plain form. */}
+      {settle && !proposal && (
+        <p className="text-[11px] text-muted">
+          {expiry
+            ? noCloseReason(trade.underlying, expiry, close, ": type the exits below")
+            : "Nothing to settle: every leg has its exit, or the open legs expire on different dates."}
         </p>
       )}
       <IronFlyForm

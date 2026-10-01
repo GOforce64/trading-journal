@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, pctKept, round2 } from "@tj/core";
+import { closeEstimate, type OptionQuote, pctKept, returnOnCost, round2 } from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
-import { Chip, Money, Panel, Pct, Tile } from "../components/ui.js";
+import { Chip, Money, Panel, Pct, premiumText, Tile, usd } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
@@ -13,8 +13,6 @@ import { MoveTiles } from "./MoveTiles.js";
 import { ScalpTiles } from "./ScalpTiles.js";
 import { SettlePanel } from "./SettlePanel.js";
 import { SyncedBanner } from "./SyncedBanner.js";
-
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Cash paid (positive) or received (negative) to open a leg. */
 const legCost = (leg: { quantity: number; multiplier: number; openPrice: number }) =>
@@ -97,8 +95,13 @@ export function TradeDetail({
             <Money value={trade.netPnl} />
           )}
         </span>
-        <span className="text-[18px]">
-          <Pct value={metrics?.pnlPctOfCost ?? null} />
+        {/* A fly's P&L against max profit (its metrics need both wings, % kept doesn't); a scalp's return on cost. */}
+        <span data-testid="header-pct" className="text-[18px]">
+          <Pct
+            value={
+              trade.strategy === "scalp" ? returnOnCost(trade) : (metrics?.pnlPctOfCost ?? pctKept(trade))
+            }
+          />
         </span>
         <button
           type="button"
@@ -220,8 +223,10 @@ export function TradeDetail({
                     <td>{leg.strike.toFixed(2)}</td>
                     <td>{leg.expiry.slice(5)}</td>
                     <td className="text-right">{leg.quantity}</td>
-                    <td className="text-right">{leg.openPrice.toFixed(2)}</td>
-                    <td className="text-right">{leg.closePrice?.toFixed(2) ?? "—"}</td>
+                    <td className="text-right">{premiumText(leg.openPrice)}</td>
+                    <td className="text-right">
+                      {leg.closePrice == null ? "—" : premiumText(leg.closePrice)}
+                    </td>
                     <td className="text-right">
                       <Money value={legCost(leg)} />
                     </td>

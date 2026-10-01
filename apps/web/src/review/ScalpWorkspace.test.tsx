@@ -347,6 +347,90 @@ describe("ScalpWorkspace levels", () => {
     );
   });
 
+  it("keeps a typed target price when Tab moves to its contracts, and saves both on leaving the row", async () => {
+    const fetchMock = stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 3 }],
+        scalp: { ...STOCK, targets: [{ price: 234.5, contracts: 1 }] },
+      },
+    });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    fireEvent.change(field("T2 price"), { target: { value: "236" } });
+    act(() => field("T2 contracts").focus());
+    // Nothing is saved with the default 2 contracts: the row stays open for the count.
+    expect(patches(fetchMock)).toEqual([]);
+    expect(field("T2 price").value).toBe("236");
+    fireEvent.change(field("T2 contracts"), { target: { value: "1" } });
+    act(() => field("T2 contracts").blur());
+    await waitFor(() =>
+      expect(patches(fetchMock)).toEqual([
+        {
+          scalp: {
+            levelBasis: "stock",
+            targets: [
+              { price: 234.5, contracts: 1 },
+              { price: 236, contracts: 1 },
+            ],
+          },
+        },
+      ]),
+    );
+  });
+
+  it("drops the new target on Esc in its contracts field, as Esc in its price field does", async () => {
+    const fetchMock = stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 3 }],
+        scalp: { ...STOCK, targets: [{ price: 234.5, contracts: 1 }] },
+      },
+    });
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Target" }));
+    fireEvent.change(field("T2 price"), { target: { value: "236" } });
+    act(() => field("T2 contracts").focus());
+    fireEvent.keyDown(field("T2 contracts"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "T2 price" })).toBeNull());
+    expect(patches(fetchMock)).toEqual([]);
+  });
+
+  it("builds a second edit on the first while the first is still saving", async () => {
+    let answer: () => void = () => {};
+    const trade = {
+      ...SCALP,
+      legs: [{ ...LEG, quantity: 3 }],
+      scalp: {
+        ...STOCK,
+        targets: [
+          { price: 233, contracts: 1 },
+          { price: 234.5, contracts: 1 },
+        ],
+      },
+    };
+    const fetchMock = stubApi({
+      trade,
+      patch: () =>
+        new Promise<Response>((resolve) => {
+          answer = () => resolve(json(trade));
+        }) as unknown as Response,
+    });
+    renderWorkspace();
+    const contracts = await screen.findByRole("textbox", { name: "T1 contracts" });
+    act(() => contracts.focus());
+    fireEvent.change(contracts, { target: { value: "2" } });
+    act(() => contracts.blur());
+    await waitFor(() => expect(patches(fetchMock)).toHaveLength(1));
+    // Before the first save answers, T2 goes: the list sent keeps T1's new contracts.
+    fireEvent.click(screen.getByRole("button", { name: "Remove T2" }));
+    await waitFor(() => expect(patches(fetchMock)).toHaveLength(2));
+    expect(patches(fetchMock)[1]).toEqual({
+      scalp: { levelBasis: "stock", targets: [{ price: 233, contracts: 2 }] },
+    });
+    act(() => answer());
+  });
+
   it("changes a target's contracts", async () => {
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: STOCK } });
     renderWorkspace();
@@ -359,6 +443,28 @@ describe("ScalpWorkspace levels", () => {
         { scalp: { levelBasis: "stock", targets: [{ price: 234.5, contracts: 1 }] } },
       ]),
     );
+  });
+
+  it("warns when the saved targets trim more than the position holds, as after a size edit", async () => {
+    stubApi({
+      trade: {
+        ...SCALP,
+        legs: [{ ...LEG, quantity: 1 }],
+        scalp: {
+          ...STOCK,
+          targets: [
+            { price: 233, contracts: 1 },
+            { price: 234.5, contracts: 1 },
+          ],
+        },
+      },
+    });
+    renderWorkspace();
+    expect(
+      await screen.findByText(
+        "The targets trim 2 contracts; the position has 1. Lower a target's contracts or remove one.",
+      ),
+    ).toBeTruthy();
   });
 
   it("refuses a list that trims more than the position, sending nothing", async () => {

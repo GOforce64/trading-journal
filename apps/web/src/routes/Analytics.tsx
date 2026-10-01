@@ -86,10 +86,14 @@ function FilterRow({
   const [customOpen, setCustomOpen] = useState(false);
   const showCustom = customOpen || preset === "custom";
   const books = search.books ? [search.books] : ["live", "paper"];
-  // Archived setups stay out of the list unless the link names one.
+  // Archived setups stay out of the list unless the link names one. A linked setup the list doesn't have yet (the
+  // setups still loading, or failed) still filters the trades, so it keeps an option rather than showing All.
   const setupOptions = setups
     .filter((setup) => !setup.archived || setup.id === search.setup)
     .sort((a, b) => a.name.localeCompare(b.name));
+  if (search.setup && !setupOptions.some((setup) => setup.id === search.setup)) {
+    setupOptions.unshift({ id: search.setup, name: "this setup" } as Setup);
+  }
 
   // One book must stay on: switching off the other leaves just this one, and the last one can't be switched off.
   const toggleBook = (book: "live" | "paper") => {

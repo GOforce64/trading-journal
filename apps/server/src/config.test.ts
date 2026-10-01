@@ -67,6 +67,17 @@ describe("readSecrets", () => {
     expect(() => readSecrets(file)).not.toThrow(/shh-secret/);
   });
 
+  it("reads one entry without judging the other, so a broken IBKR entry leaves the Alpaca key working", () => {
+    const file = secretsFile(
+      JSON.stringify({
+        alpaca: { keyId: "PKTEST", secretKey: "shh-secret" },
+        ibkr: { token: "", since: "yesterday" },
+      }),
+    );
+    expect(readSecrets(file, "alpaca").alpaca).toEqual({ keyId: "PKTEST", secretKey: "shh-secret" });
+    expect(() => readSecrets(file, "ibkr")).toThrow(/ibkr\.token/);
+  });
+
   it("names the field that is missing from the Alpaca entry", () => {
     const file = secretsFile(JSON.stringify({ alpaca: { keyId: "PKTEST" } }));
     expect(() => readSecrets(file)).toThrow(/alpaca\.secretKey/);

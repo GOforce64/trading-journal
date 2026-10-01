@@ -1,4 +1,5 @@
 import { closedTrades, creditSplit, keptHistogram, keptStats, wingsSplit, wingWidthSplit } from "@tj/core";
+import { useMemo } from "react";
 import { KeptHistogram } from "../analytics/Charts.js";
 import { rememberEdges, resolveEdges } from "../analytics/edges.js";
 import { shareText } from "../analytics/format.js";
@@ -13,7 +14,10 @@ const wholeDollars = (value: number | null) =>
 
 /** How much credit the flies keep, and the splits only flies have (spec §7.3). */
 export function FliesTab({ trades, search, onSearch }: TabProps) {
-  const flies = closedTrades(trades.filter((trade) => trade.strategy === "iron_fly"));
+  const flies = useMemo(
+    () => closedTrades(trades.filter((trade) => trade.strategy === "iron_fly")),
+    [trades],
+  );
   const kept = keptStats(flies);
   const creditEdges = resolveEdges("credit", search.creditEdges);
   const tickers = new Map(flies.map((trade) => [trade.id, trade.underlying]));

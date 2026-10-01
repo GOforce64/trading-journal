@@ -132,7 +132,7 @@ The code repository contains **no user data, ever**.
 - **Contents:**
   - `journal.db`: all trades and settings
   - `attachments/<sha256>.<ext>`: screenshots, content-addressed
-  - `backups/`: automatic DB snapshot before every migration, import and merge (the last 10 are kept)
+  - `backups/`: automatic DB snapshot before every migration, import and merge. Each kind is named for itself (`journal-migration-…`, `journal-import-…`) and keeps its last 10; backups from before the names count with whichever kind runs, so they go oldest first. Files the app didn't make stay. The bar cache is left out of each copy, since it's fetched again.
   - `secrets.json`: the Alpaca key (saved from Settings), IBKR Flex tokens and the Massive API key; file mode `0600` on Linux
   - `machine.json`: this installation's random `machineId`
 - `.gitignore` also blocks `*.db`, `*.tjbundle`, `secrets.json`, `data/` and `.env*` as a second line of defense.
@@ -159,7 +159,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 - **scalp_details** (1:1 with trade):
   - context: the stock at entry and its range over the hold are in `scalp_prices` (`entry_price`, `hold_high`, `hold_low`), fetched from minute bars ([2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md)). Calls count as long the stock, puts as short.
   - plan: `level_basis` (`stock` | `premium`), `stop_price`, `stock_entry_override` and `risk_override`, with the targets as rows of `scalp_targets` (`position`, `price`, `contracts`).
-  - risk model and outcome: worked out on read by `scalpRisk` in `core`, never stored. That's IV at entry, the option at the stop and at each target, planned risk and reward, R, R:R, and MAE/MFE in stock dollars and in R. Minutes after open and hold time come with the scalp analytics.
+  - risk model and outcome: worked out on read by `scalpRisk` in `core`, never stored. That's IV at entry, the option at the stop and at each target, planned risk and reward, R, R:R, and MAE/MFE in stock dollars and in R. Minutes after open, hold time and option cost are worked out on read too, by the scalp analytics ([2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-analytics-design.md)).
   - missed trades only: `planned_entry_at`, `planned_entry_price`, `planned_exit_at`, `planned_exit_price`, `skip_reason`
 - **iron_fly_details** (1:1 with trade). All fields are nullable, because historical imports will be incomplete:
   - structure: `body_put_strike`, `body_call_strike` (equal for a standard fly, different for a broken one), `put_wing_strike`, `call_wing_strike`, `contracts`, `credit` (per share). **Wings do not have to be the same width**, so put-side and call-side risk are tracked separately.

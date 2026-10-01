@@ -100,10 +100,11 @@ export function tradeRoutes(db: Db, now?: () => number) {
       const query = c.req.valid("query");
       const filter = { strategy: query.strategy, book: query.book, underlying: query.underlying };
       if (query.review === "pending") {
-        // Every pending trade, oldest first: the queue must never stop at the newest 500.
+        // Every pending trade, oldest first: the queue must never stop at the newest 500. Only scalps can wait.
+        if (filter.strategy === "iron_fly") return c.json([]);
         return c.json(
           repo
-            .list({ ...filter, limit: null })
+            .list({ ...filter, strategy: "scalp", limit: null })
             .map(withMetrics)
             .filter((trade) => trade.review?.status === "pending")
             .reverse(),

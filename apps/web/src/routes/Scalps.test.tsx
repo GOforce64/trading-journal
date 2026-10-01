@@ -36,7 +36,11 @@ const scalp = {
 };
 
 /** Answers the scalps, the scalps waiting (`pending`), and an empty setup list. */
-function setup(onNewScalp?: () => void, pending: unknown[] = [scalp]) {
+function setup(
+  onNewScalp?: () => void,
+  pending: unknown[] = [scalp],
+  url: { tab?: "review"; onTab?: (tab: "review" | undefined) => void } = {},
+) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
     const body = url.includes("/api/setups") ? [] : url.includes("review=pending") ? pending : [scalp];
@@ -46,7 +50,7 @@ function setup(onNewScalp?: () => void, pending: unknown[] = [scalp]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <Scalps onNewScalp={onNewScalp} />
+      <Scalps onNewScalp={onNewScalp} tab={url.tab} onTab={url.onTab} />
     </QueryClientProvider>,
   );
   return fetchMock;
@@ -89,6 +93,16 @@ describe("Scalps", () => {
       ).toBe(true),
     );
     expect(await screen.findByText("NVDA")).toBeTruthy();
+  });
+
+  it("keeps its tab in the URL, so a reload or a link opens To review", async () => {
+    const onTab = vi.fn();
+    setup(undefined, [scalp], { tab: "review", onTab });
+    expect(await screen.findByText("To review")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(onTab).toHaveBeenCalledWith(undefined);
+    fireEvent.click(await screen.findByRole("button", { name: "To review (1)" }));
+    expect(onTab).toHaveBeenLastCalledWith("review");
   });
 
   it("says so when nothing waits", async () => {

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { IronFlyDetailsInput, NewTrade } from "@tj/core";
 import { nyWallClock } from "@tj/core";
 import { asc } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { scalpTargets } from "../schema.js";
@@ -105,6 +105,25 @@ describe("trades repository", () => {
     expect(trades.list({ book: "live" })).toHaveLength(1);
     expect(trades.list({ strategy: "scalp" })).toHaveLength(0);
     expect(trades.list()[0]?.openedAt).toBe(5000);
+  });
+
+  it("breaks a tie in open time by id, so the review queue's order never shuffles", () => {
+    const trades = repo();
+    const ids = Array.from({ length: 6 }, () => trades.create({ ...sampleFly, openedAt: 3000 }).id);
+    expect(trades.list().map((trade) => trade.id)).toEqual([...ids].sort().reverse());
+  });
+
+  it("reads a list's legs, details, levels, prices and tags a table at a time, not trade by trade", () => {
+    const trades = repo();
+    for (let index = 0; index < 20; index++) trades.create({ ...sampleFly, openedAt: 1000 + index });
+    // Drizzle keeps the better-sqlite3 handle on $client; every query prepares a statement there.
+    const client = (db as unknown as { $client: { prepare(sql: string): unknown } }).$client;
+    const prepare = vi.spyOn(client, "prepare");
+    const listed = trades.list();
+    expect(listed).toHaveLength(20);
+    expect(listed.every((trade) => trade.legs.length === 2 && trade.ironFly != null)).toBe(true);
+    expect(prepare.mock.calls.length).toBeLessThanOrEqual(8);
+    prepare.mockRestore();
   });
 
   it("hides excluded trades unless asked for them", () => {
@@ -703,6 +722,20 @@ describe("the scalp review", () => {
     );
   });
 
+  it("judges a value at the cent it's stored at, so 0.004 is refused as the 0 it would become", () => {
+    const id = repo().create(nvda).id;
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", stockEntryOverride: 0.004 } })).toThrow(
+      "A stock price must be above 0",
+    );
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", riskOverride: 0.004 } })).toThrow(
+      "A planned risk must be above 0",
+    );
+    expect(() => repo().update(id, { scalp: { levelBasis: "stock", stopPrice: 0.004 } })).toThrow(
+      "A stock price must be above 0",
+    );
+    expect(repo().get(id)?.scalp).toBeNull();
+  });
+
   it("lists scalps missing a fetched price, oldest first, and stores what the filler finds without an edit", () => {
     const closed = repo().create(nvda).id;
     const open = repo().create({
@@ -757,6 +790,23 @@ describe("the scalp review", () => {
     fetched();
     repo().update(id, { underlying: "AMD" });
     expect(repo().get(id)?.scalpPrices).toBeNull();
+  });
+
+  it("drops a typed stock at entry when the ticker changes or the entry moves to another minute", () => {
+    const id = repo().create(nvda).id;
+    const typed = () => repo().update(id, { scalp: { levelBasis: "stock", stockEntryOverride: 231 } });
+    const override = () => repo().get(id)?.scalp?.stockEntryOverride;
+    typed();
+    repo().update(id, { openedAt: nvda.openedAt + 20_000, closedAt: (nvda.closedAt ?? 0) + 60_000 });
+    expect(override()).toBe(231);
+    repo().update(id, { openedAt: nvda.openedAt + 60_000 });
+    expect(override()).toBeNull();
+    typed();
+    repo().update(id, { underlying: "AMD" });
+    expect(override()).toBeNull();
+    // A new stock typed with the move stands.
+    repo().update(id, { underlying: "NVDA", scalp: { stockEntryOverride: 230.5 } });
+    expect(override()).toBe(230.5);
   });
 
   it("compares a premarket scalp's times by the minute, not clamped to the session as a fly's are", () => {

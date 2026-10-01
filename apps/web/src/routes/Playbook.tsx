@@ -38,12 +38,19 @@ export interface PlaybookProps {
 export function Playbook({ onOpenSetup }: PlaybookProps) {
   // Shared by the cards and the Setups table.
   const [showArchived, setShowArchived] = useState(false);
-  const { data: trades } = useAllTrades();
-  const { data: setups = [] } = useSetups();
+  const { data: trades, isError: tradesFailed } = useAllTrades();
+  const { data: setups = [], isError: setupsFailed, isLoading: setupsLoading } = useSetups();
   useBackfillPrices(trades);
   return (
     <div className="flex flex-col gap-3">
-      <SetupCards trades={trades} setups={setups} showArchived={showArchived} onOpenSetup={onOpenSetup} />
+      <SetupCards
+        trades={trades}
+        setups={setups}
+        showArchived={showArchived}
+        onOpenSetup={onOpenSetup}
+        failed={tradesFailed || setupsFailed}
+        setupsLoading={setupsLoading}
+      />
       <SetupsPanel showArchived={showArchived} onShowArchived={setShowArchived} />
       <TagsPanel />
     </div>
@@ -73,6 +80,7 @@ function SetupsPanel({
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>({ name: "", strategy: "scalp", description: "" });
   const [problem, setProblem] = useState<string | null>(null);
+  const [archiveProblem, setArchiveProblem] = useState<string | null>(null);
   const shown = setups.filter((setup) => showArchived || !setup.archived);
 
   const edit = (id: string, from: Draft) => {
@@ -204,7 +212,15 @@ function SetupsPanel({
                   </button>{" "}
                   <button
                     type="button"
-                    onClick={() => update.mutate({ id: setup.id, patch: { archived: !setup.archived } })}
+                    onClick={() =>
+                      update.mutateAsync({ id: setup.id, patch: { archived: !setup.archived } }).then(
+                        () => setArchiveProblem(null),
+                        (error: unknown) =>
+                          setArchiveProblem(
+                            `Couldn't ${setup.archived ? "restore" : "archive"} ${setup.name}: ${messageOf(error)}`,
+                          ),
+                      )
+                    }
                     className={BUTTON}
                   >
                     {setup.archived ? "Restore" : "Archive"}
@@ -216,6 +232,7 @@ function SetupsPanel({
           {editing === "new" && editor}
         </tbody>
       </table>
+      {archiveProblem && <p className="mt-1 text-[11px] text-down">{archiveProblem}</p>}
     </Section>
   );
 }
@@ -246,6 +263,7 @@ function TagList({
   const update = useUpdateTag();
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [archiveProblem, setArchiveProblem] = useState<string | null>(null);
   const shown = tags.filter((tag) => tag.kind === kind && (showArchived || !tag.archived));
   return (
     <div>
@@ -272,7 +290,15 @@ function TagList({
             </button>
             <button
               type="button"
-              onClick={() => update.mutate({ id: tag.id, patch: { archived: !tag.archived } })}
+              onClick={() =>
+                update.mutateAsync({ id: tag.id, patch: { archived: !tag.archived } }).then(
+                  () => setArchiveProblem(null),
+                  (error: unknown) =>
+                    setArchiveProblem(
+                      `Couldn't ${tag.archived ? "restore" : "archive"} ${tag.name}: ${messageOf(error)}`,
+                    ),
+                )
+              }
               className={BUTTON}
             >
               {tag.archived ? "Restore" : "Archive"}
@@ -280,6 +306,7 @@ function TagList({
           </li>
         ))}
       </ul>
+      {archiveProblem && <p className="mt-1 text-[11px] text-down">{archiveProblem}</p>}
       <div className="mt-1">
         {adding ? (
           <NameField

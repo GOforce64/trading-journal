@@ -31,9 +31,15 @@ export interface HoldRange {
 
 /**
  * The stock's highest high and lowest low from `from`'s minute through `to`'s (spec §7). Null until the bars reach
- * `to`'s minute: a range cut short by minutes not yet published would understate MAE and MFE.
+ * `to`'s minute: a range cut short by minutes not yet published would understate MAE and MFE. `complete` says the
+ * bars are a finished day's, all there will ever be, so a thin name with no trade at or after the exit still gets one.
  */
-export function holdRange(bars: readonly PriceBar[], from: number, to: number): HoldRange | null {
+export function holdRange(
+  bars: readonly PriceBar[],
+  from: number,
+  to: number,
+  complete = false,
+): HoldRange | null {
   const first = Math.floor(from / MINUTE) * MINUTE;
   const last = Math.floor(to / MINUTE) * MINUTE;
   let range: HoldRange | null = null;
@@ -45,7 +51,7 @@ export function holdRange(bars: readonly PriceBar[], from: number, to: number): 
       ? { high: Math.max(range.high, bar.h), low: Math.min(range.low, bar.l) }
       : { high: bar.h, low: bar.l };
   }
-  return reached ? range : null;
+  return reached || complete ? range : null;
 }
 
 /** Targets in the order the trade reaches them (spec §6.4): falling prices for a put on stock, rising otherwise. */
@@ -238,11 +244,12 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
   // Targets trim only the contracts held, nearest first: a size edit can leave the saved ones trimming more (§8).
   const trimmed = new Array<number>(levels.length).fill(0);
   let left = leg.quantity;
-  for (const { index } of sortTargets(
+  const reach = sortTargets(
     levels.map((target, index) => ({ price: target.price, index })),
     basis,
     right,
-  )) {
+  );
+  for (const { index } of reach) {
     const contracts = Math.min(levels[index]?.contracts ?? 0, left);
     trimmed[index] = contracts;
     left -= contracts;
@@ -264,6 +271,10 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
       runner = { contracts: left, atTarget: last.index + 1 };
     }
     plannedReward = round2(reward);
+  } else if (left > 0 && reach.length > 0) {
+    // Nothing prices (no stock price yet, or every target on the wrong side), but the untrimmed contracts are still
+    // a runner, at the farthest target in reach order.
+    runner = { contracts: left, atTarget: (reach.at(-1)?.index ?? 0) + 1 };
   }
 
   const high = trade.scalpPrices?.holdHigh ?? null;

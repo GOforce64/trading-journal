@@ -119,6 +119,34 @@ export function holidayName(date: string): string | null {
   return holidays.get(date) ?? null;
 }
 
+/** 13:00 and 16:00 ET, in minutes since midnight. */
+const EARLY_CLOSE = 13 * 60;
+const FULL_CLOSE = 16 * 60;
+
+/**
+ * The NYSE's 13:00 early closes in a year: July 3 and Christmas Eve when they're sessions (not a weekend, nor the
+ * observed holiday), and the day after Thanksgiving.
+ */
+export function nyseEarlyCloses(year: number): Set<string> {
+  const closes = new Set<string>();
+  for (const date of [ymd(year, 7, 3), ymd(year, 12, 24)]) if (isTradingDay(date)) closes.add(date);
+  closes.add(addDays(nthWeekday(year, 11, 4, 4), 1));
+  return closes;
+}
+
+const earlyByYear = new Map<number, Set<string>>();
+
+/** When a date's regular session ends, in minutes since midnight New York: 16:00, or 13:00 on a half day. */
+export function regularClose(date: string): number {
+  const year = Number(date.slice(0, 4));
+  let closes = earlyByYear.get(year);
+  if (!closes) {
+    closes = nyseEarlyCloses(year);
+    earlyByYear.set(year, closes);
+  }
+  return closes.has(date) ? EARLY_CLOSE : FULL_CLOSE;
+}
+
 /** A weekday that is not an NYSE holiday. */
 export function isTradingDay(date: string): boolean {
   const weekday = dayOfWeek(date);

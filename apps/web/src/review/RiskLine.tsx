@@ -1,12 +1,11 @@
 import type { ScalpRisk } from "@tj/core";
 import { useEffect, useRef, useState } from "react";
 import type { TradeView } from "../api.js";
+import { usd } from "../components/ui.js";
 import { type Levels, parseAmount, parsePrice } from "./levels.js";
 import { INPUT } from "./Pickers.js";
 import { usePriceNote } from "./prices.js";
 import { liveLine, problemText } from "./riskText.js";
-
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /**
  * The strip's R (scalp-R spec §9.2): the live "Risk · R · R:R" line, priced where the lines are right now, and the

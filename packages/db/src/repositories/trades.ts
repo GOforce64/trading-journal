@@ -127,6 +127,17 @@ export function staleScalpPrices(
   );
 }
 
+/** A typed stock at entry goes stale with a new ticker, or an entry moved to another minute (scalp-R spec §7). */
+export function staleEntryOverride(
+  existing: TradeRow,
+  patch: Pick<TradePatch, "underlying" | "openedAt">,
+): boolean {
+  return (
+    (patch.underlying !== undefined && patch.underlying !== existing.underlying) ||
+    (patch.openedAt !== undefined && minuteOf(patch.openedAt) !== minuteOf(existing.openedAt))
+  );
+}
+
 const legKey = (leg: {
   right: string;
   strike: number;
@@ -205,9 +216,11 @@ export function mergeLevels(
   const levelBasis = patch.levelBasis ?? existing?.levelBasis;
   if (!levelBasis) throw new ReviewRuleError("A scalp's first level needs a basis");
   const kept = existing?.levelBasis === levelBasis ? existing : null;
+  // Each value is judged at the cent it's stored at: 0.004 is refused as the 0 it would become.
   const level = (value: number) => {
-    if (levelBasis === "stock" && value <= 0) throw new ReviewRuleError("A stock price must be above 0");
-    return round2(value);
+    const cents = round2(value);
+    if (levelBasis === "stock" && cents <= 0) throw new ReviewRuleError("A stock price must be above 0");
+    return cents;
   };
   const stop = patch.stopPrice === undefined ? (kept?.stopPrice ?? null) : patch.stopPrice;
   let targets = kept?.targets ?? [];
@@ -218,8 +231,9 @@ export function mergeLevels(
   }
   const override = (sent: number | null | undefined, stored: number | null, message: string) => {
     const value = sent === undefined ? stored : sent;
-    if (value != null && value <= 0) throw new ReviewRuleError(message);
-    return value == null ? null : round2(value);
+    const cents = value == null ? null : round2(value);
+    if (cents != null && cents <= 0) throw new ReviewRuleError(message);
+    return cents;
   };
   return {
     tradeId,
@@ -240,36 +254,95 @@ export function mergeLevels(
 }
 
 export function createTradesRepo(db: Db, now: () => number = Date.now) {
-  function levelsOf(conn: DbLike, tradeId: string): ScalpLevels | null {
-    const row = conn.select().from(scalpDetails).where(eq(scalpDetails.tradeId, tradeId)).get();
-    if (!row) return null;
-    const targets = conn
-      .select({ price: scalpTargets.price, contracts: scalpTargets.contracts })
-      .from(scalpTargets)
-      .where(eq(scalpTargets.tradeId, tradeId))
-      .orderBy(asc(scalpTargets.position))
-      .all();
-    return { ...row, targets };
+  /**
+   * Trades with their legs, fly details, levels, fetched prices and tags, read a table at a time for all of them:
+   * a list of 500 costs six queries, not seven per trade.
+   */
+  function hydrateMany(conn: DbLike, rows: readonly TradeRow[]): TradeRecord[] {
+    if (rows.length === 0) return [];
+    const byTrade = <T extends { tradeId: string }>(found: T[]) => {
+      const groups = new Map<string, T[]>();
+      for (const item of found) {
+        const group = groups.get(item.tradeId);
+        if (group) group.push(item);
+        else groups.set(item.tradeId, [item]);
+      }
+      return groups;
+    };
+    // SQLite allows at most 32,766 bound values, so ids go in chunks.
+    const chunks: string[][] = [];
+    for (let at = 0; at < rows.length; at += 1000)
+      chunks.push(rows.slice(at, at + 1000).map((row) => row.id));
+    const read = <T>(query: (ids: string[]) => T[]) => chunks.flatMap(query);
+
+    const legsOf = byTrade(
+      read((ids) =>
+        conn
+          .select()
+          .from(legs)
+          .where(and(inArray(legs.tradeId, ids), isNull(legs.deletedAt)))
+          .all(),
+      ),
+    );
+    const flies = new Map(
+      read((ids) => conn.select().from(ironFlyDetails).where(inArray(ironFlyDetails.tradeId, ids)).all()).map(
+        (fly) => [fly.tradeId, fly],
+      ),
+    );
+    const details = read((ids) =>
+      conn.select().from(scalpDetails).where(inArray(scalpDetails.tradeId, ids)).all(),
+    );
+    const targetsOf = byTrade(
+      read((ids) =>
+        conn
+          .select({
+            tradeId: scalpTargets.tradeId,
+            price: scalpTargets.price,
+            contracts: scalpTargets.contracts,
+          })
+          .from(scalpTargets)
+          .where(inArray(scalpTargets.tradeId, ids))
+          .orderBy(asc(scalpTargets.position))
+          .all(),
+      ),
+    );
+    const levels = new Map(
+      details.map((row) => [
+        row.tradeId,
+        {
+          ...row,
+          targets: (targetsOf.get(row.tradeId) ?? []).map(({ price, contracts }) => ({ price, contracts })),
+        },
+      ]),
+    );
+    const prices = new Map(
+      read((ids) => conn.select().from(scalpPrices).where(inArray(scalpPrices.tradeId, ids)).all()).map(
+        (found) => [found.tradeId, found],
+      ),
+    );
+    const tagsOf = byTrade(
+      read((ids) =>
+        conn
+          .select({ tradeId: tradeTags.tradeId, tagId: tradeTags.tagId })
+          .from(tradeTags)
+          .where(inArray(tradeTags.tradeId, ids))
+          .all(),
+      ),
+    );
+    return rows.map((row) => ({
+      ...row,
+      legs: legsOf.get(row.id) ?? [],
+      ironFly: flies.get(row.id) ?? null,
+      scalp: levels.get(row.id) ?? null,
+      scalpPrices: prices.get(row.id) ?? null,
+      tagIds: (tagsOf.get(row.id) ?? []).map((link) => link.tagId),
+    }));
   }
 
   function hydrate(conn: DbLike, row: TradeRow): TradeRecord {
-    return {
-      ...row,
-      legs: conn
-        .select()
-        .from(legs)
-        .where(and(eq(legs.tradeId, row.id), isNull(legs.deletedAt)))
-        .all(),
-      ironFly: conn.select().from(ironFlyDetails).where(eq(ironFlyDetails.tradeId, row.id)).get() ?? null,
-      scalp: levelsOf(conn, row.id),
-      scalpPrices: conn.select().from(scalpPrices).where(eq(scalpPrices.tradeId, row.id)).get() ?? null,
-      tagIds: conn
-        .select({ tagId: tradeTags.tagId })
-        .from(tradeTags)
-        .where(eq(tradeTags.tradeId, row.id))
-        .all()
-        .map((link) => link.tagId),
-    };
+    const [record] = hydrateMany(conn, [row]);
+    if (!record) throw new Error(`trade ${row.id} could not be read`);
+    return record;
   }
 
   function requireRow(conn: DbLike, id: string): TradeRecord {
@@ -413,17 +486,16 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       if (filter.book) conditions.push(eq(trades.book, filter.book));
       if (filter.underlying) conditions.push(eq(trades.underlying, filter.underlying.toUpperCase()));
       if (!filter.includeExcluded) conditions.push(eq(trades.excluded, false));
-      return (
-        db
-          .select()
-          .from(trades)
-          .where(and(...conditions))
-          .orderBy(desc(trades.openedAt))
-          // SQLite reads a negative LIMIT as no limit.
-          .limit(filter.limit === null ? -1 : (filter.limit ?? 500))
-          .all()
-          .map((row) => hydrate(db, row))
-      );
+      const rows = db
+        .select()
+        .from(trades)
+        .where(and(...conditions))
+        // Ties by id, as the web orders the review queue, so the server's queue matches it.
+        .orderBy(desc(trades.openedAt), desc(trades.id))
+        // SQLite reads a negative LIMIT as no limit.
+        .limit(filter.limit === null ? -1 : (filter.limit ?? 500))
+        .all();
+      return hydrateMany(db, rows);
     },
 
     update(id: string, patch: TradePatch): TradeRecord | null {
@@ -480,6 +552,10 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         }
         if (staleScalpPrices(existing, patch)) {
           tx.delete(scalpPrices).where(eq(scalpPrices.tradeId, id)).run();
+        }
+        // Unless the same patch types a new one.
+        if (staleEntryOverride(existing, patch) && scalp?.stockEntryOverride === undefined) {
+          tx.update(scalpDetails).set({ stockEntryOverride: null }).where(eq(scalpDetails.tradeId, id)).run();
         }
         return requireRow(tx, id);
       });

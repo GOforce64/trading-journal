@@ -243,6 +243,14 @@ describe("ReviewPanel", () => {
     await waitFor(() => expect(bodies(fetchMock, "PATCH")).toEqual([{ reviewed: false }]));
   });
 
+  it("says a complete scalp is reviewed, with no button that would change nothing", async () => {
+    stubApi({ trade: { ...SCALP, review: { status: "done", missing: [] } } });
+    renderPanel();
+    expect(await screen.findByText("Reviewed: setup, grade and stop are set.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Done reviewing" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back to queue" })).toBeNull();
+  });
+
   it("gives a fly its own setups in the side panel, with no Done reviewing", async () => {
     stubApi({ trade: { ...SCALP, strategy: "iron_fly", review: null } });
     renderPanel("side");

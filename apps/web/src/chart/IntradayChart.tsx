@@ -156,6 +156,12 @@ export function IntradayChart({
     }
     function follow(event: MouseEvent) {
       if (!drag) return;
+      // No button held: the release happened where the window couldn't hear it (over another window), so the
+      // drag ends where the line last was.
+      if (event.buttons === 0) {
+        finish(true);
+        return;
+      }
       const price = priceAt(pointOf(event).y, toPrice);
       if (price == null) return;
       drag.price = price;
@@ -358,7 +364,8 @@ export function IntradayChart({
           {model.emas.map((each, index) => {
             const value = values.emas[index]?.get(candle.t);
             return show[`ema${index}` as Toggle] && value !== undefined ? (
-              <span key={each.length} style={{ color: EMA_COLORS[index] }}>
+              // biome-ignore lint/suspicious/noArrayIndexKey: the slot is an EMA's identity, and two can share a length
+              <span key={`ema${index}`} style={{ color: EMA_COLORS[index] }}>
                 EMA {each.length} {value.toFixed(2)}
               </span>
             ) : null;

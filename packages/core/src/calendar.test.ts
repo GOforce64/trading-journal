@@ -7,9 +7,11 @@ import {
   holidayName,
   isTradingDay,
   nyMinuteOfDay,
+  nyseEarlyCloses,
   nyseHolidays,
   nyWallClock,
   nyWeekday,
+  regularClose,
   sessionMoment,
   sessionsBetween,
   weekdayOfDate,
@@ -94,6 +96,22 @@ describe("nyseHolidays", () => {
 
   it("does not move a Saturday New Year's Day back into December", () => {
     expect(isTradingDay("2027-12-31")).toBe(true);
+  });
+});
+
+describe("nyseEarlyCloses and regularClose", () => {
+  it("closes at 13:00 on July 3 and Christmas Eve when they're sessions, and the day after Thanksgiving", () => {
+    expect([...nyseEarlyCloses(2025)].sort()).toEqual(["2025-07-03", "2025-11-28", "2025-12-24"]);
+    // 2026: July 3 is the observed Independence Day, a holiday, so no early close then.
+    expect([...nyseEarlyCloses(2026)].sort()).toEqual(["2026-11-27", "2026-12-24"]);
+    // 2027: Christmas Eve is the observed Christmas; 2023: July 3 is a Monday.
+    expect(nyseEarlyCloses(2027).has("2027-12-24")).toBe(false);
+    expect(nyseEarlyCloses(2023).has("2023-07-03")).toBe(true);
+  });
+
+  it("gives each date's regular close, in minutes since midnight", () => {
+    expect(regularClose("2026-11-27")).toBe(13 * 60);
+    expect(regularClose("2026-11-30")).toBe(16 * 60);
   });
 });
 

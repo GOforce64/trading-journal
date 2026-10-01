@@ -231,6 +231,21 @@ describe("Analytics' Setup filter", () => {
     expect([...select.options].map((option) => option.text)).toEqual(["All", "Old setup", "ORB breakout"]);
   });
 
+  it("keeps showing the linked setup when the setups couldn't load, rather than All", async () => {
+    const fetchMock = stubTrades(TAGGED, [], { setups: SETUPS });
+    const answered = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) =>
+      String(input).includes("/api/setups")
+        ? new Response("{}", { status: 500 })
+        : (answered?.(input, init) as Promise<Response>),
+    );
+    renderWithClient(<Analytics search={{ setup: "orb" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$100.00"));
+    const select = screen.getByRole("combobox", { name: "Setup" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.selectedOptions[0]?.text).toBe("this setup"));
+    expect(select.value).toBe("orb");
+  });
+
   it("counts a setup the journal doesn't have as All", async () => {
     stubTrades(TAGGED, [], { setups: SETUPS });
     renderWithClient(<Analytics search={{ setup: "gone" }} onSearch={() => {}} />);
@@ -409,7 +424,30 @@ describe("Analytics Iron flies: move data", () => {
     renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
     const button = await screen.findByRole("button", { name: "Fill in missing" });
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.getAttribute("title")).toBe("Add an Alpaca key in Settings to fetch stock prices.");
+    // "Checking the Alpaca key…" until the settings answer; then why.
+    await waitFor(() =>
+      expect(button.getAttribute("title")).toBe("Add an Alpaca key in Settings to fetch stock prices."),
+    );
+  });
+
+  it("says so when Fill in missing failed", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/moves/fill") return new Response("{}", { status: 500 });
+      const body =
+        path === "/api/settings"
+          ? { dataDir: null, marketData: { state: "on", message: null, keyIdHint: null } }
+          : path === "/api/setups" || path === "/api/tags"
+            ? []
+            : MOVED;
+      return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithClient(<Analytics search={{ tab: "flies" }} onSearch={() => {}} />);
+    const button = await screen.findByRole("button", { name: "Fill in missing" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    expect(await screen.findByText("Couldn't fetch stock prices: the server answered 500.")).toBeTruthy();
   });
 
   it("fills every fly's missing stock prices on request, and says how it went", async () => {

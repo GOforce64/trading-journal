@@ -183,6 +183,19 @@ describe("POST /api/risk/fill", () => {
     expect((await app.trade(id)).scalpPrices?.entryPrice).toBeCloseTo(231.1, 6);
   });
 
+  it("says a thin name's range is too recent, not missing, while today's bars are still coming", async () => {
+    // Closed at 13:20 today; nothing has traded since 13:00, and the day isn't over, so a later bar may yet come.
+    const app = setup({ minuteBars: async () => [bar("2026-09-29", 780, 231, 231.5, 230.9, 231.2)] });
+    const id = await app.create(
+      nvda({ openedAt: nyWallClock("2026-09-29", 780) + 30_000, closedAt: nyWallClock("2026-09-29", 800) }),
+    );
+    expect((await app.fill([id])).body).toEqual({
+      filled: 1,
+      missing: [{ tradeId: id, reason: "too_recent" }],
+      unavailable: null,
+    });
+  });
+
   it("says when Alpaca has no bar for the entry minute, keeping the range it found", async () => {
     const app = setup({
       minuteBars: async () => SEP_28.filter((each) => each.t !== nyWallClock("2026-09-28", 571)),
@@ -198,6 +211,14 @@ describe("POST /api/risk/fill", () => {
       holdHigh: 233.21,
       holdLow: 232.2,
     });
+  });
+
+  it("takes a finished day's range even when no trade reaches the exit minute", async () => {
+    // A thin name: nothing trades at or after 09:46 on Sep 28, and the day is long over.
+    const app = setup({ minuteBars: async () => SEP_28.slice(0, 3) });
+    const id = await app.create();
+    expect((await app.fill([id])).body).toEqual({ filled: 1, missing: [], unavailable: null });
+    expect((await app.trade(id)).scalpPrices).toMatchObject({ holdHigh: 233.21, holdLow: 230.71 });
   });
 
   it("answers no_key without a key", async () => {

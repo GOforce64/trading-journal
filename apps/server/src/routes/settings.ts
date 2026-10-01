@@ -77,7 +77,7 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
   const ibkrView = () => {
     let config: IbkrConfig | undefined;
     try {
-      config = deps ? readSecrets(deps.secretsFile).ibkr : undefined;
+      config = deps ? readSecrets(deps.secretsFile, "ibkr").ibkr : undefined;
     } catch {
       config = undefined;
     }
@@ -153,7 +153,7 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
         const input = c.req.valid("json");
         let saved: IbkrConfig | undefined;
         try {
-          saved = readSecrets(deps.secretsFile).ibkr;
+          saved = readSecrets(deps.secretsFile, "ibkr").ibkr;
         } catch (error) {
           return c.json({ error: "broken_file", message: (error as Error).message }, 409);
         }

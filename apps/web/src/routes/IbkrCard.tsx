@@ -21,6 +21,18 @@ function ignoredLine(ignored: SyncSummary["ignored"]): string | null {
   return parts.length > 0 ? `${parts.join(", ")} ignored.` : null;
 }
 
+/** Identical skipped trades (same ticker, time and reason) as one line with a count: they have no ids of their own. */
+function groupSkipped<S extends { ticker: string; openedAt: number; reason: string }>(skipped: readonly S[]) {
+  const groups = new Map<string, { key: string; skip: S; count: number }>();
+  for (const skip of skipped) {
+    const key = `${skip.ticker}-${skip.openedAt}-${skip.reason}`;
+    const group = groups.get(key);
+    if (group) group.count++;
+    else groups.set(key, { key, skip, count: 1 });
+  }
+  return [...groups.values()];
+}
+
 /** The IBKR sync on Import / Sync: what the last run did, and a button to run one (spec §9.2). */
 export function IbkrCard() {
   const status = useIbkrStatus();
@@ -66,9 +78,10 @@ export function IbkrCard() {
           )}
           {summary.skipped.length > 0 && (
             <ul className="flex flex-col gap-0.5">
-              {summary.skipped.map((skip) => (
-                <li key={`${skip.ticker}-${skip.openedAt}-${skip.reason}`}>
+              {groupSkipped(summary.skipped).map(({ key, skip, count }) => (
+                <li key={key}>
                   Skipped {skip.ticker} · {when(skip.openedAt)} — {SKIP_REASON[skip.reason]}
+                  {count > 1 ? ` ×${count}` : ""}
                 </li>
               ))}
             </ul>

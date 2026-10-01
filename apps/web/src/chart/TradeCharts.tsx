@@ -1,4 +1,13 @@
-import { addDays, MAX_BAR_DAYS, nyDate, nyMinuteOfDay, type PriceBar, SESSION_END } from "@tj/core";
+import {
+  addDays,
+  isTradingDay,
+  MAX_BAR_DAYS,
+  nyDate,
+  nyMinuteOfDay,
+  PREMARKET_OPEN,
+  type PriceBar,
+  SESSION_END,
+} from "@tj/core";
 import { useMemo, useState } from "react";
 import { Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
@@ -35,7 +44,10 @@ export function TradeCharts({
   const symbol = trade.underlying;
   const firstDay = nyDate(trade.openedAt);
   const lastDay = trade.closedAt != null ? nyDate(trade.closedAt) : todayNy();
-  const live = lastDay === todayNy() && nyMinuteOfDay(Date.now()) < LIVE_UNTIL;
+  // Today's bars grow only on a session day, from the premarket open until 20:16.
+  const today = todayNy();
+  const clock = nyMinuteOfDay(Date.now());
+  const live = lastDay === today && isTradingDay(today) && clock >= PREMARKET_OPEN && clock < LIVE_UNTIL;
   // The warm-up week before the trade, but no more than the server serves: a trade held for months shows its last weeks.
   const weekBefore = addDays(firstDay, -7);
   const earliest = addDays(lastDay, -MAX_BAR_DAYS);
@@ -64,7 +76,8 @@ export function TradeCharts({
     </Panel>
   );
   if (!TICKER.test(symbol)) return message(`No stock bars for ${symbol}.`);
-  if (minute.isError) {
+  // A failed live refresh keeps the chart that's drawn (below); only a first load that failed shows this.
+  if (minute.isError && !minute.data) {
     return (
       <Panel title="Chart">
         <div className="flex items-center gap-2">
@@ -103,8 +116,14 @@ export function TradeCharts({
         hiddenEmas={hiddenEmas}
         onFit={() => setFitKey((key) => key + 1)}
       />
-      {minute.data?.partial && (
-        <p className="text-[10px] text-muted">Alpaca's free data runs 15 minutes behind.</p>
+      {minute.isError ? (
+        <p className="text-[10px] text-down">
+          Couldn't refresh the chart: Alpaca didn't answer. Trying again in a minute.
+        </p>
+      ) : (
+        minute.data?.partial && (
+          <p className="text-[10px] text-muted">Alpaca's free data runs 15 minutes behind.</p>
+        )
       )}
       <div className="grid gap-2 min-[1100px]:grid-cols-[2fr_1fr]">
         <IntradayChart
@@ -114,15 +133,26 @@ export function TradeCharts({
           lines={levels?.lines}
           editing={levels?.editing}
         />
-        {dayChart.candles.length > 0 ? (
+        {/* Only once the daily bars are in: before, today's candle alone would stand for the whole chart. */}
+        {daily.isSuccess && !daily.data.unavailable && dayChart.candles.length > 0 ? (
           <DailyChart model={dayChart} show={prefs.show} fitKey={fitKey} />
+        ) : daily.isError ? (
+          <div className="flex items-center justify-center gap-2 self-center">
+            <p className="text-down">Couldn't load the daily chart: Alpaca didn't answer.</p>
+            <button
+              type="button"
+              aria-label="Retry the daily chart"
+              onClick={() => daily.refetch()}
+              className="rounded-sm border border-line px-2 py-0.5 text-fg hover:border-accent"
+            >
+              Retry
+            </button>
+          </div>
         ) : (
           <p className="self-center text-center text-muted">
             {daily.isPending
               ? "Loading the daily chart…"
-              : daily.isError
-                ? "Alpaca didn't answer. Try again."
-                : (daily.data?.unavailable?.message ?? `No daily bars for ${symbol}.`)}
+              : (daily.data?.unavailable?.message ?? `No daily bars for ${symbol}.`)}
           </p>
         )}
       </div>

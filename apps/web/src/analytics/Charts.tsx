@@ -13,6 +13,15 @@ import {
 } from "recharts";
 import { dollars } from "./format.js";
 
+/**
+ * An axis that always takes in zero. Fitted to the data alone, bars that all share a sign start from the smallest,
+ * which then draws no bar at all, and the rest lose their proportions.
+ */
+export const WITH_ZERO: [(low: number) => number, (high: number) => number] = [
+  (low) => Math.min(0, low),
+  (high) => Math.max(0, high),
+];
+
 export const UP = "#26a69a";
 export const DOWN = "#ef5350";
 const LINE = "#2a2e39";
@@ -44,7 +53,7 @@ export function MonthBars({ months }: { months: readonly MonthResult[] }) {
     <ResponsiveContainer width="100%" height={130}>
       <BarChart data={data} margin={{ top: 14, right: 8, bottom: 0, left: 8 }}>
         <XAxis dataKey="label" tick={TICK} axisLine={false} tickLine={false} />
-        <YAxis hide />
+        <YAxis hide domain={WITH_ZERO} />
         <ReferenceLine y={0} stroke={LINE} />
         <Tooltip {...TOOLTIP} formatter={(value) => dollars(Number(value))} />
         <Bar dataKey="net" isAnimationActive={false}>
@@ -101,7 +110,15 @@ export function KeptHistogram({
   return (
     <ResponsiveContainer width="100%" height={150}>
       <BarChart data={data} margin={{ top: 14, right: 8, bottom: 0, left: 8 }}>
-        <XAxis dataKey="label" tick={TICK} interval={0} axisLine={false} tickLine={false} />
+        {/* Labels that would collide are dropped; every bar keeps its count, and its tooltip its range. */}
+        <XAxis
+          dataKey="label"
+          tick={TICK}
+          interval="preserveStartEnd"
+          minTickGap={4}
+          axisLine={false}
+          tickLine={false}
+        />
         <YAxis hide allowDecimals={false} />
         <Tooltip
           {...TOOLTIP}

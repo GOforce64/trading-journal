@@ -1,8 +1,7 @@
 import { returnOnCost } from "@tj/core";
 import type { TradeView } from "../api.js";
-import { Pct, Tile } from "../components/ui.js";
+import { Pct, Tile, usd } from "../components/ui.js";
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 /** Up to 4 decimals, trailing zeros dropped: 1.06, 1.295. */
 const price = (value: number) => String(Number(value.toFixed(4)));
 const expiryText = (date: string) =>
@@ -29,9 +28,15 @@ export function ScalpTiles({ trade }: { trade: TradeView }) {
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
       <Tile label="Contract" testId="tile-contract">
-        {leg
-          ? `${trade.underlying} ${leg.strike}${leg.right} · exp ${expiryText(leg.expiry)}`
-          : trade.underlying}
+        {/* It wraps between the contract and its expiry, never inside either. */}
+        {leg ? (
+          <>
+            <span className="whitespace-nowrap">{`${trade.underlying} ${leg.strike}${leg.right}`}</span>{" "}
+            <span className="whitespace-nowrap">{`· exp ${expiryText(leg.expiry)}`}</span>
+          </>
+        ) : (
+          trade.underlying
+        )}
       </Tile>
       <Tile label="Size" testId="tile-size">
         {contracts} contract{contracts === 1 ? "" : "s"}

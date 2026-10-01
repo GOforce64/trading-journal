@@ -82,6 +82,12 @@ describe("parseAnalyticsSearch", () => {
     expect(parseAnalyticsSearch({ ticker: "BRK/B" })).toEqual({ ticker: "BRK/B" });
   });
 
+  it("takes the spec's excluded=1 as well as excluded=true", () => {
+    expect(parseAnalyticsSearch({ excluded: 1 })).toEqual({ excluded: true });
+    expect(parseAnalyticsSearch({ excluded: "1" })).toEqual({ excluded: true });
+    expect(parseAnalyticsSearch({ excluded: 0 })).toEqual({});
+  });
+
   it("accepts the numbers the router's parser makes of plain values", () => {
     expect(parseAnalyticsSearch({ creditEdges: 250, excluded: "true" })).toEqual({
       creditEdges: "250",

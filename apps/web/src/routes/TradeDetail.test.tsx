@@ -322,6 +322,24 @@ describe("TradeDetail", () => {
     expect(screen.getByTestId("tile-max-loss").textContent).toContain("2,008.00");
   });
 
+  it("shows a one-winged fly's P&L % in the header, as its % kept tile does", async () => {
+    const oneWing = {
+      ...trade,
+      ironFly: { ...trade.ironFly, callWingStrike: null },
+      metrics: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(oneWing), { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    renderDetail();
+    await waitFor(() => expect(screen.getByTestId("tile-kept")).toBeTruthy());
+    expect(screen.getByTestId("header-pct").textContent).toBe("+42.95%");
+  });
+
   it("shows the charts under the header", async () => {
     vi.stubGlobal(
       "fetch",
@@ -472,6 +490,28 @@ describe("TradeDetail move tiles", () => {
     expect(screen.getByTestId("tile-implied-move").textContent).toContain("needs the stock at entry");
   });
 
+  it("offers no Fill in missing for a price dated on a weekend, which can never fill", async () => {
+    // Opened on Saturday Sep 26 2026 (typed in by hand): there's no session to read a price from.
+    const saturday = {
+      ...noPrices,
+      openedAt: Date.UTC(2026, 8, 26, 16, 0),
+      closedAt: Date.UTC(2026, 8, 28, 14, 0),
+    };
+    const fetchMock = stubMoves(saturday);
+    renderDetail();
+    await waitFor(() =>
+      expect(screen.getByTestId("tile-stock").textContent).toContain(
+        "Not a trading day; type the moves in Edit.",
+      ),
+    );
+    // Once the key is known to be on, a fillable price would get its button by now.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/settings"))).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("button", { name: "Fill in missing" })).toBeNull();
+  });
+
   it("asks for a key, and offers no button, when none is set up", async () => {
     stubMoves(noPrices, { marketOn: false });
     renderDetail();
@@ -590,9 +630,22 @@ const nvda = {
 function stubSynced(
   body: unknown,
   keptEdits: { tradeId: string; ticker: string; netPnl: number | null }[] = [],
+  reset: unknown = { status: "ok", error: null, changedTradeIds: ["nvda"] },
 ) {
+  // After a reset the trade comes back unmarked, as the server leaves it.
+  let handedBack = false;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/reset")) {
+      // A real reset runs a whole sync: long enough to see "Asking IBKR…".
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      handedBack = true;
+    }
+    if (handedBack && url.includes("/api/trades/")) {
+      return new Response(JSON.stringify({ ...(body as object), factsEditedAt: null }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
     const payload = url.includes("/api/ibkr/status")
       ? {
           configured: true,
@@ -603,8 +656,10 @@ function stubSynced(
           lastSummary: { keptEdits },
         }
       : url.includes("/reset")
-        ? { status: "ok" }
-        : body;
+        ? reset
+        : url.includes("/fill")
+          ? { filled: 0, missing: [], unavailable: null }
+          : body;
     return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -642,6 +697,13 @@ describe("TradeDetail for a scalp", () => {
     expect(screen.queryByTestId("tile-max-loss")).toBeNull();
   });
 
+  it("shows a scalp's return on cost in the header, and keeps its contract on one line", async () => {
+    stubSynced(nvda);
+    renderDetail();
+    expect((await screen.findByTestId("header-pct")).textContent).toBe("+21.10%");
+    expect(screen.getByText("NVDA 232.5C").className).toContain("whitespace-nowrap");
+  });
+
   it("lists every fill of a synced trade", async () => {
     stubSynced(nvda);
     renderDetail();
@@ -651,6 +713,15 @@ describe("TradeDetail for a scalp", () => {
     expect(rows[0]?.textContent).toContain("BUY");
     expect(rows[3]?.textContent).toContain("SELL");
     expect(rows[3]?.textContent).toContain("1.15");
+  });
+
+  it("shows fill and leg prices to their last digit, as 1.295, not 1.29", async () => {
+    stubSynced({ ...nvda, fills: [{ ...nvda.fills[0], id: "p", price: 1.295 }] });
+    renderDetail();
+    expect((await screen.findByTestId("fill-row-p")).textContent).toContain("1.295");
+    // The legs table's close price too, and a round premium still with two decimals.
+    expect(screen.getAllByText("1.295", { selector: "td" })).toHaveLength(2);
+    expect(screen.getAllByText("1.06", { selector: "td" }).length).toBeGreaterThan(0);
   });
 
   it("labels expiries and canceled fills", async () => {
@@ -677,11 +748,46 @@ describe("TradeDetail for a scalp", () => {
       ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Use IBKR's numbers" }));
+    expect(await screen.findByRole("button", { name: "Asking IBKR…" })).toBeTruthy();
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/ibkr/trades/nvda/reset")),
       ).toBe(true),
     );
+    // The rewritten trade gets its stock prices again, as after a sync.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/risk/fill"))).toBe(true),
+    );
+  });
+
+  it("says so when handing a trade back to IBKR ran into a failed sync", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
+      status: "error",
+      error: { kind: "unreachable", message: "IBKR didn't answer." },
+      changedTradeIds: [],
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
+    expect(
+      await screen.findByText(
+        "Handed back to IBKR, but the sync failed: IBKR didn't answer. The next sync brings IBKR's numbers.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says so in a sentence of its own when the sync didn't run at all", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
+      status: "not_configured",
+      error: null,
+      changedTradeIds: [],
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
+    expect(
+      await screen.findByText(
+        "Handed back to IBKR, but the sync failed: it didn't run. The next sync brings IBKR's numbers.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows no banner, and asks nothing of IBKR, on a synced trade the user hasn't changed", async () => {

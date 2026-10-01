@@ -36,9 +36,7 @@ export function useIbkrStatus() {
  * and trades the sync added or changed get their stock prices (move data, and a scalp's R), as after a save.
  */
 export function useIbkrSync() {
-  const queryClient = useQueryClient();
-  const fill = useFillMoves();
-  const fillPrices = useFillScalpPrices();
+  const afterSync = useAfterSync();
   return useMutation({
     mutationKey: SYNC_KEY,
     mutationFn: async (auto: boolean): Promise<SyncSummary> => {
@@ -46,18 +44,29 @@ export function useIbkrSync() {
       if (!res.ok) throw new Error(`IBKR sync failed: ${res.status}`);
       return res.json();
     },
-    onSuccess: async (summary) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["ibkr-status"] }),
-        queryClient.invalidateQueries({ queryKey: ["trades"] }),
-        queryClient.invalidateQueries({ queryKey: ["trade"] }),
-      ]);
-      if (summary.changedTradeIds.length > 0) {
-        fill.mutate(summary.changedTradeIds);
-        fillPrices.mutate(summary.changedTradeIds);
-      }
-    },
+    onSuccess: afterSync,
   });
+}
+
+/**
+ * What follows any sync, the button's, opening the app's, or a trade handed back to IBKR: the trade lists and the
+ * status refetch, and the trades it added or changed get their stock prices (move data, and a scalp's R).
+ */
+export function useAfterSync() {
+  const queryClient = useQueryClient();
+  const fill = useFillMoves();
+  const fillPrices = useFillScalpPrices();
+  return async (summary: Pick<SyncSummary, "changedTradeIds">) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["ibkr-status"] }),
+      queryClient.invalidateQueries({ queryKey: ["trades"] }),
+      queryClient.invalidateQueries({ queryKey: ["trade"] }),
+    ]);
+    if (summary.changedTradeIds.length > 0) {
+      fill.mutate(summary.changedTradeIds);
+      fillPrices.mutate(summary.changedTradeIds);
+    }
+  };
 }
 
 /** True while a sync runs, wherever it was started. */

@@ -276,6 +276,14 @@ describe("applying a synced trade", () => {
     expect(trades().get("trade-nvda")?.scalpPrices).toBeNull();
   });
 
+  it("drops a typed stock at entry when a sync moves the entry to another minute", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    trades().update("trade-nvda", { scalp: { levelBasis: "stock", stockEntryOverride: 231 } });
+    // Levels are review fields, not facts, so the sync still rewrites the trade.
+    expect(ibkr().apply(scalp({ openedAt: OPEN + 120_000 }), ACCOUNT.id)).toBe("updated");
+    expect(trades().get("trade-nvda")?.scalp?.stockEntryOverride).toBeNull();
+  });
+
   it("adds a new trade as the sync's, with its leg ids", () => {
     expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("added");
     const stored = trades().get("trade-nvda");
@@ -328,6 +336,15 @@ describe("applying a synced trade", () => {
     expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("kept_edits");
     expect(trades().get("trade-nvda")?.netPnl).toBe(50);
     expect(ibkr().apply(scalp({ netPnl: 50 }), ACCOUNT.id)).toBe("unchanged");
+  });
+
+  it("doesn't call seconds an edit form dropped a difference worth keeping", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    // An older edit form saved times to the minute: 09:31:05 came back as 09:31:00, with the P&L edited too.
+    trades().update("trade-nvda", { netPnl: 50, openedAt: OPEN - 5_000 });
+    expect(ibkr().apply(scalp({ netPnl: 50 }), ACCOUNT.id)).toBe("unchanged");
+    // A real difference is still kept, and said.
+    expect(ibkr().apply(scalp({ netPnl: 60 }), ACCOUNT.id)).toBe("kept_edits");
   });
 });
 
@@ -389,6 +406,37 @@ describe("orphans, links and runs", () => {
     ).toEqual([linked.id]);
     ibkr().linkFills(ACCOUNT.id, new Map());
     expect(ibkr().fillsForTrade("trade-nvda")).toEqual([]);
+  });
+
+  it("links a canceled fill to the trade of the correction booked under its trade id, so its page shows it", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    const original = fillInput({
+      brokerExecKey: "a.01.01",
+      brokerTradeId: "1786699376",
+      quantity: 2,
+      price: 0.73,
+    });
+    const correction = fillInput({
+      brokerExecKey: "a.01.02",
+      brokerTradeId: "1786699376",
+      quantity: 1,
+      price: 0.73,
+    });
+    const stray = fillInput({ brokerExecKey: "b.01.01", brokerTradeId: "999", quantity: 1, price: 1 });
+    ibkr().storeFills(ACCOUNT.id, [original, correction, stray], "activity");
+    ibkr().markCanceled(ACCOUNT.id, [{ brokerTradeId: "1786699376", quantity: 2, price: 0.73 }]);
+    ibkr().markCanceled(ACCOUNT.id, [{ brokerTradeId: "999", quantity: 1, price: 1 }]);
+    ibkr().linkFills(
+      ACCOUNT.id,
+      new Map([[correction.id, { tradeId: "trade-nvda", legId: "trade-nvda-leg" }]]),
+    );
+    const linked = ibkr().fillsForTrade("trade-nvda");
+    expect(linked.map((fill) => [fill.brokerExecKey, fill.canceled])).toEqual([
+      ["a.01.01", true],
+      ["a.01.02", false],
+    ]);
+    // A cancel with nothing standing beside it names no trade, so it stays unlinked.
+    expect(linked.some((fill) => fill.brokerExecKey === "b.01.01")).toBe(false);
   });
 
   it("records the last run, errors before any account included", () => {

@@ -1,5 +1,14 @@
 import { ivCrushHistogram, type MoveRow, movePoints, moveRatioBuckets, type RatioSummary } from "@tj/core";
-import { fillSummary, MOVE_COPY, useFilling, useFillMoves, useMarketOn } from "../moves.js";
+import { useMemo } from "react";
+import {
+  fillFailure,
+  fillSummary,
+  MARKET_COPY,
+  MOVE_COPY,
+  useFilling,
+  useFillMoves,
+  useMarketState,
+} from "../moves.js";
 import { dollars } from "./format.js";
 import { CrushHistogram, MoveScatter } from "./MoveCharts.js";
 import { Section } from "./Section.js";
@@ -57,10 +66,12 @@ export function MoveSection({
   flies: readonly MoveRow[];
   tickers: ReadonlyMap<string, string>;
 }) {
-  const points = movePoints(flies);
-  const ratios = moveRatioBuckets(flies);
-  const crush = ivCrushHistogram(flies);
-  const marketOn = useMarketOn();
+  // Each works out every fly's moves (an IV solve apiece), so only a new list of flies runs them again.
+  const points = useMemo(() => movePoints(flies), [flies]);
+  const ratios = useMemo(() => moveRatioBuckets(flies), [flies]);
+  const crush = useMemo(() => ivCrushHistogram(flies), [flies]);
+  const market = useMarketState();
+  const marketOn = market === "on";
   const fetching = useFilling();
   const fill = useFillMoves();
 
@@ -74,13 +85,14 @@ export function MoveSection({
           <button
             type="button"
             disabled={!marketOn || fetching}
-            title={marketOn ? undefined : MOVE_COPY.noKey}
+            title={market === "on" ? undefined : MARKET_COPY[market]}
             onClick={() => fill.mutate(undefined)}
             className="rounded-sm border border-accent bg-[#2962ff1a] px-2 py-0.5 text-fg disabled:opacity-50"
           >
             {fetching ? MOVE_COPY.fetching : "Fill in missing"}
           </button>
         )}
+        {fill.error && <span className="text-down">{fillFailure(fill.error)}</span>}
         {fill.data && <span>{fillSummary(fill.data)}</span>}
       </p>
       <div className="grid gap-2 lg:grid-cols-3">

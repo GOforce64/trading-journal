@@ -1,9 +1,9 @@
 import type { Excursion, ScalpRisk } from "@tj/core";
 import { rText } from "../analytics/format.js";
 import { signedUsd } from "../components/Estimate.js";
+import { usd } from "../components/ui.js";
 import { heldText } from "../routes/ScalpTiles.js";
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 /** Up to 4 decimals, trailing zeros dropped: 1.06, 1.295. */
 const premiumText = (value: number) => String(Number(value.toFixed(4)));
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -23,8 +23,15 @@ export interface RiskTileTrade {
   scalpPrices: { holdHigh: number | null; holdLow: number | null } | null;
 }
 
-/** What each tile of the R row says (scalp-R spec §9.1). */
-export function riskTileText(risk: ScalpRisk, trade: RiskTileTrade): Record<RiskTileKey, TileText> {
+/**
+ * What each tile of the R row says (scalp-R spec §9.1). `rangeNote` says why a closed scalp's MAE and MFE wait for
+ * the hold's range, such as Alpaca's 15-minute delay.
+ */
+export function riskTileText(
+  risk: ScalpRisk,
+  trade: RiskTileTrade,
+  rangeNote = "needs the stock's range",
+): Record<RiskTileKey, TileText> {
   const open = trade.closedAt == null;
   const planned = risk.plannedRisk;
 
@@ -51,7 +58,7 @@ export function riskTileText(risk: ScalpRisk, trade: RiskTileTrade): Record<Risk
   const high = `stock high ${trade.scalpPrices?.holdHigh?.toFixed(2)}`;
   const put = risk.right === "P";
   const excursion = (move: Excursion | null, sign: "−" | "+", where: string): TileText => {
-    if (!move) return { value: "—", working: open ? "open" : "needs the stock's range" };
+    if (!move) return { value: "—", working: open ? "open" : rangeNote };
     const signed = (text: string) => (Number(text) === 0 ? text : `${sign}${text}`);
     const value = signed(move.stock.toFixed(2));
     return { value, working: move.r == null ? where : `${signed(move.r.toFixed(2))}R · ${where}` };
@@ -100,7 +107,9 @@ export function problemText(risk: ScalpRisk, priceNote: string): string {
       }
       const stock = risk.stockAtEntry?.price ?? 0;
       const put = risk.right === "P";
-      const where = risk.stop === stock ? "at" : put ? "below" : "above";
+      // Compared at the cents the message shows, so a stop typed at 230.83 against 230.8279 reads "at".
+      const cents = (price: number | null) => Math.round((price ?? 0) * 100);
+      const where = cents(risk.stop) === cents(stock) ? "at" : put ? "below" : "above";
       return `The stop is ${where} the stock at entry (${stock.toFixed(2)}), so this ${put ? "put" : "call"} can't lose there.`;
     }
     case "cannot_price":

@@ -122,6 +122,19 @@ describe("aggregate", () => {
   });
 });
 
+describe("aggregate across the November clock change", () => {
+  it("keeps New York's slots when EDT ends overnight: Monday's 09:30 is still a 09:30 candle", () => {
+    // Clocks go back on Sun Nov 1 2026: Friday is UTC−4, Monday UTC−5.
+    const bars = [bar("2026-10-30", "09:30", 1, 1, 1, 1), bar("2026-11-02", "09:30", 2, 2, 2, 2)];
+    const candles = aggregate(bars, 60);
+    expect(candles.map((candle) => nyClock(candle.t))).toEqual([
+      { date: "2026-10-30", minute: 9 * 60 },
+      { date: "2026-11-02", minute: 9 * 60 },
+    ]);
+    expect(candles[1]?.t).toBe(Date.parse("2026-11-02T09:00:00-05:00"));
+  });
+});
+
 describe("ema", () => {
   it("smooths with α = 2 ÷ (length + 1), seeded with the first value, as TradingView's ta.ema", () => {
     // By hand, length 2 (α = 2/3): 1, 1.6667, 2.5556, 3.5185, 4.5062, 5.5021. Drawn from index 3 × 2 − 1 = 5.
@@ -160,6 +173,17 @@ describe("vwap", () => {
   });
 });
 
+describe("half days", () => {
+  const FRIDAY = "2026-11-27"; // the day after Thanksgiving: the session ends at 13:00
+  const bars = [bar(FRIDAY, "12:59", 10, 11, 9, 10, 100), bar(FRIDAY, "13:00", 20, 21, 19, 20, 100)];
+
+  it("tints candles from 13:00 as extended hours, and leaves them out of VWAP and the daily candle", () => {
+    expect(aggregate(bars, 1).map((candle) => candle.extended)).toEqual([false, true]);
+    expect(vwap(bars, aggregate(bars, 1))).toEqual([10, null]);
+    expect(dailyFromMinutes(bars, FRIDAY)).toMatchObject({ o: 10, h: 11, l: 9, c: 10 });
+  });
+});
+
 describe("sessionLevels", () => {
   it("reads the premarket high and low of the day, and the prior session's regular high and low", () => {
     const bars = [
@@ -182,6 +206,16 @@ describe("sessionLevels", () => {
     const bars = [
       bar("2026-11-27", "09:30", 70, 71, 69, 70),
       bar("2026-11-27", "12:59", 70, 73, 70, 72),
+      bar("2026-11-30", "09:00", 72, 72, 72, 72),
+    ];
+    expect(sessionLevels(bars, "2026-11-30")).toMatchObject({ pdHigh: 73, pdLow: 69 });
+  });
+
+  it("leaves a half day's after hours out of its range, from 13:00", () => {
+    const bars = [
+      bar("2026-11-27", "09:30", 70, 71, 69, 70),
+      bar("2026-11-27", "12:59", 70, 73, 70, 72),
+      bar("2026-11-27", "14:00", 72, 80, 60, 72), // after the 13:00 close: extended hours
       bar("2026-11-30", "09:00", 72, 72, 72, 72),
     ];
     expect(sessionLevels(bars, "2026-11-30")).toMatchObject({ pdHigh: 73, pdLow: 69 });

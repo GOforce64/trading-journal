@@ -256,6 +256,8 @@ describe("EditTrade", () => {
     await waitFor(() =>
       expect((screen.getByLabelText("Short put exit") as HTMLInputElement).value).toBe("0.29"),
     );
+    // The date as the Settle panel writes it.
+    expect(screen.getByText(/close on Sep 25\. Check them and the fees, then save\./)).toBeTruthy();
     expect((screen.getByLabelText("Short call exit") as HTMLInputElement).value).toBe("0");
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
@@ -263,6 +265,34 @@ describe("EditTrade", () => {
     const body = JSON.parse(String(patch?.[1]?.body));
     expect(body.closedAt).toBe(Date.UTC(2026, 8, 25, 20, 0));
     expect(body.netPnl).toBe(433);
+  });
+
+  it("says why nothing is proposed when asked to settle without a close", async () => {
+    const expired = {
+      ...trade,
+      underlying: "BB",
+      closedAt: null,
+      netPnl: null,
+      legs: trade.legs.map((leg) => ({ ...leg, expiry: "2026-09-25", closePrice: null })),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const body = String(input).includes("/api/close/")
+          ? { symbol: "BB", date: "2026-09-25", close: null, unavailable: null }
+          : expired;
+        return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EditTrade tradeId="t1" settle />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByText("Alpaca has no close for BB on Sep 25: type the exits below."),
+    ).toBeTruthy();
   });
 
   it("edits a scalp in the scalp form, and says a synced trade's edits are kept", async () => {
@@ -306,6 +336,51 @@ describe("EditTrade", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
     const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
     expect(JSON.parse(String(patch?.[1]?.body)).legs[0]).toMatchObject({ closePrice: 1.4, quantity: 2 });
+  });
+
+  it("asks for no move data after saving a scalp, which only flies have", async () => {
+    const scalp = { ...trade, strategy: "scalp", underlying: "NVDA", ironFly: null, legs: [trade.legs[0]] };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(scalp), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    fireEvent.change(await screen.findByLabelText("Exit price"), { target: { value: "1.40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/moves/fill"))).toBe(false);
+  });
+
+  it("keeps a synced scalp's seconds when saving an edit", async () => {
+    // A fill at 09:31:05 prices R from 5 s into its minute bar; saving must not move it to 09:31:00.
+    const opened = Date.UTC(2026, 8, 28, 13, 31, 5);
+    const closed = Date.UTC(2026, 8, 28, 13, 46, 12);
+    const scalp = {
+      ...trade,
+      strategy: "scalp",
+      underlying: "NVDA",
+      structureLabel: "Long call",
+      openedAt: opened,
+      closedAt: closed,
+      ironFly: null,
+      legs: [
+        { ...trade.legs[0], right: "C", strike: 232.5, quantity: 2, openPrice: 1.06, closePrice: 1.295 },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(scalp), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    const openedField = (await screen.findByLabelText("Opened")) as HTMLInputElement;
+    expect(openedField.step).toBe("1");
+    fireEvent.change(screen.getByLabelText("Exit price"), { target: { value: "1.40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
+    expect(JSON.parse(String(patch?.[1]?.body))).toMatchObject({ openedAt: opened, closedAt: closed });
   });
 
   it("says a synced fly's edits are kept too", async () => {

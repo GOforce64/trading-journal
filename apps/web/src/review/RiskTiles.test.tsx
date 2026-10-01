@@ -72,6 +72,12 @@ describe("RiskTiles", () => {
     expect(screen.getByTestId("risk-reason").textContent).toBe("Fetching the stock price…");
   });
 
+  it("says why MAE and MFE wait for the hold's range, rather than only that they need it", () => {
+    renderTiles(nvda({ scalpPrices: { entryPrice: 230.83, holdHigh: null, holdLow: null } }));
+    expect(tile("mae")).toBe("—fetching the stock's range…");
+    expect(tile("mfe")).toBe("—fetching the stock's range…");
+  });
+
   it("shows nothing for a trade without R", () => {
     renderTiles(nvda({ strategy: "iron_fly" }));
     expect(screen.queryByTestId("tile-r")).toBeNull();

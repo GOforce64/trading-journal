@@ -77,7 +77,9 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
   const key = `${period}|${at}`;
   const [calendar, setCalendar] = useState({ key, month: calendarMonth(period, at, today) });
   const month = calendar.key === key ? calendar.month : calendarMonth(period, at, today);
-  const [selected, setSelected] = useState<string | null>(null);
+  // A selected day belongs to the month and period it was picked in: stepping either drops it.
+  const [selection, setSelection] = useState<{ key: string; month: string; date: string } | null>(null);
+  const selected = selection?.key === key && selection.month === month ? selection.date : null;
 
   // Month and today are defaults, so they stay out of the URL.
   const go = (next: { period?: Period; at?: string }) => {
@@ -188,7 +190,7 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
             month={month}
             days={days}
             selected={selected}
-            onSelect={(date) => setSelected((current) => (current === date ? null : date))}
+            onSelect={(date) => setSelection(selected === date ? null : { key, month, date })}
           />
           {selected && (
             <DayTrades date={selected} trades={days.get(selected)?.trades ?? []} onOpenTrade={onOpenTrade} />

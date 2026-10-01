@@ -53,7 +53,8 @@ export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSea
   if (ticker && TICKER.test(ticker)) search.ticker = ticker;
   const setup = text(raw.setup);
   if (setup && SETUP_ID.test(setup)) search.setup = setup;
-  if (raw.excluded === true || raw.excluded === "true") search.excluded = true;
+  // The spec writes excluded=1; the page writes excluded=true.
+  if ([true, "true", 1, "1"].includes(raw.excluded as never)) search.excluded = true;
   const by = BREAKDOWNS.find((each) => each === raw.by);
   if (by && by !== "setup") search.by = by;
   if (raw.metric === "r" || raw.metric === "win") search.metric = raw.metric;

@@ -1,4 +1,4 @@
-import { nyMinuteOfDay, nyWallClock } from "./calendar.js";
+import { nyMinuteOfDay, nyWallClock, regularClose } from "./calendar.js";
 import { nyDate } from "./marks.js";
 
 /** One bar of prices. `t` is its start, as epoch ms; `v` is shares. */
@@ -16,7 +16,7 @@ export interface Candle extends PriceBar {
   extended: boolean;
 }
 
-/** Minutes since midnight, New York. */
+/** Minutes since midnight, New York. The regular session ends at 16:00, or 13:00 on a half day (`regularClose`). */
 export const PREMARKET_OPEN = 4 * 60;
 export const REGULAR_OPEN = 9 * 60 + 30;
 export const REGULAR_CLOSE = 16 * 60;
@@ -25,6 +25,8 @@ export const SESSION_END = 20 * 60;
 export const EMA_WARMUP = 3;
 /** The longest intraday range the server serves: a trade held a few weeks, plus its warm-up week. */
 export const MAX_BAR_DAYS = 45;
+/** Alpaca's free plan shares SIP prices 15 minutes after the fact; a minute more allows for clock drift. */
+export const ALPACA_DELAY_MS = 16 * 60_000;
 
 const HOUR = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -77,7 +79,7 @@ export function aggregate(bars: readonly PriceBar[], minutes: number): Candle[] 
       l: bar.l,
       c: bar.c,
       v: bar.v,
-      extended: slot < REGULAR_OPEN || slot >= REGULAR_CLOSE,
+      extended: slot < REGULAR_OPEN || slot >= regularClose(date),
     });
   }
   return candles;
@@ -117,7 +119,7 @@ export function vwap(bars: readonly PriceBar[], candles: readonly Candle[]): (nu
       weighted = 0;
       volume = 0;
     }
-    if (clock.minute < REGULAR_OPEN || clock.minute >= REGULAR_CLOSE) continue;
+    if (clock.minute < REGULAR_OPEN || clock.minute >= regularClose(clock.date)) continue;
     weighted += ((bar.h + bar.l + bar.c) / 3) * bar.v;
     volume += bar.v;
     while (index + 1 < candles.length && (candles[index + 1]?.t ?? Number.POSITIVE_INFINITY) <= bar.t)
@@ -148,7 +150,7 @@ export function sessionLevels(bars: readonly PriceBar[], date: string): SessionL
     if (clock.date === date && clock.minute >= PREMARKET_OPEN && clock.minute < REGULAR_OPEN) {
       pmHigh = pmHigh === null ? bar.h : Math.max(pmHigh, bar.h);
       pmLow = pmLow === null ? bar.l : Math.min(pmLow, bar.l);
-    } else if (clock.date < date && clock.minute >= REGULAR_OPEN && clock.minute < REGULAR_CLOSE) {
+    } else if (clock.date < date && clock.minute >= REGULAR_OPEN && clock.minute < regularClose(clock.date)) {
       const day = regular.get(clock.date);
       regular.set(
         clock.date,
@@ -169,7 +171,7 @@ export function dailyFromMinutes(bars: readonly PriceBar[], date: string): Price
   let day: PriceBar | null = null;
   for (const bar of bars) {
     const clock = nyClock(bar.t);
-    if (clock.date !== date || clock.minute < REGULAR_OPEN || clock.minute >= REGULAR_CLOSE) continue;
+    if (clock.date !== date || clock.minute < REGULAR_OPEN || clock.minute >= regularClose(date)) continue;
     if (!day) {
       day = { t: nyMidnight(date), o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v };
       continue;

@@ -7,7 +7,7 @@ import {
   round2,
 } from "@tj/core";
 import { uuidV5 } from "../oquants/ids.js";
-import type { FillKind } from "./parse.js";
+import type { FillKind, OpenClose } from "./parse.js";
 
 /** Fixed namespace for IBKR ids; changing it would make every synced trade new. */
 export const IBKR_NAMESPACE = "7c1f2b9a-4e3d-4c8b-9a6f-2d5e8b1c3f40";
@@ -32,7 +32,7 @@ export interface FillForGrouping {
   quantity: number;
   price: number;
   commission: number;
-  openClose: "O" | "C" | null;
+  openClose: OpenClose | null;
   kind: FillKind;
 }
 
@@ -83,6 +83,52 @@ function byContract(fills: FillForGrouping[]): FillForGrouping[][] {
   return [...contracts.values()];
 }
 
+/** Whether IBKR says a fill closes a position, all or part of it. */
+const closes = (fill: FillForGrouping) => fill.openClose === "C" || fill.openClose === "C;O";
+
+/**
+ * A fill that takes a contract through zero, such as selling 2 against a long 1, closes the position and opens a
+ * new one with the rest, so it's split at zero: the trade it closed goes flat there. The closing part keeps the
+ * fill's id, so the fill shows on that trade; the opening part gets its own id and key, and its share of the
+ * commission. Returns each opening part's id with its fill's.
+ *
+ * The position is counted from the window's first fill, so a split needs IBKR's word too: only a fill marked
+ * "C;O", or one with no mark, is split. Fills in the same second sort by key, not by when they happened, so a
+ * count can cross zero where the account never did; and a contract whose first fill closes was held from before
+ * the window, so its count is off by what was held.
+ */
+function splitCrossings(fills: FillForGrouping[]): { fills: FillForGrouping[]; parts: Map<string, string> } {
+  const position = new Map<string, number>();
+  const heldBefore = new Set<string>();
+  const out: FillForGrouping[] = [];
+  const parts = new Map<string, string>();
+  for (const fill of fills) {
+    if (!position.has(fill.conid) && closes(fill)) heldBefore.add(fill.conid);
+    const before = position.get(fill.conid) ?? 0;
+    const after = before + fill.quantity;
+    position.set(fill.conid, after);
+    const marked = fill.openClose === "C;O" || fill.openClose === null;
+    if (before * after >= 0 || !marked || heldBefore.has(fill.conid)) {
+      out.push(fill);
+      continue;
+    }
+    const closing = Math.round(((fill.commission * Math.abs(before)) / Math.abs(fill.quantity)) * 1e6) / 1e6;
+    const opening = { id: `${fill.id}:open`, key: `${fill.key}:open` };
+    out.push(
+      { ...fill, quantity: -before, commission: closing, openClose: "C" },
+      {
+        ...fill,
+        ...opening,
+        quantity: after,
+        commission: Math.round((fill.commission - closing) * 1e6) / 1e6,
+        openClose: "O",
+      },
+    );
+    parts.set(opening.id, fill.id);
+  }
+  return { fills: out, parts };
+}
+
 /** One contract's fills split flat to flat. */
 function roundTrips(fills: FillForGrouping[]): FillForGrouping[][] {
   const trips: FillForGrouping[][] = [];
@@ -108,7 +154,8 @@ function roundTrips(fills: FillForGrouping[]): FillForGrouping[][] {
 export function groupFills(fills: readonly FillForGrouping[], options: GroupOptions): Grouped {
   const out: Grouped = { candidates: [], skipped: [], links: new Map() };
   const buckets = new Map<string, FillForGrouping[]>();
-  for (const fill of [...fills].sort(byTime)) {
+  const split = splitCrossings([...fills].sort(byTime));
+  for (const fill of split.fills) {
     const key = `${fill.underlying}|${fill.expiry}`;
     const list = buckets.get(key);
     if (list) list.push(fill);
@@ -132,6 +179,13 @@ export function groupFills(fills: readonly FillForGrouping[], options: GroupOpti
       }
     }
     for (const episode of open) settle(episode.fills, out, options);
+  }
+  // An opening part is no stored fill. The fill links to the trade its closing part closed, or, when that part was
+  // skipped, to the trade its opening part began.
+  for (const [id, fillId] of split.parts) {
+    const link = out.links.get(id);
+    out.links.delete(id);
+    if (link && !out.links.has(fillId)) out.links.set(fillId, link);
   }
   out.candidates.sort((a, b) => a.trade.openedAt - b.trade.openedAt);
   return out;
@@ -158,30 +212,41 @@ function episodeFor(open: Episode[], fill: FillForGrouping): Episode | undefined
 }
 
 function settle(episode: FillForGrouping[], out: Grouped, options: GroupOptions): void {
-  const skip = (reason: SkippedEpisode["reason"]): void => {
+  const skip = (reason: SkippedEpisode["reason"], fills = episode): void => {
     out.skipped.push({
       reason,
-      ticker: episode[0]?.underlying ?? "",
-      openedAt: episode[0]?.executedAt ?? 0,
-      fillIds: episode.map((fill) => fill.id),
+      ticker: fills[0]?.underlying ?? "",
+      openedAt: fills[0]?.executedAt ?? 0,
+      fillIds: fills.map((fill) => fill.id),
     });
   };
   const contracts = byContract(episode);
   // A contract whose first fill closes a position was opened before the fills we have.
-  if (contracts.some((fills) => fills[0]?.openClose === "C")) {
+  if (contracts.some((fills) => fills[0] && closes(fills[0]))) {
     skip("before_start");
     return;
   }
 
   const openedBySelling = contracts.some((fills) => (fills[0]?.quantity ?? 0) < 0);
   if (!openedBySelling) {
+    // A round trip opened by selling, after the contract went flat or through zero, is a short: not a scalp.
     for (const fills of contracts)
-      for (const trip of roundTrips(fills)) addTrade([trip], "scalp", out, options);
+      for (const trip of roundTrips(fills)) {
+        if ((trip[0]?.quantity ?? 0) < 0) skip("unrecognised", trip);
+        else addTrade([trip], "scalp", out, options);
+      }
     return;
   }
   const opened = (right: "C" | "P", short: boolean) =>
     contracts.filter((fills) => fills[0]?.right === right && (fills[0]?.quantity ?? 0) < 0 === short).length;
+  // A leg that went from short to long, or back, is two positions: no one leg of a fly.
+  const changesSide = contracts.some((fills) =>
+    roundTrips(fills).some(
+      (trip) => Math.sign(trip[0]?.quantity ?? 0) !== Math.sign(fills[0]?.quantity ?? 0),
+    ),
+  );
   const isFly =
+    !changesSide &&
     opened("C", true) === 1 &&
     opened("P", true) === 1 &&
     opened("C", false) <= 1 &&

@@ -22,7 +22,14 @@ export function Panel({
   );
 }
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
+/** An option price to its last digit, two to four decimals: 1.295 → "1.295", 2.1 → "2.10", 0.333333 → "0.3333". */
+export function premiumText(value: number): string {
+  const four = value.toFixed(4);
+  return four.replace(/(\.\d{2}\d*?)0+$/, "$1");
+}
+
+/** Dollars and cents: 104.05 → "$104.05", −3 → "-$3.00". */
+export const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Dollars, coloured by sign, always monospaced. */
 export function Money({ value, className = "" }: { value: number | null; className?: string }) {

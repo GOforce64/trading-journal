@@ -1,4 +1,4 @@
-import { isTradingDay, nyDate, sessionMoment } from "@tj/core";
+import { ALPACA_DELAY_MS, isTradingDay, nyDate, sessionMoment } from "@tj/core";
 import { createTradesRepo, type Db, type PriceSide } from "@tj/db";
 import type { MarketData } from "./marketData.js";
 
@@ -29,9 +29,6 @@ export interface MoveFiller {
   /** Fetches the missing stock prices of these flies, or of every fly without ids. One run at a time. */
   fill(tradeIds?: readonly string[]): Promise<FillResult>;
 }
-
-/** Alpaca's free plan shares SIP prices 15 minutes after the fact; a minute more allows for clock drift. */
-export const RECENT_MS = 16 * 60_000;
 
 const NO_KEY: FillUnavailable = {
   reason: "no_key",
@@ -73,7 +70,7 @@ export function createMoveFiller({
           miss("no_session");
           continue;
         }
-        if (moment > now() - RECENT_MS) {
+        if (moment > now() - ALPACA_DELAY_MS) {
           miss("too_recent");
           continue;
         }

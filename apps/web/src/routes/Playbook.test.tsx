@@ -141,6 +141,20 @@ describe("Playbook", () => {
     );
   });
 
+  it("says why archiving a setup or a tag failed", async () => {
+    stubApi("The server is read-only");
+    renderPlaybook();
+    fireEvent.click(within(await screen.findByTestId("setup-orb")).getByRole("button", { name: "Archive" }));
+    expect(
+      await within(setupsPanel()).findByText("Couldn't archive ORB breakout: The server is read-only"),
+    ).toBeTruthy();
+    const fomo = (await screen.findByText("FOMO entry")).closest("li") as HTMLElement;
+    fireEvent.click(within(fomo).getByRole("button", { name: "Archive" }));
+    expect(
+      await within(tagsPanel()).findByText("Couldn't archive FOMO entry: The server is read-only"),
+    ).toBeTruthy();
+  });
+
   it("shows why a name was refused beside the row, keeping the draft", async () => {
     stubApi("A setup with that name exists");
     renderPlaybook();
@@ -210,6 +224,18 @@ describe("Playbook", () => {
     expect(onOpenSetup).toHaveBeenCalledWith("orb", "scalps");
     fireEvent.click(within(setupsPanel()).getByLabelText("Show archived"));
     expect(within(cards).getByRole("article", { name: "Old setup" })).toBeTruthy();
+  });
+
+  it("says the cards couldn't load when the trades fail, instead of loading for ever", async () => {
+    const fetchMock = stubApi();
+    const answered = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) =>
+      String(input).includes("/api/trades")
+        ? json({ error: "boom" }, 500)
+        : (answered?.(input, init) as Promise<Response>),
+    );
+    renderPlaybook();
+    expect(await screen.findByText("Couldn't load the setups' trades: reload to try again.")).toBeTruthy();
   });
 
   it("fetches the stock prices the scalps lack, once", async () => {

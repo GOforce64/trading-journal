@@ -1,5 +1,5 @@
 import type { TradeFill } from "../api.js";
-import { Panel } from "../components/ui.js";
+import { Panel, premiumText, usd } from "../components/ui.js";
 
 const ET = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -15,7 +15,6 @@ function fillTime(at: number): string {
   const parts = Object.fromEntries(ET.formatToParts(new Date(at)).map((part) => [part.type, part.value]));
   return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const KIND_LABEL: Record<string, string> = {
   expiration: "expired",
   exercise: "exercised",
@@ -55,7 +54,7 @@ export function FillsPanel({ fills }: { fills: TradeFill[] }) {
                 {fill.right}
               </td>
               <td className="text-right">{Math.abs(fill.quantity)}</td>
-              <td className="text-right">{fill.price.toFixed(2)}</td>
+              <td className="text-right">{premiumText(fill.price)}</td>
               <td className="text-right">{usd(fill.commission)}</td>
               <td className="pl-2 text-muted">
                 {fill.canceled ? "canceled" : (KIND_LABEL[fill.kind] ?? "")}

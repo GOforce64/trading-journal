@@ -1,9 +1,15 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TradeView } from "../api.js";
-import { needsPrices, useAutoFillPrices, useBackfillPrices, usePriceNote } from "./prices.js";
+import {
+  needsPrices,
+  useAutoFillPrices,
+  useBackfillPrices,
+  useFillScalpPrices,
+  usePriceNote,
+} from "./prices.js";
 
 const FULL = { entryPrice: 230.83, holdHigh: 233.21, holdLow: 230.71 };
 const scalp = (id: string, scalpPrices: unknown = null, closedAt: number | null = 2) =>
@@ -50,6 +56,26 @@ const filledAll = () => ({ filled: 1, missing: [], unavailable: null });
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("useFillScalpPrices", () => {
+  it("sends a long list, such as a first sync's changed trades, in requests of at most 1,000 ids", async () => {
+    const fetchMock = stubFill((tradeIds) => ({ filled: tradeIds.length, missing: [], unavailable: null }));
+    const hook: { fill?: ReturnType<typeof useFillScalpPrices> } = {};
+    function Probe() {
+      hook.fill = useFillScalpPrices();
+      return null;
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Probe />
+      </QueryClientProvider>,
+    );
+    const ids = Array.from({ length: 1001 }, (_, index) => `t${index}`);
+    const result = await hook.fill?.mutateAsync(ids);
+    expect(bodies(fetchMock).map((body) => body.tradeIds.length)).toEqual([1000, 1]);
+    expect(result).toEqual({ filled: 1001, missing: [], unavailable: null });
+  });
 });
 
 describe("needsPrices", () => {
@@ -106,6 +132,48 @@ describe("useAutoFillPrices", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60_000);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("says a failed fetch failed instead of fetching for ever, and asks again a minute later", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage(scalp("t1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("note").textContent).toBe(
+        "Couldn't fetch the stock price: trying again in a minute.",
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("refetches the trades after a fill that stored something, not after one that stored nothing", async () => {
+    const fetchMock = stubFill((tradeIds) => ({
+      filled: 0,
+      missing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      unavailable: null,
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const listed = vi.fn(async () => []);
+    function Lists() {
+      useQuery({ queryKey: ["trades"], queryFn: listed });
+      return null;
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Lists />
+        <Page trade={scalp("t1")} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("note").textContent).toBe(
+        "Alpaca shares prices 15 minutes late: trying again in a minute.",
+      ),
+    );
+    expect(listed).toHaveBeenCalledTimes(1);
   });
 
   it("gives the reason Alpaca has no bar, or the server's own message", async () => {

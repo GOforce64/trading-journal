@@ -1,7 +1,7 @@
-import { type MoveValue, sessionMoment, type TradeMoves, tradeMoves } from "@tj/core";
+import { isTradingDay, type MoveValue, nyDate, sessionMoment, type TradeMoves, tradeMoves } from "@tj/core";
 import type { ReactNode } from "react";
 import type { TradeView } from "../api.js";
-import { Tile } from "../components/ui.js";
+import { Tile, usd } from "../components/ui.js";
 import {
   etMinute,
   ivPct,
@@ -12,10 +12,8 @@ import {
   useFilling,
   useFillMoves,
   useFillResults,
-  useMarketOn,
+  useMarketState,
 } from "../moves.js";
-
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 const IV_BLANK = {
   near_expiry: "left blank within 24 h of expiry",
@@ -50,7 +48,8 @@ function ivWorking(moves: TradeMoves): string {
 export function MoveTiles({ trade }: { trade: TradeView }) {
   const moves = tradeMoves(trade);
   const fetching = useFilling();
-  const marketOn = useMarketOn();
+  const market = useMarketState();
+  const marketOn = market === "on";
   const results = useFillResults();
   const fill = useFillMoves();
   const { impliedMove, actualMove, moveRatio, ivBefore, ivAfter, stockAtEntry, stockAtExit } = moves;
@@ -60,12 +59,15 @@ export function MoveTiles({ trade }: { trade: TradeView }) {
   // Only the stock tile says why a price is missing; the others say what they need.
   const missingSide: PriceSide | null =
     stockAtEntry == null ? "entry" : !open && stockAtExit == null ? "exit" : null;
+  const missingAt = missingSide === "entry" ? trade.openedAt : (trade.closedAt ?? trade.openedAt);
+  // A price dated on a weekend or holiday has no session to be read from, so Fill in missing could never fill it.
+  const fillable = missingSide != null && isTradingDay(nyDate(sessionMoment(missingAt)));
   const missingNote =
     missingSide &&
     priceNote({
-      at: missingSide === "entry" ? trade.openedAt : (trade.closedAt ?? trade.openedAt),
+      at: missingAt,
       fetching,
-      marketOn,
+      market,
       lastReason: lastReason(results, trade.id, missingSide),
       now: Date.now(),
     });
@@ -113,7 +115,7 @@ export function MoveTiles({ trade }: { trade: TradeView }) {
         {open ? "open" : stockAtExit != null ? usd(stockAtExit) : "—"}
         <Working>
           {missingNote ?? readAt}
-          {missingSide && marketOn && !fetching && (
+          {fillable && marketOn && !fetching && (
             <button type="button" onClick={() => fill.mutate([trade.id])} className="ml-2 text-accent">
               Fill in missing
             </button>

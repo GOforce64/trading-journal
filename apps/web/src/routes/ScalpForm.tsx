@@ -1,6 +1,6 @@
 import { type PricedLeg, positionCash } from "@tj/core";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Money, Panel, Pct } from "../components/ui.js";
+import { Money, Panel, Pct, usd } from "../components/ui.js";
 import { todayNy, useChain, useCompanyName, useSettled } from "../market.js";
 import { ExpirySelect, StrikeSelect } from "./ChainPickers.js";
 
@@ -44,7 +44,6 @@ const INPUT =
 const num = (value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
 const zeroIfBlank = (value: string): number => (Number.isNaN(num(value)) ? 0 : num(value));
 const millis = (value: string): number => (value ? new Date(value).getTime() : Number.NaN);
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 export interface ScalpFormProps {
   initial?: Partial<ScalpFormValues>;
@@ -146,7 +145,15 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   const input = (label: string, key: keyof ScalpFormValues, type = "text") => (
     <label className={FIELD}>
       {label}
-      <input aria-label={label} type={type} value={values[key]} onChange={set(key)} className={INPUT} />
+      <input
+        aria-label={label}
+        type={type}
+        // Times to the second, as a synced fill has them.
+        step={type === "datetime-local" ? 1 : undefined}
+        value={values[key]}
+        onChange={set(key)}
+        className={INPUT}
+      />
     </label>
   );
 

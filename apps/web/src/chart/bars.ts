@@ -2,13 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api.js";
 import { TICKER } from "../market.js";
 
-/** The trade's 1-minute bars (spec §6). A live trade refreshes each minute; past days never change. */
+/**
+ * The trade's 1-minute bars (spec §6). A live trade refreshes each minute; past days never change. An answer still
+ * partial once the day is over (fetched just before 20:16) is fetched again until it's final.
+ */
 export function useMinuteBars(symbol: string, from: string, to: string, live: boolean) {
   return useQuery({
     queryKey: ["bars", symbol, from, to],
     enabled: TICKER.test(symbol),
-    staleTime: live ? 30_000 : Number.POSITIVE_INFINITY,
-    refetchInterval: live ? 60_000 : false,
+    staleTime: (query) => (live || query.state.data?.partial ? 30_000 : Number.POSITIVE_INFINITY),
+    refetchInterval: (query) => (live || query.state.data?.partial ? 60_000 : false),
     retry: false,
     queryFn: async () => {
       const res = await api.api.bars[":symbol"].$get({ param: { symbol }, query: { from, to } });

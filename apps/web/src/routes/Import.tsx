@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api.js";
 import { Money, Panel } from "../components/ui.js";
-import { fillSummary, useFillMoves } from "../moves.js";
+import { fillFailure, fillSummary, useFillMoves } from "../moves.js";
 import { IbkrCard } from "./IbkrCard.js";
 
 interface PreviewRow {
@@ -153,6 +153,11 @@ export function Import({ onDone }: { onDone?: () => void }) {
               </button>
             )}
             {fill.isPending && <p className="mt-1 text-muted">Fetching stock prices from Alpaca…</p>}
+            {fill.error && (
+              <p className="mt-1 text-down">
+                {fillFailure(fill.error, " Try Fill in missing on the Iron flies tab.")}
+              </p>
+            )}
             {fill.data && (
               <p className="mt-1 text-muted">{fillSummary(fill.data, ", see the Iron flies tab")}</p>
             )}

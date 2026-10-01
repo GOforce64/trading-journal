@@ -1,18 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type LegInput, settleExpiry } from "@tj/core";
 import { api, type TradeView } from "../api.js";
-import { Money, Panel } from "../components/ui.js";
+import { Money, Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
-import { netWorking, settleProposal } from "../settle.js";
+import { dayText, netWorking, noCloseReason, settleProposal } from "../settle.js";
 
-const usd = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
-const dayText = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
 const legName = (leg: { quantity: number; right: string }) =>
   `${leg.quantity < 0 ? "Short" : "Long"} ${leg.right === "C" ? "call" : "put"}`;
 
@@ -78,10 +71,7 @@ export function SettlePanel({
   });
 
   if (!expiry) return null;
-  const reason =
-    close.data?.unavailable?.message ??
-    (close.isError ? "Alpaca didn't answer, so type the exits in Edit." : null) ??
-    `Alpaca has no close for ${trade.underlying} on ${dayText(expiry)}, so type the exits in Edit.`;
+  const reason = noCloseReason(trade.underlying, expiry, close, ", so type the exits in Edit");
 
   return (
     <Panel title="Settle at expiry">
@@ -104,7 +94,8 @@ export function SettlePanel({
             {trade.underlying} closed at {usd(proposal.close)} on {dayText(expiry)}. Proposed exits at
             intrinsic value:
           </p>
-          <table className="num w-full border-collapse text-[11px]">
+          {/* Sized to its columns: stretched, the exits sat a page-width away from their legs. */}
+          <table className="num w-auto border-collapse text-[11px] [&_td+td]:pl-6 [&_th+th]:pl-6">
             <thead className="text-[9px] text-muted uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium">Leg</th>

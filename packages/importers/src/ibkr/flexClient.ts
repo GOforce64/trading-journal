@@ -18,9 +18,10 @@ export interface FlexOptions {
   /** The global fetch unless a test supplies its own. */
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
   /** Per request. */
   timeoutMs?: number;
-  /** How long to wait in all for IBKR to say yes. */
+  /** How long a statement may take in all, asking and collecting, before IBKR is called slow. */
   patienceMs?: number;
 }
 
@@ -61,6 +62,7 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
   const {
     fetch: fetchImpl = fetch,
     sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    now = Date.now,
     timeoutMs = 30_000,
     patienceMs = 120_000,
   } = options;
@@ -80,20 +82,21 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
     return res.text();
   }
 
-  /** Waits 2, 4, 8, 16, then 20 s between tries, giving up after `patienceMs` in all. */
+  /**
+   * Waits 2, 4, 8, 16, then 20 s between tries, giving up once `patienceMs` have passed since it was made: the
+   * time IBKR takes to answer counts too.
+   */
   function backoff() {
+    const deadline = now() + patienceMs;
     let next = 2_000;
-    let waited = 0;
     return async () => {
-      if (waited >= patienceMs) throw slow();
+      if (now() >= deadline) throw slow();
       await sleep(next);
-      waited += next;
       next = Math.min(next * 2, 20_000);
     };
   }
 
-  async function sendRequest(queryId: string): Promise<string> {
-    const wait = backoff();
+  async function sendRequest(queryId: string, wait: () => Promise<void>): Promise<string> {
     for (;;) {
       const body = await get(
         `${FLEX_BASE}/SendRequest?t=${encodeURIComponent(token)}&q=${encodeURIComponent(queryId)}&v=3`,
@@ -114,8 +117,9 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
 
   return {
     async statement(queryId) {
-      const reference = await sendRequest(queryId);
+      // One allowance for asking and collecting together.
       const wait = backoff();
+      const reference = await sendRequest(queryId, wait);
       for (;;) {
         // IBKR needs a moment before the first GetStatement.
         await wait();
@@ -128,7 +132,7 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
       }
     },
     async checkQuery(queryId) {
-      await sendRequest(queryId);
+      await sendRequest(queryId, backoff());
     },
   };
 }

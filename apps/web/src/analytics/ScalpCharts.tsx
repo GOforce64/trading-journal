@@ -1,20 +1,12 @@
 import type { GroupStats } from "@tj/core";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { DOWN, TICK, TOOLTIP, UP } from "./Charts.js";
+import { DOWN, TICK, TOOLTIP, UP, WITH_ZERO } from "./Charts.js";
 import { type Metric, metricValue, rowSummary, shortLabel, tickText } from "./scalpText.js";
 
 const ACCENT = "#5b8cff";
 const LINE = "#2a2e39";
 /** A breakdown row's band: room for its 9 px label, so labels never overlap however many rows there are. */
 const ROW_BAND = 22;
-/**
- * Net and R always take in zero: an axis fitted to the data alone starts at its lowest value, so with every bar on
- * one side the smallest draws no bar and the rest lose their proportions. Win % runs 0–100%.
- */
-const WITH_ZERO: [(low: number) => number, (high: number) => number] = [
-  (low) => Math.min(0, low),
-  (high) => Math.max(0, high),
-];
 
 export interface MetricRow extends GroupStats {
   label: string;

@@ -113,7 +113,7 @@ const toGrouping = (row: FillRow): FillForGrouping => ({
   quantity: row.quantity,
   price: row.price,
   commission: row.commission,
-  openClose: row.openClose === "O" || row.openClose === "C" ? row.openClose : null,
+  openClose: row.openClose === "O" || row.openClose === "C" || row.openClose === "C;O" ? row.openClose : null,
   kind:
     row.kind === "expiration" || row.kind === "exercise" || row.kind === "assignment" ? row.kind : "trade",
 });
@@ -156,7 +156,8 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
     if (!settings)
       return { ...emptySummary(), status: "not_configured", ran: false, lastRunAt: last?.lastRunAt ?? null };
     if (auto && last?.lastSummary && now() - last.lastRunAt < AUTO_INTERVAL_MS) {
-      return { ...(last.lastSummary as SyncSummary), ran: false };
+      // The last run's counts for the card, but nothing changed now: no ids for the page to fill prices for again.
+      return { ...(last.lastSummary as SyncSummary), ran: false, changedTradeIds: [] };
     }
 
     const flex = client(settings.token);

@@ -1,8 +1,17 @@
 import { type NewTrade, nyDate } from "@tj/core";
 import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import type { Db } from "../client.js";
-import { accounts, fills, ironFlyDetails, legs, scalpPrices, syncState, trades } from "../schema.js";
-import { stalePrices, staleScalpPrices } from "./trades.js";
+import {
+  accounts,
+  fills,
+  ironFlyDetails,
+  legs,
+  scalpDetails,
+  scalpPrices,
+  syncState,
+  trades,
+} from "../schema.js";
+import { staleEntryOverride, stalePrices, staleScalpPrices } from "./trades.js";
 
 export type FillRow = typeof fills.$inferSelect;
 
@@ -23,7 +32,7 @@ export interface FillInput {
   quantity: number;
   price: number;
   commission: number;
-  openClose: "O" | "C" | null;
+  openClose: "O" | "C" | "C;O" | null;
   kind: "trade" | "expiration" | "exercise" | "assignment";
   raw: Record<string, string>;
 }
@@ -158,14 +167,23 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       .run();
   }
 
+  /**
+   * Whether the stored trade already says what IBKR does. `toTheMinute` compares times by the minute: an edited trade
+   * whose only difference is seconds an older edit form dropped hasn't differed in a way worth "kept your edits".
+   */
   function sameFacts(
     existing: typeof trades.$inferSelect,
     candidate: SyncedTradeInput,
     accountId: string,
+    toTheMinute = false,
   ): boolean {
     const want = facts(candidate.trade, accountId);
+    const minute = (at: unknown) => (typeof at === "number" ? Math.floor(at / 60_000) : at);
     for (const [key, value] of Object.entries(want)) {
-      if (existing[key as keyof typeof want] !== value) return false;
+      const stored = existing[key as keyof typeof want];
+      if (toTheMinute && (key === "openedAt" || key === "closedAt")) {
+        if (minute(stored) !== minute(value)) return false;
+      } else if (stored !== value) return false;
     }
     const storedLegs = db
       .select()
@@ -401,9 +419,11 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
         writeFly(candidate);
         return "added";
       }
-      const same = sameFacts(existing, candidate, accountId);
-      if (existing.factsEditedAt != null) return same ? "unchanged" : "kept_edits";
-      if (same) return "unchanged";
+      // An edited trade is left alone either way; the answer only says whether IBKR differs.
+      if (existing.factsEditedAt != null) {
+        return sameFacts(existing, candidate, accountId, true) ? "unchanged" : "kept_edits";
+      }
+      if (sameFacts(existing, candidate, accountId)) return "unchanged";
       db.update(trades)
         .set({ ...facts(candidate.trade, accountId), updatedAt: timestamp })
         .where(eq(trades.id, candidate.id))
@@ -417,6 +437,13 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       // A close or a time the sync moved makes a scalp's fetched prices stale too (scalp-R spec §7).
       if (staleScalpPrices(existing, candidate.trade)) {
         db.delete(scalpPrices).where(eq(scalpPrices.tradeId, candidate.id)).run();
+      }
+      // And a stock at entry the user typed for the old entry minute.
+      if (staleEntryOverride(existing, candidate.trade)) {
+        db.update(scalpDetails)
+          .set({ stockEntryOverride: null })
+          .where(eq(scalpDetails.tradeId, candidate.id))
+          .run();
       }
       return "updated";
     },
@@ -448,10 +475,27 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       return deleted;
     },
 
+    /**
+     * Links fills to their trades and legs, and unlinks the rest. A canceled fill, which grouping never sees, joins
+     * the trade of a fill standing under the same IBKR trade id (the correction), else under the same order: so the
+     * trade's Fills panel shows it, labelled canceled. One with nothing standing beside it stays unlinked.
+     */
     linkFills(accountId: string, links: ReadonlyMap<string, { tradeId: string; legId: string }>): void {
       db.update(fills).set({ tradeId: null, legId: null }).where(eq(fills.accountId, accountId)).run();
       for (const [fillId, link] of links) {
         db.update(fills).set({ tradeId: link.tradeId, legId: link.legId }).where(eq(fills.id, fillId)).run();
+      }
+      const all = db.select().from(fills).where(eq(fills.accountId, accountId)).all();
+      const standing = all.filter((fill) => !fill.canceled && fill.tradeId != null);
+      for (const fill of all.filter((each) => each.canceled)) {
+        const beside =
+          standing.find((other) => other.brokerTradeId === fill.brokerTradeId) ??
+          standing.find((other) => fill.brokerOrderId != null && other.brokerOrderId === fill.brokerOrderId);
+        if (!beside) continue;
+        db.update(fills)
+          .set({ tradeId: beside.tradeId, legId: beside.legId })
+          .where(eq(fills.id, fill.id))
+          .run();
       }
     },
 

@@ -48,11 +48,17 @@ const secretsSchema = z.object({
 
 export type Secrets = z.infer<typeof secretsSchema>;
 
+const EXPECTED: Record<keyof Secrets, string> = {
+  alpaca: '{"alpaca": {"keyId": "…", "secretKey": "…"}}',
+  ibkr: '{"ibkr": {"token": "…", "activityQueryId": "…", "todayQueryId": "…", "since": "YYYY-MM-DD"}}',
+};
+
 /**
  * Reads the hand-made secrets file (spec §5). No file means no keys. A broken file
- * throws, naming the problem without repeating anything the file holds.
+ * throws, naming the problem without repeating anything the file holds. With `only`, just that entry is read and
+ * judged, so a broken IBKR entry never switches the Alpaca key off, or the other way round.
  */
-export function readSecrets(file: string): Secrets {
+export function readSecrets(file: string, only?: keyof Secrets): Secrets {
   let text: string;
   try {
     text = readFileSync(file, "utf8");
@@ -67,10 +73,13 @@ export function readSecrets(file: string): Secrets {
     // The parser's own message quotes the text around the mistake, which may be a key.
     throw new Error(`${file} is not valid JSON`);
   }
-  const parsed = secretsSchema.safeParse(data);
+  let schema: z.ZodType<Secrets> = secretsSchema;
+  if (only === "alpaca") schema = secretsSchema.pick({ alpaca: true });
+  if (only === "ibkr") schema = secretsSchema.pick({ ibkr: true });
+  const parsed = schema.safeParse(data);
   if (!parsed.success) {
     const fields = parsed.error.issues.map((issue) => issue.path.join(".") || "the top level").join(", ");
-    throw new Error(`${file}: check ${fields}; expected {"alpaca": {"keyId": "…", "secretKey": "…"}}`);
+    throw new Error(`${file}: check ${fields}; expected ${EXPECTED[only ?? "alpaca"]}`);
   }
   return parsed.data;
 }

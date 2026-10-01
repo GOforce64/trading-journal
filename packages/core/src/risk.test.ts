@@ -94,6 +94,12 @@ describe("holdRange", () => {
     expect(holdRange(BARS.slice(0, 3), OPENED, CLOSED)).toBeNull();
   });
 
+  it("takes what a finished day has, when no bar reaches the exit minute", () => {
+    // A thin name after hours: no trade at or after the exit minute, ever. The day is complete, so the range stands.
+    expect(holdRange(BARS.slice(0, 3), OPENED, CLOSED, true)).toEqual({ high: 233.21, low: 230.71 });
+    expect(holdRange([], OPENED, CLOSED, true)).toBeNull();
+  });
+
   it("takes an exit minute without trades once a later bar shows it has passed", () => {
     expect(holdRange([ENTRY_BAR, bar(590, 232, 232.5, 231.9, 232)], OPENED, CLOSED)).toEqual({
       high: 232.11,
@@ -161,6 +167,25 @@ describe("scalpRisk", () => {
       runner: { contracts: 1, atTarget: 2 },
     });
     expect(risk?.rewardRisk).toBeCloseTo(3.07, 2);
+  });
+
+  it("still counts the runner when nothing can be priced, at the farthest target by reach", () => {
+    // No stock price yet: no reward, but the untrimmed contract is still a runner, at T2 (234.50).
+    const unpricedRisk = scalpRisk(nvda({ legs: [leg({ quantity: 3 })], scalpPrices: null }));
+    expect(unpricedRisk).toMatchObject({ plannedReward: null, runner: { contracts: 1, atTarget: 2 } });
+    // Every target on the wrong side (below a call's entry): the same.
+    const below = scalpRisk(
+      nvda(
+        { legs: [leg({ quantity: 3 })] },
+        {
+          targets: [
+            { price: 229, contracts: 1 },
+            { price: 228, contracts: 1 },
+          ],
+        },
+      ),
+    );
+    expect(below).toMatchObject({ plannedReward: null, runner: { contracts: 1, atTarget: 1 } });
   });
 
   it("puts the runner at the farthest target whatever the list's order, as while a line is dragged", () => {

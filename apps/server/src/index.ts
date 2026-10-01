@@ -25,7 +25,7 @@ const webDir = existsSync(WEB_DIST) ? WEB_DIST : undefined;
 // Market data is optional too: without a usable key the journal runs without it.
 let keys: AlpacaKeys | null = null;
 try {
-  keys = readSecrets(paths.secretsFile).alpaca ?? null;
+  keys = readSecrets(paths.secretsFile, "alpaca").alpaca ?? null;
 } catch (error) {
   console.warn(`Market data off: ${(error as Error).message}`);
 }
@@ -34,7 +34,7 @@ const market = createMarketData(keys);
 const app = createApp({
   db: openDatabase(paths.dbFile),
   webDir,
-  backup: () => backupDatabase(paths.dbFile, paths.backupDir),
+  backup: () => backupDatabase(paths.dbFile, paths.backupDir, 10, "import"),
   market,
   settings: {
     dataDir: paths.dataDir,
@@ -43,7 +43,7 @@ const app = createApp({
     checkIbkr: (token, queryId) => checkFlexQuery(token, queryId),
   },
   // Read on every sync, so saving in Settings applies at once; a broken file means not set up.
-  ibkrConfig: () => readSecrets(paths.secretsFile).ibkr ?? null,
+  ibkrConfig: () => readSecrets(paths.secretsFile, "ibkr").ibkr ?? null,
 });
 
 serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {

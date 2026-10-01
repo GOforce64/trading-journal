@@ -28,27 +28,49 @@ interface Dot {
   label: string;
 }
 
+/** How close, as shares of the chart's span, a name may sit to one already placed. */
+const LABEL_GAP = { x: 0.08, y: 0.06 };
+
+/**
+ * The dots to name: the five largest results, largest first, skipping any that would sit on a name already placed
+ * (CRM and CRWD a point apart). `top` is the charts' span, in the dots' units.
+ */
+export function pickLabels(
+  dots: readonly { id: string; x: number; y: number; pnl: number }[],
+  top: number,
+  count = 5,
+): Set<string> {
+  const placed: { x: number; y: number }[] = [];
+  const names = new Set<string>();
+  for (const each of [...dots].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))) {
+    if (names.size === count) break;
+    const crowded = placed.some(
+      (other) =>
+        Math.abs(other.x - each.x) < LABEL_GAP.x * top && Math.abs(other.y - each.y) < LABEL_GAP.y * top,
+    );
+    if (crowded) continue;
+    placed.push(each);
+    names.add(each.id);
+  }
+  return names;
+}
+
 /**
  * Implied move (x) against |actual| move (y), both in percent, one dot per fly (spec §9.4).
  * Above the y = x line the stock moved more than the options priced in.
  */
 export function MoveScatter({ points }: { points: readonly MovePoint[] }) {
-  const labelled = new Set(
-    [...points]
-      .sort((a, b) => Math.abs(b.netPnl) - Math.abs(a.netPnl))
-      .slice(0, 5)
-      .map((point) => point.id),
-  );
-  const dots: Dot[] = points.map((point) => ({
+  const placed = points.map((point) => ({
     id: point.id,
     ticker: point.ticker,
     x: point.implied * 100,
     y: point.absActual * 100,
     size: Math.abs(point.netPnl),
     pnl: point.netPnl,
-    label: labelled.has(point.id) ? point.ticker : "",
   }));
-  const top = Math.ceil(Math.max(10, ...dots.map((dot) => Math.max(dot.x, dot.y))) / 5) * 5;
+  const top = Math.ceil(Math.max(10, ...placed.map((dot) => Math.max(dot.x, dot.y))) / 5) * 5;
+  const labelled = pickLabels(placed, top);
+  const dots: Dot[] = placed.map((dot) => ({ ...dot, label: labelled.has(dot.id) ? dot.ticker : "" }));
   return (
     <>
       <ResponsiveContainer width="100%" height={220}>
@@ -133,7 +155,15 @@ export function CrushHistogram({
   return (
     <ResponsiveContainer width="100%" height={150}>
       <BarChart data={data} margin={{ top: 14, right: 8, bottom: 0, left: 8 }}>
-        <XAxis dataKey="label" tick={TICK} interval={0} axisLine={false} tickLine={false} />
+        {/* Labels that would collide are dropped; every bar keeps its count, and its tooltip its range. */}
+        <XAxis
+          dataKey="label"
+          tick={TICK}
+          interval="preserveStartEnd"
+          minTickGap={10}
+          axisLine={false}
+          tickLine={false}
+        />
         <YAxis hide allowDecimals={false} />
         <Tooltip
           {...TOOLTIP}

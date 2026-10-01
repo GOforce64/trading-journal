@@ -129,6 +129,35 @@ describe("IntradayChart", () => {
   });
 });
 
+describe("IntradayChart cleanup", () => {
+  it("removes its chart and stops listening when the page leaves", () => {
+    // Placing the stop, so a listening chart would take Esc as cancel.
+    const edit = { placing: "stop", onPlace: vi.fn(), onDrag: vi.fn(), onDrop: vi.fn(), onCancel: vi.fn() };
+    const { unmount } = render(
+      <IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} lines={[]} editing={edit} />,
+    );
+    const removedBefore = library.removed;
+    unmount();
+    expect(library.removed).toBe(removedBefore + 1);
+    // Esc after leaving reaches nothing.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(edit.onCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("IntradayChart's legend", () => {
+  it("lists two EMAs of the same length, each once, without React confusing them", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const twins = intradayModel(BARS, TRADE, 3, [8, 8, 20, 50]);
+    render(<IntradayChart model={twins} show={DEFAULT_PREFS.show} fitKey={0} />);
+    act(() => library.crosshair?.({ time: nyWallClock(DAY, 600) / 1000 }));
+    const legend = screen.getByTestId("chart-legend").textContent ?? "";
+    expect(legend.match(/EMA 8 /g)).toHaveLength(2);
+    expect(errors.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(false);
+    errors.mockRestore();
+  });
+});
+
 describe("DailyChart", () => {
   it("draws daily candles by date, with the trade's days marked, opening on the last six months", () => {
     const daily = [
@@ -205,8 +234,8 @@ describe("IntradayChart editing the review's lines", () => {
     renderEditing(edit);
     fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8) + 3, button: 0 });
     expect(library.chartOptions.at(-1)).toEqual({ handleScroll: false, handleScale: false });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(231) });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230.5) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(231), buttons: 1 });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230.5), buttons: 1 });
     expect(edit.onDrag).toHaveBeenLastCalledWith("stop", 230.5);
     expect(stopLine()?.price).toBe(230.5);
     expect(edit.onDrop).not.toHaveBeenCalled();
@@ -220,10 +249,24 @@ describe("IntradayChart editing the review's lines", () => {
     const edit = editing();
     renderEditing(edit);
     fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
-    fireEvent.mouseMove(document.body, { clientX: 1200, clientY: yOf(229) });
+    fireEvent.mouseMove(document.body, { clientX: 1200, clientY: yOf(229), buttons: 1 });
     fireEvent.mouseUp(document.body);
     expect(edit.onDrop).toHaveBeenCalledTimes(1);
     expect(edit.onDrop).toHaveBeenCalledWith("stop", 229);
+    expect(library.chartOptions.at(-1)).toEqual({ handleScroll: true, handleScale: true });
+  });
+
+  it("ends a drag whose release was lost outside the window, keeping the line where it was", () => {
+    const edit = editing();
+    renderEditing(edit);
+    fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230.5), buttons: 1 });
+    // Released over another window: no mouseup ever comes, and the next move has no button held.
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(229), buttons: 0 });
+    expect(edit.onDrop).toHaveBeenCalledTimes(1);
+    expect(edit.onDrop).toHaveBeenCalledWith("stop", 230.5);
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(228), buttons: 0 });
+    expect(stopLine()?.price).toBe(230.5);
     expect(library.chartOptions.at(-1)).toEqual({ handleScroll: true, handleScale: true });
   });
 
@@ -231,7 +274,7 @@ describe("IntradayChart editing the review's lines", () => {
     const edit = editing();
     renderEditing(edit);
     fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230), buttons: 1 });
     fireEvent.keyDown(window, { key: "Escape" });
     expect(stopLine()?.price).toBe(231.8);
     expect(edit.onCancel).toHaveBeenCalled();
@@ -255,7 +298,7 @@ describe("IntradayChart editing the review's lines", () => {
   it("does nothing with the mouse without editing, as on a fly's page", () => {
     render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} lines={[STOP]} />);
     fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(231.8), button: 0 });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(230), buttons: 1 });
     expect(library.chartOptions).toEqual([]);
     expect(stopLine()?.price).toBe(231.8);
   });
@@ -274,7 +317,7 @@ describe("IntradayChart editing the review's lines", () => {
     const edit = editing();
     renderEditing(edit, [STOP, T1]);
     fireEvent.mouseDown(chart(), { clientX: 100, clientY: yOf(234.5), button: 0 });
-    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(235.5) });
+    fireEvent.mouseMove(window, { clientX: 100, clientY: yOf(235.5), buttons: 1 });
     expect(edit.onDrag).toHaveBeenLastCalledWith("t1", 235.5);
     fireEvent.mouseUp(window);
     expect(edit.onDrop).toHaveBeenCalledWith("t1", 235.5);
