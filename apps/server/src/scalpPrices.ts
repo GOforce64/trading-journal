@@ -99,7 +99,9 @@ export function createScalpPriceFiller({
         filled++;
       }
       if (entryPrice == null) miss("no_bars");
-      else if (gap.closedAt != null && range == null) miss(closeOut ? "no_bars" : "too_recent");
+      // A day still coming in may yet bring a bar at or after the exit: that's for later, not missing.
+      else if (gap.closedAt != null && range == null)
+        miss(closeOut && !answer.partial ? "no_bars" : "too_recent");
     }
     return { filled, missing, unavailable: null };
   }
