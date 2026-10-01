@@ -132,7 +132,7 @@ The code repository contains **no user data, ever**.
 - **Contents:**
   - `journal.db`: all trades and settings
   - `attachments/<sha256>.<ext>`: screenshots, content-addressed
-  - `backups/`: automatic DB snapshot before every migration, import and merge (the last 10 are kept)
+  - `backups/`: automatic DB snapshot before every migration, import and merge. Each kind is named for itself (`journal-migration-…`, `journal-import-…`) and keeps its last 10; backups from before the names count with whichever kind runs, so they go oldest first. Files the app didn't make stay. The bar cache is left out of each copy, since it's fetched again.
   - `secrets.json`: the Alpaca key (saved from Settings), IBKR Flex tokens and the Massive API key; file mode `0600` on Linux
   - `machine.json`: this installation's random `machineId`
 - `.gitignore` also blocks `*.db`, `*.tjbundle`, `secrets.json`, `data/` and `.env*` as a second line of defense.

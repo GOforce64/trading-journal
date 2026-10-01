@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,6 +57,30 @@ describe("backupDatabase", () => {
     expect(names).toContain("journal-before-notes-merge.db");
     // Imports don't use up the migrations' share.
     expect(names).toContain(basename(migration));
+  });
+
+  it("prunes backups named the old way, before each kind had its name, oldest first", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tj-backup-"));
+    const file = join(dir, "journal.db");
+    const backupDir = join(dir, "backups");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    mkdirSync(backupDir, { recursive: true });
+    const legacy = [
+      "journal-2026-09-24T18-03-12-345Z.db",
+      "journal-2026-09-25T09-00-00-000Z.db",
+      "journal-2026-09-25T09-00-00-000Z-1.db",
+    ];
+    legacy.forEach((name, index) => {
+      writeFileSync(join(backupDir, name), "x");
+      const at = new Date(Date.UTC(2026, 8, 24 + index));
+      utimesSync(join(backupDir, name), at, at);
+    });
+    writeFileSync(join(backupDir, "journal-before-notes-merge.db"), "x");
+    backupDatabase(file, backupDir, 2, "import");
+    const names = readdirSync(backupDir);
+    // The new backup and the newest old one make the two kept; a copy made by hand stays.
+    expect(names.filter((name) => legacy.includes(name))).toEqual(["journal-2026-09-25T09-00-00-000Z-1.db"]);
+    expect(names).toContain("journal-before-notes-merge.db");
   });
 
   it("leaves the bar cache out of a backup, since it's fetched again", () => {

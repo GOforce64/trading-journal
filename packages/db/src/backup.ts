@@ -5,6 +5,12 @@ import Database from "better-sqlite3";
 /** Why a backup was taken. Each kind keeps its own most recent copies. */
 export type BackupReason = "backup" | "import" | "migration";
 
+/**
+ * A backup from before each kind had its name: `journal-` and the ISO time, made for migrations and imports alike.
+ * Every kind prunes these with its own, so they go oldest first as new backups come.
+ */
+const LEGACY = /^journal-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(-\d+)?\.db$/;
+
 /** The cache tables: fetched again on demand, so a backup leaves them out. */
 const CACHE_TABLES = ["bars", "bar_days"];
 
@@ -53,10 +59,13 @@ export function backupDatabase(
   return target;
 }
 
-/** Keeps the `keep` most recent backups of one kind. Files it didn't make, such as a copy made by hand, stay. */
+/**
+ * Keeps the `keep` most recent backups of one kind, counting old-style ones with it. Files it didn't make, such as a
+ * copy made by hand, stay.
+ */
 function pruneBackups(backupDir: string, prefix: string, keep: number): void {
   const files = readdirSync(backupDir)
-    .filter((name) => name.startsWith(prefix) && name.endsWith(".db"))
+    .filter((name) => (name.startsWith(prefix) && name.endsWith(".db")) || LEGACY.test(name))
     .map((name) => ({ name, mtime: statSync(join(backupDir, name)).mtimeMs }))
     .sort((a, b) => b.mtime - a.mtime || b.name.localeCompare(a.name));
   for (const file of files.slice(keep)) unlinkSync(join(backupDir, file.name));
