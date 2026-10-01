@@ -15,12 +15,21 @@ const refused = (status: "Warn" | "Fail", code: string, message: string) =>
   );
 const STATEMENT = `<FlexQueryResponse queryName="TJ Today" type="TCF"><FlexStatements count="1"></FlexStatements></FlexQueryResponse>`;
 
-/** Plays back one reply per call, or throws a given error, and records every call and every wait. */
+/**
+ * Plays back one reply per call, or throws a given error, and records every call and every wait. The clock moves
+ * with each wait, and by `latencyMs` with each answer.
+ */
 function fake(...replies: (Response | Error)[]) {
+  return fakeWith({ latencyMs: 0 }, ...replies);
+}
+
+function fakeWith({ latencyMs }: { latencyMs: number }, ...replies: (Response | Error)[]) {
   const calls: { url: string; userAgent: string | null }[] = [];
   const sleeps: number[] = [];
+  let clock = 0;
   const fetch = async (url: string, init?: RequestInit) => {
     calls.push({ url, userAgent: new Headers(init?.headers).get("User-Agent") });
+    clock += latencyMs;
     const reply = replies.shift();
     if (!reply) throw new Error("IBKR was called more often than expected");
     if (reply instanceof Error) throw reply;
@@ -28,8 +37,9 @@ function fake(...replies: (Response | Error)[]) {
   };
   const sleep = async (ms: number) => {
     sleeps.push(ms);
+    clock += ms;
   };
-  return { client: ibkrFlex(TOKEN, { fetch, sleep }), calls, sleeps };
+  return { client: ibkrFlex(TOKEN, { fetch, sleep, now: () => clock }), calls, sleeps, elapsed: () => clock };
 }
 
 async function failure(promise: Promise<unknown>): Promise<FlexError> {
@@ -80,6 +90,29 @@ describe("ibkrFlex.statement", () => {
     const waited = sleeps.reduce((sum, ms) => sum + ms, 0);
     expect(waited).toBeGreaterThanOrEqual(120_000);
     expect(waited).toBeLessThan(150_000);
+  });
+
+  it("gives the statement about two minutes in all, asking and collecting together", async () => {
+    const throttled = () => refused("Fail", "1018", "Too many requests have been made from this token.");
+    const replies = [
+      ...Array.from({ length: 6 }, throttled),
+      accepted(),
+      ...Array.from({ length: 20 }, () => refused("Warn", "1019", "In progress.")),
+    ];
+    const { client, elapsed } = fake(...replies);
+    expect((await failure(client.statement(QUERY))).kind).toBe("slow");
+    expect(elapsed()).toBeGreaterThanOrEqual(120_000);
+    expect(elapsed()).toBeLessThan(150_000);
+  });
+
+  it("counts the time IBKR takes to answer toward the two minutes", async () => {
+    const replies = [
+      accepted(),
+      ...Array.from({ length: 20 }, () => refused("Warn", "1019", "In progress.")),
+    ];
+    const { client, elapsed } = fakeWith({ latencyMs: 15_000 }, ...replies);
+    expect((await failure(client.statement(QUERY))).kind).toBe("slow");
+    expect(elapsed()).toBeLessThan(160_000);
   });
 
   it("waits and retries when IBKR says too many requests", async () => {
