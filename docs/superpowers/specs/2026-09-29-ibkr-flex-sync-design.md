@@ -228,9 +228,10 @@ Both machines need the same `since` to produce identical trades, and the Setting
    - Walk each ticker-and-expiry bucket, tracking the net position per `conid`.
    - An episode starts when the whole bucket is flat and a fill arrives, and ends when every contract in it is flat again.
    - An episode still open at the end stays open.
+   - **A fill that takes a contract through zero** (selling 2 against a long 1) is split at zero: its closing part ends the position, so the trade it closed goes flat, and the rest opens a new one with its share of the commission. The fill itself links to the trade it closed.
 2. **Classification**, by how each contract was opened. The opening fills are those marked `O`, or, where IBKR gave no mark, those that grow the position.
-   - **Every contract opened by buying → scalps.** Each contract is split into its own round trips, flat to flat, and each round trip is one scalp with one leg.
-   - **Some contract opened by selling → a multi-leg candidate.** It's an **iron fly** when it has exactly one short call, one short put, and at most one long call and one long put (core's `ironFlyStructureFromLegs`; 1-wing flies count). Otherwise it's skipped: "unrecognised structure, enter it by hand".
+   - **Every contract opened by buying → scalps.** Each contract is split into its own round trips, flat to flat, and each round trip is one scalp with one leg. A round trip opened by selling (a short after the contract went flat or through zero) is skipped as unrecognised.
+   - **Some contract opened by selling → a multi-leg candidate.** It's an **iron fly** when it has exactly one short call, one short put, and at most one long call and one long put (core's `ironFlyStructureFromLegs`; 1-wing flies count). Otherwise, or when a contract changed side within the episode (a short leg bought back past zero), it's skipped: "unrecognised structure, enter it by hand".
    - **A closing fill before any opening fill** for its contract means the episode is skipped: "opened before the start date".
 3. **Legs, per contract:**
    - `quantity` is the total opened, signed.

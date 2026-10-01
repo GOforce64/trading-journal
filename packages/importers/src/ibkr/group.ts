@@ -83,6 +83,41 @@ function byContract(fills: FillForGrouping[]): FillForGrouping[][] {
   return [...contracts.values()];
 }
 
+/**
+ * A fill that takes a contract through zero, such as selling 2 against a long 1, closes the position and opens a
+ * new one with the rest, so it's split at zero: the trade it closed goes flat there. The closing part keeps the
+ * fill's id, so the fill shows on that trade; the opening part gets its own id and key, and its share of the
+ * commission. Returns the opening parts' ids.
+ */
+function splitCrossings(fills: FillForGrouping[]): { fills: FillForGrouping[]; parts: Set<string> } {
+  const position = new Map<string, number>();
+  const out: FillForGrouping[] = [];
+  const parts = new Set<string>();
+  for (const fill of fills) {
+    const before = position.get(fill.conid) ?? 0;
+    const after = before + fill.quantity;
+    position.set(fill.conid, after);
+    if (before * after >= 0) {
+      out.push(fill);
+      continue;
+    }
+    const closing = Math.round(((fill.commission * Math.abs(before)) / Math.abs(fill.quantity)) * 1e6) / 1e6;
+    const opening = { id: `${fill.id}:open`, key: `${fill.key}:open` };
+    out.push(
+      { ...fill, quantity: -before, commission: closing, openClose: "C" },
+      {
+        ...fill,
+        ...opening,
+        quantity: after,
+        commission: Math.round((fill.commission - closing) * 1e6) / 1e6,
+        openClose: "O",
+      },
+    );
+    parts.add(opening.id);
+  }
+  return { fills: out, parts };
+}
+
 /** One contract's fills split flat to flat. */
 function roundTrips(fills: FillForGrouping[]): FillForGrouping[][] {
   const trips: FillForGrouping[][] = [];
@@ -108,7 +143,8 @@ function roundTrips(fills: FillForGrouping[]): FillForGrouping[][] {
 export function groupFills(fills: readonly FillForGrouping[], options: GroupOptions): Grouped {
   const out: Grouped = { candidates: [], skipped: [], links: new Map() };
   const buckets = new Map<string, FillForGrouping[]>();
-  for (const fill of [...fills].sort(byTime)) {
+  const split = splitCrossings([...fills].sort(byTime));
+  for (const fill of split.fills) {
     const key = `${fill.underlying}|${fill.expiry}`;
     const list = buckets.get(key);
     if (list) list.push(fill);
@@ -133,6 +169,8 @@ export function groupFills(fills: readonly FillForGrouping[], options: GroupOpti
     }
     for (const episode of open) settle(episode.fills, out, options);
   }
+  // An opening part is no stored fill: the fill links to the trade its closing part closed.
+  for (const id of split.parts) out.links.delete(id);
   out.candidates.sort((a, b) => a.trade.openedAt - b.trade.openedAt);
   return out;
 }
@@ -158,12 +196,12 @@ function episodeFor(open: Episode[], fill: FillForGrouping): Episode | undefined
 }
 
 function settle(episode: FillForGrouping[], out: Grouped, options: GroupOptions): void {
-  const skip = (reason: SkippedEpisode["reason"]): void => {
+  const skip = (reason: SkippedEpisode["reason"], fills = episode): void => {
     out.skipped.push({
       reason,
-      ticker: episode[0]?.underlying ?? "",
-      openedAt: episode[0]?.executedAt ?? 0,
-      fillIds: episode.map((fill) => fill.id),
+      ticker: fills[0]?.underlying ?? "",
+      openedAt: fills[0]?.executedAt ?? 0,
+      fillIds: fills.map((fill) => fill.id),
     });
   };
   const contracts = byContract(episode);
@@ -175,13 +213,24 @@ function settle(episode: FillForGrouping[], out: Grouped, options: GroupOptions)
 
   const openedBySelling = contracts.some((fills) => (fills[0]?.quantity ?? 0) < 0);
   if (!openedBySelling) {
+    // A round trip opened by selling, after the contract went flat or through zero, is a short: not a scalp.
     for (const fills of contracts)
-      for (const trip of roundTrips(fills)) addTrade([trip], "scalp", out, options);
+      for (const trip of roundTrips(fills)) {
+        if ((trip[0]?.quantity ?? 0) < 0) skip("unrecognised", trip);
+        else addTrade([trip], "scalp", out, options);
+      }
     return;
   }
   const opened = (right: "C" | "P", short: boolean) =>
     contracts.filter((fills) => fills[0]?.right === right && (fills[0]?.quantity ?? 0) < 0 === short).length;
+  // A leg that went from short to long, or back, is two positions: no one leg of a fly.
+  const changesSide = contracts.some((fills) =>
+    roundTrips(fills).some(
+      (trip) => Math.sign(trip[0]?.quantity ?? 0) !== Math.sign(fills[0]?.quantity ?? 0),
+    ),
+  );
   const isFly =
+    !changesSide &&
     opened("C", true) === 1 &&
     opened("P", true) === 1 &&
     opened("C", false) <= 1 &&

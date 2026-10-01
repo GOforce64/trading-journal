@@ -219,6 +219,71 @@ describe("groupFills rules", () => {
     ]);
   });
 
+  it("closes a scalp when a sale takes the position through zero, and leaves the short it opened out", () => {
+    const buy = fill({ quantity: 1, price: 1, commission: 0.65 });
+    const sale = fill({ quantity: -2, price: 2, commission: 1.3 });
+    const { candidates, skipped, links } = groupFills([buy, sale], OPTIONS);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.trade).toMatchObject({
+      strategy: "scalp",
+      closedAt: sale.executedAt,
+      netPnl: 98.7,
+      feesOpen: 0.65,
+      feesClose: 0.65,
+    });
+    expect(candidates[0]?.trade.legs[0]).toMatchObject({ quantity: 1, openPrice: 1, closePrice: 2 });
+    // The short one contract left over was sold to open, which no rule makes a trade of.
+    expect(skipped).toEqual([expect.objectContaining({ reason: "unrecognised", openedAt: sale.executedAt })]);
+    // The fill itself shows on the scalp it closed.
+    expect(links.get(sale.id)?.tradeId).toBe(candidates[0]?.id);
+    expect([...links.keys()].sort()).toEqual([buy.id, sale.id].sort());
+  });
+
+  it("splits a scalp from a later short in the same contract while another contract holds the episode open", () => {
+    const put = { conid: "2", right: "P" as const, strike: 45 };
+    const { candidates, skipped } = groupFills(
+      [
+        fill({ ...put, quantity: 1, price: 1 }),
+        fill({ quantity: 1, price: 1 }),
+        fill({ quantity: -2, price: 1.5 }),
+        fill({ quantity: 1, price: 1.25 }),
+        fill({ ...put, quantity: -1, price: 2 }),
+      ],
+      OPTIONS,
+    );
+    expect(candidates.map((each) => [each.trade.structureLabel, each.trade.legs[0]?.quantity])).toEqual([
+      ["Long put", 1],
+      ["Long call", 1],
+    ]);
+    expect(skipped.map((each) => each.reason)).toEqual(["unrecognised"]);
+  });
+
+  it("skips a fly whose short leg was bought back past zero, rather than build a leg from both sides", () => {
+    const leg = (conid: string, right: "C" | "P", strike: number) => ({ conid, right, strike });
+    const [c50, p50, c55, p45] = [
+      leg("c50", "C", 50),
+      leg("p50", "P", 50),
+      leg("c55", "C", 55),
+      leg("p45", "P", 45),
+    ];
+    const { candidates, skipped } = groupFills(
+      [
+        fill({ ...c50, quantity: -1, price: 2 }),
+        fill({ ...p50, quantity: -1, price: 2 }),
+        fill({ ...c55, quantity: 1, price: 0.5 }),
+        fill({ ...p45, quantity: 1, price: 0.5 }),
+        fill({ ...c50, quantity: 2, price: 1 }),
+        fill({ ...p50, quantity: 1, price: 1 }),
+        fill({ ...c50, quantity: -1, price: 0, kind: "expiration" }),
+        fill({ ...c55, quantity: -1, price: 0, kind: "expiration" }),
+        fill({ ...p45, quantity: -1, price: 0, kind: "expiration" }),
+      ],
+      OPTIONS,
+    );
+    expect(candidates).toEqual([]);
+    expect(skipped.map((each) => each.reason)).toEqual(["unrecognised"]);
+  });
+
   it("keeps a bought contract that hasn't been sold as an open scalp", () => {
     const { candidates } = groupFills([fill({ quantity: 3, price: 2 })], OPTIONS);
     expect(candidates[0]?.trade).toMatchObject({ closedAt: null, netPnl: null });
