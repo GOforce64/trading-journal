@@ -3,6 +3,7 @@ import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 
 export type FillKind = "trade" | "expiration" | "exercise" | "assignment";
+export type OpenClose = "O" | "C" | "C;O";
 
 /** One execution or booking, the same shape whichever statement it came from (spec §6.2). */
 export interface ParsedFill {
@@ -25,7 +26,8 @@ export interface ParsedFill {
   price: number;
   /** Positive dollars. */
   commission: number;
-  openClose: "O" | "C" | null;
+  /** IBKR's mark: "C;O" closes one position and opens another (a sale of 2 against a long 1). */
+  openClose: OpenClose | null;
   kind: FillKind;
   raw: Record<string, string>;
 }
@@ -101,8 +103,14 @@ const optionRow = z.object({
 });
 type OptionRow = z.infer<typeof optionRow>;
 
-const openCloseOf = (values: string[]): "O" | "C" | null =>
-  values.includes("O") ? "O" : values.includes("C") ? "C" : null;
+const openCloseOf = (values: string[]): OpenClose | null =>
+  values.includes("C") && values.includes("O")
+    ? "C;O"
+    : values.includes("O")
+      ? "O"
+      : values.includes("C")
+        ? "C"
+        : null;
 
 // `-Number("0")` is −0, which would never equal 0 in a test or a comparison.
 const commissionOf = (value: string | undefined) => -Number(value || 0) || 0;

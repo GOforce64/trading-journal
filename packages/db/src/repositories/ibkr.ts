@@ -32,7 +32,7 @@ export interface FillInput {
   quantity: number;
   price: number;
   commission: number;
-  openClose: "O" | "C" | null;
+  openClose: "O" | "C" | "C;O" | null;
   kind: "trade" | "expiration" | "exercise" | "assignment";
   raw: Record<string, string>;
 }

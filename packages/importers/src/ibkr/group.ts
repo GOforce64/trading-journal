@@ -7,7 +7,7 @@ import {
   round2,
 } from "@tj/core";
 import { uuidV5 } from "../oquants/ids.js";
-import type { FillKind } from "./parse.js";
+import type { FillKind, OpenClose } from "./parse.js";
 
 /** Fixed namespace for IBKR ids; changing it would make every synced trade new. */
 export const IBKR_NAMESPACE = "7c1f2b9a-4e3d-4c8b-9a6f-2d5e8b1c3f40";
@@ -32,7 +32,7 @@ export interface FillForGrouping {
   quantity: number;
   price: number;
   commission: number;
-  openClose: "O" | "C" | null;
+  openClose: OpenClose | null;
   kind: FillKind;
 }
 
@@ -83,21 +83,32 @@ function byContract(fills: FillForGrouping[]): FillForGrouping[][] {
   return [...contracts.values()];
 }
 
+/** Whether IBKR says a fill closes a position, all or part of it. */
+const closes = (fill: FillForGrouping) => fill.openClose === "C" || fill.openClose === "C;O";
+
 /**
  * A fill that takes a contract through zero, such as selling 2 against a long 1, closes the position and opens a
  * new one with the rest, so it's split at zero: the trade it closed goes flat there. The closing part keeps the
  * fill's id, so the fill shows on that trade; the opening part gets its own id and key, and its share of the
- * commission. Returns the opening parts' ids.
+ * commission. Returns each opening part's id with its fill's.
+ *
+ * The position is counted from the window's first fill, so a split needs IBKR's word too: only a fill marked
+ * "C;O", or one with no mark, is split. Fills in the same second sort by key, not by when they happened, so a
+ * count can cross zero where the account never did; and a contract whose first fill closes was held from before
+ * the window, so its count is off by what was held.
  */
-function splitCrossings(fills: FillForGrouping[]): { fills: FillForGrouping[]; parts: Set<string> } {
+function splitCrossings(fills: FillForGrouping[]): { fills: FillForGrouping[]; parts: Map<string, string> } {
   const position = new Map<string, number>();
+  const heldBefore = new Set<string>();
   const out: FillForGrouping[] = [];
-  const parts = new Set<string>();
+  const parts = new Map<string, string>();
   for (const fill of fills) {
+    if (!position.has(fill.conid) && closes(fill)) heldBefore.add(fill.conid);
     const before = position.get(fill.conid) ?? 0;
     const after = before + fill.quantity;
     position.set(fill.conid, after);
-    if (before * after >= 0) {
+    const marked = fill.openClose === "C;O" || fill.openClose === null;
+    if (before * after >= 0 || !marked || heldBefore.has(fill.conid)) {
       out.push(fill);
       continue;
     }
@@ -113,7 +124,7 @@ function splitCrossings(fills: FillForGrouping[]): { fills: FillForGrouping[]; p
         openClose: "O",
       },
     );
-    parts.add(opening.id);
+    parts.set(opening.id, fill.id);
   }
   return { fills: out, parts };
 }
@@ -169,8 +180,13 @@ export function groupFills(fills: readonly FillForGrouping[], options: GroupOpti
     }
     for (const episode of open) settle(episode.fills, out, options);
   }
-  // An opening part is no stored fill: the fill links to the trade its closing part closed.
-  for (const id of split.parts) out.links.delete(id);
+  // An opening part is no stored fill. The fill links to the trade its closing part closed, or, when that part was
+  // skipped, to the trade its opening part began.
+  for (const [id, fillId] of split.parts) {
+    const link = out.links.get(id);
+    out.links.delete(id);
+    if (link && !out.links.has(fillId)) out.links.set(fillId, link);
+  }
   out.candidates.sort((a, b) => a.trade.openedAt - b.trade.openedAt);
   return out;
 }
@@ -206,7 +222,7 @@ function settle(episode: FillForGrouping[], out: Grouped, options: GroupOptions)
   };
   const contracts = byContract(episode);
   // A contract whose first fill closes a position was opened before the fills we have.
-  if (contracts.some((fills) => fills[0]?.openClose === "C")) {
+  if (contracts.some((fills) => fills[0] && closes(fills[0]))) {
     skip("before_start");
     return;
   }

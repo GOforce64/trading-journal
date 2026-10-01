@@ -220,8 +220,9 @@ describe("groupFills rules", () => {
   });
 
   it("closes a scalp when a sale takes the position through zero, and leaves the short it opened out", () => {
-    const buy = fill({ quantity: 1, price: 1, commission: 0.65 });
-    const sale = fill({ quantity: -2, price: 2, commission: 1.3 });
+    const buy = fill({ quantity: 1, price: 1, commission: 0.65, openClose: "O" });
+    // IBKR marks a fill that closes one position and opens another "C;O".
+    const sale = fill({ quantity: -2, price: 2, commission: 1.3, openClose: "C;O" });
     const { candidates, skipped, links } = groupFills([buy, sale], OPTIONS);
     expect(candidates).toHaveLength(1);
     expect(candidates[0]?.trade).toMatchObject({
@@ -245,7 +246,7 @@ describe("groupFills rules", () => {
       [
         fill({ ...put, quantity: 1, price: 1 }),
         fill({ quantity: 1, price: 1 }),
-        fill({ quantity: -2, price: 1.5 }),
+        fill({ quantity: -2, price: 1.5, openClose: "C;O" }),
         fill({ quantity: 1, price: 1.25 }),
         fill({ ...put, quantity: -1, price: 2 }),
       ],
@@ -272,7 +273,7 @@ describe("groupFills rules", () => {
         fill({ ...p50, quantity: -1, price: 2 }),
         fill({ ...c55, quantity: 1, price: 0.5 }),
         fill({ ...p45, quantity: 1, price: 0.5 }),
-        fill({ ...c50, quantity: 2, price: 1 }),
+        fill({ ...c50, quantity: 2, price: 1, openClose: "C;O" }),
         fill({ ...p50, quantity: 1, price: 1 }),
         fill({ ...c50, quantity: -1, price: 0, kind: "expiration" }),
         fill({ ...c55, quantity: -1, price: 0, kind: "expiration" }),
@@ -282,6 +283,52 @@ describe("groupFills rules", () => {
     );
     expect(candidates).toEqual([]);
     expect(skipped.map((each) => each.reason)).toEqual(["unrecognised"]);
+  });
+
+  it("links a fill whose closing part was skipped to the scalp its opening part began", () => {
+    const fills = [
+      fill({ quantity: 1, price: 1, openClose: "O" }),
+      fill({ quantity: -2, price: 2, openClose: "C;O" }),
+      fill({ quantity: 2, price: 1.5, openClose: "C;O" }),
+      fill({ quantity: -1, price: 2.5, openClose: "C" }),
+    ];
+    const { candidates, links } = groupFills(fills, OPTIONS);
+    // Each part of a split fill carries its share of the commission: $0.50 of $1.
+    expect(candidates.map((each) => each.trade.netPnl)).toEqual([98.5, 98.5]);
+    // The buy back of the short opened the second scalp: it shows there, as its last fill does.
+    expect(links.get(fills[2]?.id ?? "")?.tradeId).toBe(candidates[1]?.id);
+    expect(links.get(fills[3]?.id ?? "")?.tradeId).toBe(candidates[1]?.id);
+  });
+
+  it("doesn't split a sale IBKR marks a pure close, though fills in the same second sort it first", () => {
+    // Long 1, then in one second another buy and a sale of both. The keys sort the sale first, so a count in that
+    // order would see the position cross zero; IBKR's "C" says the sale only closed.
+    const at = Date.UTC(2026, 9, 1, 15, 0, 7);
+    const { candidates, skipped } = groupFills(
+      [
+        fill({ quantity: 1, price: 1, openClose: "O" }),
+        fill({ key: "zzz", quantity: 1, price: 1.2, openClose: "O", executedAt: at }),
+        fill({ key: "aaa", quantity: -2, price: 2, openClose: "C", executedAt: at }),
+      ],
+      OPTIONS,
+    );
+    expect(skipped).toEqual([]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.trade.legs[0]).toMatchObject({ quantity: 2, openPrice: 1.1, closePrice: 2 });
+  });
+
+  it("doesn't split fills in a contract held from before the start, whose position it can't know", () => {
+    // Long 1 bought before the start date: in the window it's sold, then a 2-lot is bought and sold.
+    const { candidates, skipped } = groupFills(
+      [
+        fill({ quantity: -1, price: 1.5, openClose: "C" }),
+        fill({ quantity: 2, price: 1, openClose: "O" }),
+        fill({ quantity: -2, price: 2, openClose: "C" }),
+      ],
+      OPTIONS,
+    );
+    expect(candidates).toEqual([]);
+    expect(skipped.map((each) => each.reason)).toEqual(["before_start"]);
   });
 
   it("keeps a bought contract that hasn't been sold as an open scalp", () => {

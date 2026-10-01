@@ -113,7 +113,7 @@ const toGrouping = (row: FillRow): FillForGrouping => ({
   quantity: row.quantity,
   price: row.price,
   commission: row.commission,
-  openClose: row.openClose === "O" || row.openClose === "C" ? row.openClose : null,
+  openClose: row.openClose === "O" || row.openClose === "C" || row.openClose === "C;O" ? row.openClose : null,
   kind:
     row.kind === "expiration" || row.kind === "exercise" || row.kind === "assignment" ? row.kind : "trade",
 });

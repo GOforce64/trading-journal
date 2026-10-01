@@ -116,6 +116,15 @@ describe("parseFlex on a Trade Confirmation statement", () => {
     expect(today.fills.find((each) => each.key === "0000e242.6ab9e92d.01.01")?.openClose).toBe("C");
   });
 
+  it("keeps IBKR's mark for a fill that closes one position and opens another", () => {
+    const xml = fixture("activity.xml").replace('openCloseIndicator="C"', 'openCloseIndicator="C;O"');
+    const marks = parseFlex(xml).fills.map((fill) => fill.openClose);
+    expect(marks.filter((mark) => mark === "C;O")).toHaveLength(1);
+    // Today's codes list the marks among others, in any order.
+    const today = fixture("today.xml").replace(' code="O;P"', ' code="O;P;C"');
+    expect(parseFlex(today).fills.filter((fill) => fill.openClose === "C;O")).toHaveLength(1);
+  });
+
   it("reads a same-day cancel by Today's price field, not as malformed", () => {
     // Today's rows name the price "price" where Activity's say "tradePrice".
     const xml = fixture("today.xml");
