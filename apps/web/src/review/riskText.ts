@@ -20,12 +20,17 @@ export type RiskTileKey = "risk" | "r" | "rewardRisk" | "mae" | "mfe" | "model";
 export interface RiskTileTrade {
   netPnl: number | null;
   closedAt: number | null;
-  scalpPrices: { holdHigh: number | null; holdLow: number | null } | null;
+  scalpPrices: {
+    holdHigh: number | null;
+    holdLow: number | null;
+    optionHigh?: number | null;
+    optionLow?: number | null;
+  } | null;
 }
 
 /**
  * What each tile of the R row says (scalp-R spec §9.1). `rangeNote` says why a closed scalp's MAE and MFE wait for
- * the hold's range, such as Alpaca's 15-minute delay.
+ * the hold's range, the stock's or, on premium, the option's (premium-chart spec §9.4), such as Alpaca's delay.
  */
 export function riskTileText(
   risk: ScalpRisk,
@@ -54,9 +59,16 @@ export function riskTileText(
     if (risk.runner) reward += ` · ${count(risk.runner.contracts, "runner")} at T${risk.runner.atTarget}`;
   }
 
-  const low = `stock low ${trade.scalpPrices?.holdLow?.toFixed(2)}`;
-  const high = `stock high ${trade.scalpPrices?.holdHigh?.toFixed(2)}`;
-  const put = risk.right === "P";
+  const premium = risk.basis === "premium";
+  const prices = trade.scalpPrices;
+  const low = premium
+    ? `option low ${prices?.optionLow?.toFixed(2)}`
+    : `stock low ${prices?.holdLow?.toFixed(2)}`;
+  const high = premium
+    ? `option high ${prices?.optionHigh?.toFixed(2)}`
+    : `stock high ${prices?.holdHigh?.toFixed(2)}`;
+  // A put gains as the stock falls; on premium every long option gains as its own price rises.
+  const put = !premium && risk.right === "P";
   const excursion = (move: Excursion | null, sign: "−" | "+", where: string): TileText => {
     if (!move) return { value: "—", working: open ? "open" : rangeNote };
     const signed = (text: string) => (Number(text) === 0 ? text : `${sign}${text}`);

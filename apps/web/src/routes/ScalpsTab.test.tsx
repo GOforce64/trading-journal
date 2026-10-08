@@ -125,7 +125,7 @@ describe("Analytics Scalps tab", () => {
     });
     renderWithClient(<Analytics search={{ tab: "scalps" }} onSearch={() => {}} />);
     await waitFor(() =>
-      expect(screen.getByTestId("r-coverage").textContent).toBe("Fetching stock prices for 1 scalp…"),
+      expect(screen.getByTestId("r-coverage").textContent).toBe("Fetching prices for 1 scalp…"),
     );
     const fill = fetchMock.mock.calls.find((call) => String(call[0]).includes("/api/risk/fill"));
     expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["s4"] });

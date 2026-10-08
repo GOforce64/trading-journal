@@ -8,6 +8,7 @@ import {
   useAutoFillPrices,
   useBackfillPrices,
   useFillScalpPrices,
+  useOptionRangeNote,
   usePriceNote,
 } from "./prices.js";
 
@@ -90,6 +91,51 @@ describe("needsPrices", () => {
     expect(needsPrices(scalp("a", { ...FULL, holdHigh: null, holdLow: null }, null))).toBe(false);
     expect(needsPrices(scalp("a", FULL))).toBe(false);
     expect(needsPrices({ ...scalp("a"), strategy: "iron_fly" } as TradeView)).toBe(false);
+  });
+});
+
+describe("needsPrices and the option's range", () => {
+  // A closed scalp from Alpaca's option history on, with one contract.
+  const recent = (scalpPrices: unknown, overrides: Record<string, unknown> = {}) =>
+    ({
+      ...scalp("r", scalpPrices),
+      openedAt: Date.UTC(2026, 8, 28, 13, 31),
+      closedAt: Date.UTC(2026, 8, 28, 13, 46),
+      legs: [{ right: "C", strike: 232.5, expiry: "2026-09-28" }],
+      ...overrides,
+    }) as unknown as TradeView;
+
+  it("asks for a closed scalp's option range once Alpaca has option bars, and not before or while it's open", () => {
+    expect(needsPrices(recent({ ...FULL, optionHigh: null, optionLow: null }))).toBe(true);
+    expect(needsPrices(recent({ ...FULL, optionHigh: 1.37, optionLow: 0.64 }))).toBe(false);
+    expect(needsPrices(recent(FULL, { openedAt: Date.UTC(2023, 11, 15, 15) }))).toBe(false);
+    expect(needsPrices(recent(FULL, { closedAt: null }))).toBe(false);
+  });
+
+  it("asks again a minute later while Alpaca's delay holds the option's range back, saying so", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = stubFill((tradeIds) => ({
+      filled: 0,
+      missing: [],
+      optionMissing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      unavailable: null,
+    }));
+    function OptionPage({ trade }: { trade: TradeView }) {
+      useAutoFillPrices(trade);
+      return <p data-testid="option-note">{useOptionRangeNote(trade.id)}</p>;
+    }
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <OptionPage trade={recent(FULL)} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("option-note").textContent).toBe("waits for Alpaca's option delay"),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 });
 
@@ -292,6 +338,21 @@ describe("useBackfillPrices", () => {
         "0|Couldn't fetch stock prices: reload to try again.",
       ),
     );
+  });
+
+  it("asks again a minute later for the scalps whose option range Alpaca's delay held back", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = stubFill((tradeIds) => ({
+      filled: 0,
+      missing: tradeIds.filter((id) => id === "late").map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      optionMissing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      unavailable: null,
+    }));
+    renderBackfill([scalp("early"), scalp("late")]);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(bodies(fetchMock)).toEqual([{ tradeIds: ["early", "late"] }, { tradeIds: ["early", "late"] }]);
   });
 
   it("asks again a minute later for the scalps Alpaca's delay held back", async () => {

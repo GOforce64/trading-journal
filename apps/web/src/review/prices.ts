@@ -1,4 +1,5 @@
 import { useIsMutating, useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
+import { nyWallClock, OPTION_BARS_SINCE } from "@tj/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type TradeView } from "../api.js";
 
@@ -6,6 +7,9 @@ type PriceFillResponse = Awaited<ReturnType<typeof api.api.risk.fill.$post>>;
 /** What one run of the scalp price filler did (scalp-R spec §7). */
 export type PriceFillResult = Awaited<ReturnType<PriceFillResponse["json"]>>;
 type PriceReason = PriceFillResult["missing"][number]["reason"];
+type OptionReason = PriceFillResult["optionMissing"][number]["reason"];
+/** Alpaca's first option bars, as an instant (premium-chart spec §3). */
+export const OPTION_EPOCH = nyWallClock(OPTION_BARS_SINCE, 0);
 
 export const PRICE_FILL_KEY = ["fill-scalp-prices"];
 /** The filler takes at most this many ids a request. */
@@ -57,11 +61,21 @@ export function useFillScalpPrices() {
   });
 }
 
-/** Whether a scalp still lacks a price the filler can fetch: the stock at entry, or, once it's closed, its range. */
-export function needsPrices(trade: Pick<TradeView, "strategy" | "closedAt" | "scalpPrices">): boolean {
+/**
+ * Whether a scalp still lacks a price the filler can fetch: the stock at entry or, once it's closed, the stock's range
+ * and, from Alpaca's option history on, the contract's (premium-chart spec §9.1).
+ */
+export function needsPrices(
+  trade: Pick<TradeView, "strategy" | "openedAt" | "closedAt" | "legs" | "scalpPrices">,
+): boolean {
   if (trade.strategy !== "scalp") return false;
   const prices = trade.scalpPrices;
-  return prices == null || prices.entryPrice == null || (trade.closedAt != null && prices.holdHigh == null);
+  if (prices == null || prices.entryPrice == null) return true;
+  if (trade.closedAt == null) return false;
+  return (
+    prices.holdHigh == null ||
+    (trade.openedAt >= OPTION_EPOCH && trade.legs.length === 1 && prices.optionHigh == null)
+  );
 }
 
 /** A finished fill: the ids it asked for, and its answer, or null when the request itself failed. */
@@ -103,6 +117,25 @@ function lastWord(
   return null;
 }
 
+/** The newest finished fill's word on this scalp's option range (premium-chart spec §9.4). */
+function lastOptionWord(
+  outcomes: readonly FillOutcome[],
+  tradeId: string,
+): OptionReason | "failed" | "unavailable" | null {
+  for (let index = outcomes.length - 1; index >= 0; index--) {
+    const outcome = outcomes[index];
+    if (!outcome) continue;
+    if (!outcome.result) {
+      if (outcome.tradeIds.includes(tradeId)) return "failed";
+      continue;
+    }
+    const found = outcome.result.optionMissing.find((gap) => gap.tradeId === tradeId);
+    if (found) return found.reason;
+    if (outcome.result.unavailable) return "unavailable";
+  }
+  return null;
+}
+
 /** Why this scalp has no stock price yet, in the page's words (scalp-R spec §9.1). */
 export function usePriceNote(tradeId: string): string {
   const fetching = useIsMutating({ mutationKey: PRICE_FILL_KEY }) > 0;
@@ -128,6 +161,25 @@ export function useRangeNote(tradeId: string): string {
   return typeof word === "string" ? RANGE_COPY[word] : RANGE_COPY.unavailable;
 }
 
+/** Why a closed premium scalp's MAE and MFE wait for the option's range, in the tiles' small print. */
+export const OPTION_RANGE_COPY = {
+  fetching: "fetching the option's range…",
+  failed: "couldn't fetch the option's range",
+  unreachable: "couldn't fetch the option's range",
+  too_recent: "waits for Alpaca's option delay",
+  no_bars: "Alpaca has no option bars for the hold",
+  unavailable: "needs the option's range",
+  too_old: "Alpaca's option bars start on Jan 18, 2024",
+} as const;
+
+/** The option range's word for this scalp: fetching, held back by Alpaca's delay, or missing. */
+export function useOptionRangeNote(tradeId: string): string {
+  const fetching = useIsMutating({ mutationKey: PRICE_FILL_KEY }) > 0;
+  const word = lastOptionWord(useFillResults(), tradeId);
+  if (fetching || word == null) return OPTION_RANGE_COPY.fetching;
+  return OPTION_RANGE_COPY[word];
+}
+
 /**
  * Fetches a scalp's missing prices when its page opens and whenever an edit clears them (scalp-R spec §7), once each,
  * StrictMode included. While Alpaca's delay holds a price back, it asks again a minute later.
@@ -138,7 +190,9 @@ export function useAutoFillPrices(trade: TradeView): void {
   const results = useFillResults();
   // Alpaca's delay held the price back, or the request failed: either way, ask again a minute later.
   const word = lastWord(results, trade.id);
-  const waiting = word === "too_recent" || word === "failed";
+  const optionWord = lastOptionWord(results, trade.id);
+  const waiting =
+    word === "too_recent" || word === "failed" || optionWord === "too_recent" || optionWord === "unreachable";
   // The trade this page last asked for, so StrictMode's second run asks nothing.
   const asked = useRef<string | null>(null);
 
@@ -189,16 +243,18 @@ export function useBackfillPrices(trades: readonly TradeView[] | undefined): Bac
     async (ids: string[]) => {
       setState({ fetching: ids.length, problem: null });
       let problem: string | null = null;
-      const later: string[] = [];
+      const later = new Set<string>();
       try {
         const result = await mutateAsync(ids);
         if (result.unavailable) problem = BACKFILL_COPY[result.unavailable.reason];
-        for (const gap of result.missing) if (gap.reason === "too_recent") later.push(gap.tradeId);
+        for (const gap of [...result.missing, ...result.optionMissing]) {
+          if (gap.reason === "too_recent") later.add(gap.tradeId);
+        }
       } catch {
         problem = BACKFILL_COPY.failed;
       }
       setState({ fetching: 0, problem });
-      setRecent(later);
+      setRecent(ids.filter((id) => later.has(id)));
     },
     [mutateAsync],
   );
