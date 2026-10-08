@@ -8,6 +8,7 @@ import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
+import { Screenshots } from "../screenshots/Screenshots.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
 import { ScalpTiles } from "./ScalpTiles.js";
@@ -267,6 +268,7 @@ export function TradeDetail({
         {trade.strategy === "iron_fly" && <ReviewPanel trade={trade} layout="side" />}
       </div>
       <FillsPanel fills={trade.fills ?? []} />
+      <Screenshots trade={{ id: trade.id, attachments: trade.attachments ?? [] }} />
     </div>
   );
 }
