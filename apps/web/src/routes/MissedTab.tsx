@@ -8,10 +8,12 @@ import {
   takenVsMissed,
 } from "@tj/core";
 import { useMemo } from "react";
+import { type Book, filterTrades } from "../analytics/data.js";
 import { rText, segmentClass, winRateText } from "../analytics/format.js";
 import { type Kpi, KpiStrip } from "../analytics/KpiStrip.js";
 import { MissedBars } from "../analytics/MissedBars.js";
 import { Section } from "../analytics/Section.js";
+import { booksOf, toFilter } from "../analytics/search.js";
 import type { TradeView } from "../api.js";
 import { useSetups, useTags } from "../review/data.js";
 import type { TabProps } from "./OverviewTab.js";
@@ -25,6 +27,8 @@ const DIMENSIONS: readonly { id: MissedBreakdown; label: string }[] = [
   { id: "grade", label: "Grade" },
 ];
 
+const TAKEN_BOOKS: readonly Book[] = ["live", "paper"];
+
 const tone = (value: number | null | undefined) =>
   value == null || value === 0 ? "text-muted" : value > 0 ? "text-up" : "text-down";
 const rCell = (value: number | null) => (value == null ? "—" : rText(value));
@@ -35,12 +39,7 @@ const tookText = (took: number | null) => (took == null ? "—" : `${Math.round(
  * setup's taken trades beside its missed ones. It reads every missed trade, whatever the Book filter, through the
  * other filters, by the entry's New York date.
  */
-export function MissedTab({
-  trades,
-  allTrades,
-  search,
-  onSearch,
-}: TabProps & { allTrades: readonly TradeView[] }) {
+export function MissedTab({ allTrades, search, onSearch }: TabProps & { allTrades: readonly TradeView[] }) {
   const { data: tags = [] } = useTags();
   const { data: setups = [] } = useSetups();
   const skips = useMemo(
@@ -60,17 +59,16 @@ export function MissedTab({
       }),
     [allTrades, search.ticker, search.setup, search.excluded, search.from, search.to],
   );
-  // The taken scalps the Book filter's Live and Paper keep: both when it keeps neither.
-  const taken = useMemo(
-    () =>
-      closedTrades(
-        trades.filter(
-          (trade): trade is TradeView & ScalpStatTrade =>
-            trade.strategy === "scalp" && trade.book !== "missed",
-        ),
+  // The taken scalps the Book filter's Live and Paper keep: both when it keeps neither (spec §6.6).
+  const taken = useMemo(() => {
+    const kept = booksOf(search).filter((book) => book !== "missed");
+    const books = kept.length > 0 ? kept : TAKEN_BOOKS;
+    return closedTrades(
+      filterTrades(allTrades, { ...toFilter(search), books }).filter(
+        (trade): trade is TradeView & ScalpStatTrade => trade.strategy === "scalp",
       ),
-    [trades],
-  );
+    );
+  }, [allTrades, search]);
   const by = search.mby ?? "skip";
   const summary = missedSummary(missed, skips);
   const rows = missedBreakdown(missed, by, { setups: setupNames, skips });

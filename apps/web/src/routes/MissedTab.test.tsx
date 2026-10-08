@@ -70,7 +70,7 @@ const taken = (id: string, r: number) => ({
 });
 const TAKEN = [taken("t1", 0.5), taken("t2", 0.3)];
 
-function setup(search = {}) {
+function setup(search = {}, trades: readonly unknown[] = TAKEN) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -89,7 +89,7 @@ function setup(search = {}) {
   render(
     <QueryClientProvider client={client}>
       <MissedTab
-        trades={TAKEN as unknown as TradeView[]}
+        trades={trades as unknown as TradeView[]}
         allTrades={[...MISSED, ...TAKEN] as unknown as TradeView[]}
         search={{ tab: "missed", ...search }}
         onSearch={onSearch}
@@ -114,6 +114,19 @@ describe("MissedTab", () => {
     expect(kpi("good-skips")).toBe("Good skips1would have lost −1.00R");
     expect(kpi("took")).toBe("Took33%2 taken · 4 missed");
     expect(screen.getByText("R covers 3 of 4 missed trades: the rest lack a stop or an exit.")).toBeTruthy();
+  });
+
+  it("takes the taken side from Live and Paper, both when the Book filter keeps only Missed", async () => {
+    // Analytics hands the tab the Book-filtered trades: with Missed alone, those are the missed ones.
+    setup({ books: "missed" }, MISSED);
+    await screen.findByText("Hesitated");
+    expect(kpi("took")).toBe("Took33%2 taken · 4 missed");
+  });
+
+  it("keeps the Book filter's Live or Paper for the taken side", async () => {
+    setup({ books: "paper,missed" }, MISSED);
+    await screen.findByText("Hesitated");
+    expect(kpi("took")).toBe("Took0%0 taken · 4 missed");
   });
 
   it("breaks them down by skip reason, with the total R as bars", async () => {
