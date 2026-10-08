@@ -83,7 +83,11 @@ Everything runs in one transaction, in this order:
 3. **Setups and tags.**
    - Resolve each id across both sides: the newer `updated_at` wins, then the canonical JSON.
    - Then group the results by name (§2). A group of several ids keeps the smallest, with the fields of the group's newest row.
-   - Every reference on both sides, `trades.setup_id` and `trade_tags.tag_id`, moves to the kept id before trades are compared. Local rows that lose their id are deleted, since their references have moved.
+   - Every reference on both sides, `trades.setup_id` and `trade_tags.tag_id`, moves to the kept id before trades are compared.
+   - **A row that loses its id stays on as a tombstone** (2026-10-08, migration 0008). It is deleted, with `merged_into` naming the kept id and the group's newest time.
+     - A stale copy of it in an older bundle then loses to the tombstone instead of coming back as a separate tag, which had broken idempotence.
+     - A reference to it follows `merged_into` to the kept row.
+     - The setups and tags lists, and the name checks, skip tombstones, and the tags' (kind, name) unique index covers live rows only.
 4. **Trades.** For each trade in the bundle:
    - **Unknown:** insert its aggregate (§2).
    - **Known:** compare versions. If the bundle's is larger, replace the local aggregate with it: the trade row, legs, iron fly details, scalp details, targets and tag links. Its `scalp_prices` row is deleted, because the facts may have moved. Otherwise keep the local one.

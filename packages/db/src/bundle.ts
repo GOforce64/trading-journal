@@ -175,20 +175,48 @@ function resolve(table: BundleTable, local: readonly Row[], remote: readonly Row
   return result;
 }
 
-/** Rows that are the same by name collapse onto the smallest id, with the newest row's fields (export-merge spec §2). */
+/**
+ * Live rows that are the same by name collapse onto the smallest id, with the newest row's fields (export-merge spec
+ * §2). The others stay on, deleted and pointing at it (`merged_into`): a stale copy in an older bundle then loses to
+ * them instead of coming back, and references to them still find the kept one.
+ */
 function collapse(rows: Map<string, Row>, nameOf: (row: Row) => string) {
+  const kept = new Map<string, Row>();
   const groups = new Map<string, Row[]>();
   for (const row of rows.values()) {
+    if (row.deleted_at != null) {
+      kept.set(String(row.id), row);
+      continue;
+    }
     const name = nameOf(row);
     groups.set(name, [...(groups.get(name) ?? []), row]);
   }
-  const kept = new Map<string, Row>();
-  const moved = new Map<string, string>();
   for (const group of groups.values()) {
     const id = group.map((row) => String(row.id)).sort()[0] ?? "";
     const newest = group.reduce((best, row) => (compare(rowVersion(row), rowVersion(best)) > 0 ? row : best));
-    kept.set(id, { ...newest, id });
-    for (const row of group) if (row.id !== id) moved.set(String(row.id), id);
+    kept.set(id, { ...newest, id, merged_into: null });
+    for (const row of group) {
+      if (row.id === id) continue;
+      kept.set(String(row.id), {
+        ...row,
+        merged_into: id,
+        deleted_at: newest.updated_at ?? null,
+        updated_at: newest.updated_at ?? null,
+      });
+    }
+  }
+  // Every id that was merged away, followed to the live row it ended up in.
+  const moved = new Map<string, string>();
+  for (const [id, row] of kept) {
+    let target = row.merged_into;
+    const seen = new Set([id]);
+    while (typeof target === "string" && !seen.has(target)) {
+      seen.add(target);
+      const next = kept.get(target)?.merged_into;
+      if (typeof next !== "string") break;
+      target = next;
+    }
+    if (typeof target === "string" && target !== id) moved.set(id, target);
   }
   return { kept, moved };
 }
@@ -354,10 +382,15 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
     const localFills = new Set(original.fills.map((row) => keyOf("fills", row)));
     summary.fillsAdded = [...fills.keys()].filter((key) => !localFills.has(key)).length;
     // A name both sides had isn't new, whichever id it keeps.
-    const localSetups = new Set(original.setups.map(setupName));
-    const localTags = new Set(original.tags.map(tagName));
-    summary.setupsAdded = [...setups.kept.values()].filter((row) => !localSetups.has(setupName(row))).length;
-    summary.tagsAdded = [...tags.kept.values()].filter((row) => !localTags.has(tagName(row))).length;
+    const live = (row: Row) => row.deleted_at == null;
+    const localSetups = new Set(original.setups.filter(live).map(setupName));
+    const localTags = new Set(original.tags.filter(live).map(tagName));
+    summary.setupsAdded = [...setups.kept.values()].filter(
+      (row) => live(row) && !localSetups.has(setupName(row)),
+    ).length;
+    summary.tagsAdded = [...tags.kept.values()].filter(
+      (row) => live(row) && !localTags.has(tagName(row)),
+    ).length;
 
     const desired: Record<BundleTable, Map<string, Row>> = {
       accounts,

@@ -132,8 +132,13 @@ function machines(related: boolean, shared: readonly Op[]) {
   return [base, other] as const;
 }
 
+/** The live setups' or tags' names: rows a merge folded into another stay on, deleted. */
 const names = (j: Journal, table: "setups" | "tags") =>
-  new Set(readTable(j.db, table).map((row) => `${row.kind ?? ""}:${String(row.name).toLowerCase()}`));
+  new Set(
+    readTable(j.db, table)
+      .filter((row) => row.deleted_at == null)
+      .map((row) => `${row.kind ?? ""}:${String(row.name).toLowerCase()}`),
+  );
 
 describe("mergeBundle's guarantees (export-merge spec §4)", () => {
   it("is the same both ways, does nothing the second time, and loses nothing", () => {
@@ -193,7 +198,7 @@ describe("mergeBundle's guarantees (export-merge spec §4)", () => {
           }
         },
       ),
-      { numRuns: 40 },
+      { numRuns: 100 },
     );
   }, 120_000);
 });
