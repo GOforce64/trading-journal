@@ -685,6 +685,23 @@ describe("ScalpWorkspace's option view", () => {
     expect(screen.getByTestId("chart-view").textContent).toBe("option");
   });
 
+  it("types premium levels while today's option bars haven't reached the trade, saying when they will", async () => {
+    const now = new Date();
+    const openedAt = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 6 * 3_600_000;
+    const behind = {
+      ...OPTION_BARS,
+      partial: true,
+      bars: [{ ...OPTION_BARS.bars[0], t: openedAt - 3_600_000 }],
+    };
+    stubApi({ trade: { ...SCALP, openedAt, closedAt: null, scalp: PREMIUM_NO_STOP }, option: behind });
+    renderWorkspace();
+    expect(
+      await screen.findByText(/^The option chart's bars arrive by \d\d:\d\d: type the levels or wait\.$/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "+ Stop" }));
+    expect(screen.getByTestId("chart-placing").textContent).toBe("none");
+  });
+
   it("shows a stock scalp's levels on the option view as estimates, which can't be placed or dragged", async () => {
     stubApi({ trade: WORKED, option: OPTION_BARS });
     renderWorkspace();

@@ -40,6 +40,21 @@ export function clockText(t: number): string {
   return `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 }
 
+/**
+ * What the option view can draw for a trade (premium-chart spec §6.3, §8): its bars, or none yet because today's
+ * haven't reached the trade's minute, or none at all.
+ */
+export function optionBarsState(
+  answer: { bars: readonly { t: number }[]; partial: boolean } | undefined,
+  openedAt: number,
+): "loading" | "ready" | "waiting" | "none" {
+  if (!answer) return "loading";
+  const last = answer.bars.at(-1);
+  // Earlier days' bars don't help a trade whose own minute isn't out yet: its fills would land on them.
+  if (answer.partial && (!last || last.t < Math.floor(openedAt / 60_000) * 60_000)) return "waiting";
+  return last ? "ready" : "none";
+}
+
 /** When a minute's bars are out: `delayMinutes` after it (premium-chart spec §6.3). */
 export const arriveBy = (openedAt: number, delayMinutes: number): string =>
   clockText(Math.floor(openedAt / 60_000) * 60_000 + delayMinutes * 60_000);

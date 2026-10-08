@@ -8,7 +8,7 @@ import { DailyChart } from "./DailyChart.js";
 import type { ChartEditing } from "./drag.js";
 import { IntradayChart, type PriceLine } from "./IntradayChart.js";
 import { type ChartFill, type ChartTrade, dailyModel, intradayModel } from "./model.js";
-import { arriveBy, type ChartView, clockText } from "./option.js";
+import { arriveBy, type ChartView, clockText, optionBarsState } from "./option.js";
 import { useChartPrefs } from "./prefs.js";
 
 const NO_BARS: PriceBar[] = [];
@@ -25,12 +25,12 @@ interface OptionAnswer {
 }
 
 /** Why the option view has nothing to draw (premium-chart spec §8). */
-function optionEmptyText(answer: OptionAnswer, openedAt: number, name: string): string {
-  const reason = answer.unavailable?.reason;
-  if (answer.unavailable && (reason === "no_key" || reason === "too_old")) return answer.unavailable.message;
-  if (answer.partial) {
+function optionEmptyText(answer: OptionAnswer, openedAt: number, name: string, waiting: boolean): string {
+  if (waiting) {
     return `This contract's bars from ${clockText(openedAt)} arrive by ${arriveBy(openedAt, answer.delayMinutes)}.`;
   }
+  const reason = answer.unavailable?.reason;
+  if (answer.unavailable && (reason === "no_key" || reason === "too_old")) return answer.unavailable.message;
   return `No option bars for ${name}.`;
 }
 
@@ -115,6 +115,7 @@ export function TradeCharts({
   if (bars.length === 0) return message(minute.data?.unavailable?.message ?? `No stock bars for ${symbol}.`);
 
   const onOption = option?.view === "option";
+  const optionState = optionBarsState(optionBars.data, trade.openedAt);
   const shown = onOption ? optionModel : intraday;
   // An EMA needs more history when its chart has nothing of it to draw; the stock view looks at the daily chart too.
   const hiddenEmas = shown.emas.flatMap((line, index) =>
@@ -173,9 +174,11 @@ export function TradeCharts({
       );
     } else if (optionBars.isPending) {
       optionCell = placeholder(<p className="text-muted">Loading the option chart…</p>);
-    } else if (contractBars.length === 0 && optionBars.data) {
+    } else if (optionBars.data && optionState !== "ready") {
       optionCell = placeholder(
-        <p className="text-muted">{optionEmptyText(optionBars.data, trade.openedAt, option.name)}</p>,
+        <p className="text-muted">
+          {optionEmptyText(optionBars.data, trade.openedAt, option.name, optionState === "waiting")}
+        </p>,
       );
     }
   }

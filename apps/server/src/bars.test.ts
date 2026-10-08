@@ -315,6 +315,14 @@ describe("GET /api/bars/option/:contract", () => {
     ).toBe("no_key");
   });
 
+  it("never blames the key for a refusal of finished days, answering 502 instead", async () => {
+    const { market, get } = setupOption(async () => {
+      throw OPRA();
+    });
+    expect((await get("from=2026-09-21&to=2026-09-28")).status).toBe(502);
+    expect(market.status().state).toBe("on");
+  });
+
   it("refuses a bad contract or range, and answers 502 without storing anything when Alpaca fails", async () => {
     const { fetchBars, get } = setupOption(async () => {
       throw new AlpacaError(500, "");

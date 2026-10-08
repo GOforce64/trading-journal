@@ -236,7 +236,8 @@ export function approxLines(risk: ScalpRisk | null): PriceLine[] {
   return [
     ...stop,
     ...risk.targets.flatMap((target, index): PriceLine[] =>
-      target.optionAt == null
+      // A target on the wrong side earns nothing, so it draws nothing either (premium-chart spec §7).
+      target.optionAt == null || target.wrongSide
         ? []
         : [
             {

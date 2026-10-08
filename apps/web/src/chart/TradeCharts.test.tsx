@@ -328,6 +328,15 @@ describe("TradeCharts' option view", () => {
     expect(await screen.findByText("This contract's bars from 09:52 arrive by 10:08.")).toBeTruthy();
   });
 
+  it("waits for today's bars when only earlier days' are out, rather than marking the fills on them", async () => {
+    const today = todayNy();
+    const earlier = OPTION_BARS.map((bar) => ({ ...bar, t: nyWallClock(addDays(today, -1), 600) }));
+    stubOption([reply({ ...OPTION_OK, bars: earlier, partial: true })]);
+    renderOption("option", { ...TRADE, openedAt: nyWallClock(today, 592) + 40_000, closedAt: null });
+    expect(await screen.findByText("This contract's bars from 09:52 arrive by 10:08.")).toBeTruthy();
+    expect(optionCandles()).toBe(false);
+  });
+
   it("notes how far behind today's option bars run", async () => {
     stubOption([reply({ ...OPTION_OK, partial: true, delayMinutes: 80 })]);
     renderOption("option");

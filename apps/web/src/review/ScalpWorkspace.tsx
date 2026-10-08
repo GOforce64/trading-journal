@@ -2,7 +2,14 @@ import { scalpRisk } from "@tj/core";
 import { useEffect, useMemo, useState } from "react";
 import type { TradeDetailView } from "../api.js";
 import { barRange, useOptionBars } from "../chart/bars.js";
-import { arriveBy, type ChartView, contractName, contractOf, viewOf } from "../chart/option.js";
+import {
+  arriveBy,
+  type ChartView,
+  contractName,
+  contractOf,
+  optionBarsState,
+  viewOf,
+} from "../chart/option.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { LevelFields } from "./LevelFields.js";
 import { approxLines, useLevels } from "./levels.js";
@@ -25,7 +32,8 @@ export function ScalpWorkspace({
   const contract = contractOf(trade);
   const { from, lastDay } = barRange(trade);
   const optionBars = useOptionBars(contract, from, lastDay);
-  const premiumChart = (optionBars.data?.bars.length ?? 0) > 0;
+  const optionState = optionBarsState(optionBars.data, trade.openedAt);
+  const premiumChart = optionState === "ready";
   const levels = useLevels(trade, { premiumChart });
   const home = viewOf(levels.basis);
   const [view, setView] = useState<ChartView>(home);
@@ -53,10 +61,11 @@ export function ScalpWorkspace({
   };
   const answer = optionBars.data;
   let premiumNote: string | null = null;
-  if (levels.basis === "premium" && !premiumChart && answer) {
-    premiumNote = answer.partial
-      ? `The option chart's bars arrive by ${arriveBy(trade.openedAt, answer.delayMinutes)}: type the levels or wait.`
-      : "No option bars for this contract: type the levels.";
+  if (levels.basis === "premium" && answer && optionState !== "ready") {
+    premiumNote =
+      optionState === "waiting"
+        ? `The option chart's bars arrive by ${arriveBy(trade.openedAt, answer.delayMinutes)}: type the levels or wait.`
+        : "No option bars for this contract: type the levels.";
   }
   return (
     <>

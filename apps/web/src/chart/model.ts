@@ -139,6 +139,16 @@ function candleAt(candles: readonly { t: number }[], t: number): number {
   return found;
 }
 
+/** The candle holding `t` on its own New York day, else that day's first candle after it; none on a day without one. */
+function sameDayCandle<T extends { t: number }>(candles: readonly T[], t: number): T | undefined {
+  const date = nyClock(t).date;
+  const index = candleAt(candles, t);
+  const at = candles[index];
+  if (at && nyClock(at.t).date === date) return at;
+  const next = candles[index + 1];
+  return next && nyClock(next.t).date === date ? next : undefined;
+}
+
 const drawable = (candles: readonly { t: number }[], values: readonly (number | null)[]): Point[] =>
   values.flatMap((value, index) => {
     const candle = candles[index];
@@ -184,7 +194,8 @@ export function intradayModel(
   const marks = tradeMarks(trade);
   const markers = marks
     .flatMap((mark) => {
-      const candle = candles[candleAt(candles, mark.t)];
+      // The option view keeps a fill on its own day: a thin strike's last candle may be days old (premium-chart §6.2).
+      const candle = slots ? sameDayCandle(candles, mark.t) : candles[candleAt(candles, mark.t)];
       return candle ? [{ ...mark, t: candle.t }] : [];
     })
     .sort((a, b) => a.t - b.t);

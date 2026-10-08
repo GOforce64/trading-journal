@@ -54,7 +54,12 @@ describe("approxLines", () => {
   it("draws a stock scalp's levels at the option prices R gives them, to the cent, without ids", () => {
     const risk = {
       optionAtStop: 0.5432,
-      targets: [{ optionAt: 1.2345 }, { optionAt: null }, { optionAt: 2.5 }],
+      targets: [
+        { optionAt: 1.2345, wrongSide: false },
+        { optionAt: null, wrongSide: false },
+        { optionAt: 2.5, wrongSide: false },
+        { optionAt: 0.4, wrongSide: true },
+      ],
     } as unknown as ScalpRisk;
     const lines = approxLines(risk);
     expect(lines.map((line) => [line.label, line.price, line.dashed])).toEqual([

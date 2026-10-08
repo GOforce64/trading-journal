@@ -249,7 +249,8 @@ export function createBarService({
           ({ bars: todays, partial } = await todaysOptionBars(sources.optionHistory, contract, today));
         }
       } catch (error) {
-        sources?.report(error);
+        // A refusal is Alpaca's delay, not a bad key: report() would mark the key rejected for any 403.
+        if (!optionTooRecent(error)) sources?.report(error);
         throw new BarsUnreachable();
       }
 

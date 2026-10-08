@@ -101,6 +101,20 @@ describe("intradayModel with session slots", () => {
     expect(model.window).toEqual({ from: 0, to: 25 });
     expect(intradayModel(thin, NVDA, 3, [8]).slots).toBeNull();
   });
+
+  it("marks a fill on its own day only: the day's first candle when it came before it, nothing on a day without one", () => {
+    const later = [{ t: nyWallClock(DAY, 605), o: 1, h: 1.1, l: 0.9, c: 1, v: 10 }];
+    const yesterday = [{ t: nyWallClock("2026-09-25", 955), o: 1, h: 1.1, l: 0.9, c: 1, v: 10 }];
+    // Fills at 09:31 and 09:46; the day's only trade is at 10:05.
+    expect(intradayModel(later, NVDA, 1, [8], { slots: true }).markers.map((marker) => marker.t)).toEqual([
+      nyWallClock(DAY, 605),
+      nyWallClock(DAY, 605),
+      nyWallClock(DAY, 605),
+      nyWallClock(DAY, 605),
+    ]);
+    // Only Friday's bars are out: Monday's fills wait for Monday's bars.
+    expect(intradayModel(yesterday, NVDA, 1, [8], { slots: true }).markers).toEqual([]);
+  });
 });
 
 describe("intradayModel", () => {
