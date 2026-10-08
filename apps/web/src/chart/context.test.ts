@@ -32,12 +32,7 @@ const missedShort: ContextTrade = {
 
 describe("contextMarks", () => {
   it("draws a taken scalp as a buy at its entry and a sell at its exit, with what it was", () => {
-    const tip = [
-      "Taken · NVDA 180C · Live",
-      "10:04 → 10:16 · 3 contracts",
-      "+$186.40 · +1.62R",
-      "Click to open",
-    ];
+    const tip = ["Taken · NVDA 180C · Live", "10:04 → 10:16 · 3 contracts", "+$186.40 · +1.62R"];
     expect(contextMarks([taken])).toEqual([
       { tradeId: "s1", t: taken.openedAt, price: null, kind: "buy", label: "", tip },
       { tradeId: "s1", t: taken.closedAt, price: null, kind: "sell", label: "", tip },
@@ -50,7 +45,7 @@ describe("contextMarks", () => {
       ["missed", 179.6, "Missed short −0.62R"],
       ["missed", 179.9, ""],
     ]);
-    expect(marks[0]?.tip).toEqual(["Missed · Short", "10:52 → 11:06", "−0.62R", "Click to open"]);
+    expect(marks[0]?.tip).toEqual(["Missed · Short", "10:52 → 11:06", "−0.62R"]);
   });
 
   it("draws a missed trade without an exit at its entry alone", () => {
@@ -58,7 +53,7 @@ describe("contextMarks", () => {
     const marks = contextMarks([open]);
     expect(marks).toHaveLength(1);
     expect(marks[0]?.label).toBe("Missed short");
-    expect(marks[0]?.tip).toEqual(["Missed · Short", "10:52 · no exit yet", "no R yet", "Click to open"]);
+    expect(marks[0]?.tip).toEqual(["Missed · Short", "10:52 · no exit yet", "no R yet"]);
   });
 
   it("leaves out iron flies, and an open taken scalp's missing exit", () => {

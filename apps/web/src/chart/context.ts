@@ -50,7 +50,6 @@ function takenMarks(trade: ContextTrade): ContextMark[] {
     `Taken · ${trade.underlying} ${leg.strike}${leg.right} · ${capital(trade.book)}`,
     when,
     ...(result ? [result] : []),
-    "Click to open",
   ];
   const marks: ContextMark[] = [
     { tradeId: trade.id, t: trade.openedAt, price: null, kind: "buy", label: "", tip },
@@ -75,7 +74,6 @@ function missedMarks(trade: ContextTrade): ContextMark[] {
       ? `${clockText(trade.openedAt)} → ${clockText(exit.t)}`
       : `${clockText(trade.openedAt)} · no exit yet`,
     r == null ? "no R yet" : rText(r),
-    "Click to open",
   ];
   const label = `Missed ${levels.direction}${r == null ? "" : ` ${rText(r)}`}`;
   const marks: ContextMark[] = [

@@ -540,7 +540,7 @@ describe("IntradayChart and a missed trade's points", () => {
       price: candle(220).c,
       kind: "missed" as const,
       label: "Missed short −0.62R",
-      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R", "Click to open"],
+      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R"],
     };
     render(
       <IntradayChart
@@ -560,5 +560,24 @@ describe("IntradayChart and a missed trade's points", () => {
     );
     fireEvent.mouseDown(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c), button: 0 });
     expect(onOpenTrade).toHaveBeenCalledWith("m9");
+  });
+
+  it("offers no click to open while placing, since a click then places (spec §6.4)", () => {
+    const onOpenTrade = vi.fn();
+    const edit = editing("entry");
+    const mark = {
+      tradeId: "t9",
+      t: candle(220).t,
+      price: candle(220).c,
+      kind: "missed" as const,
+      label: "Missed short −0.62R",
+      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R"],
+    };
+    renderPoints(edit, { points: [], context: [mark], onOpenTrade });
+    fireEvent.mouseMove(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c) });
+    expect(screen.getByTestId("context-tip").textContent).toBe("Missed · Short10:52 → 11:06−0.62R");
+    fireEvent.mouseDown(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c), button: 0 });
+    expect(onOpenTrade).not.toHaveBeenCalled();
+    expect(edit.onPlacePoint).toHaveBeenCalled();
   });
 });

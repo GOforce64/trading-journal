@@ -20,13 +20,11 @@ export function NewMissed({
   symbol,
   date,
   onCreated,
-  onOpenTrade,
 }: {
   symbol: string;
   /** YYYY-MM-DD, New York. */
   date: string;
   onCreated: (id: string) => void;
-  onOpenTrade?: (id: string) => void;
 }) {
   const create = useCreateMissed();
   const [time, setTime] = useState("");
@@ -84,7 +82,6 @@ export function NewMissed({
           levels={{ lines: [], editing }}
           points={NO_POINTS}
           context={context}
-          onOpenTrade={onOpenTrade}
           showDay
           emptyText={`No bars for ${symbol} on ${dayText}. Check the ticker.`}
         />
