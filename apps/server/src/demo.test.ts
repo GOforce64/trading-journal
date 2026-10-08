@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,31 @@ describe("the demo's directory", () => {
     prepareDemoDir(empty, real);
     expect(readdirSync(empty)).toEqual([DEMO_MARKER]);
   });
+});
+
+describe("the demo's directory, when it can't be cleared", () => {
+  // A read-only folder stands in for Windows' EBUSY on a running demo's open journal.
+  const canLock = process.platform !== "win32" && process.getuid?.() !== 0;
+  it.skipIf(!canLock)(
+    "keeps its marker and says to stop a running demo, so the next run can still clear it",
+    () => {
+      const real = temp();
+      const earlier = temp();
+      writeFileSync(join(earlier, DEMO_MARKER), "");
+      const locked = join(earlier, "attachments");
+      mkdirSync(locked);
+      writeFileSync(join(locked, "shot.png"), "x");
+      chmodSync(locked, 0o555);
+      try {
+        expect(() => prepareDemoDir(earlier, real)).toThrow(/still running/);
+        expect(existsSync(join(earlier, DEMO_MARKER))).toBe(true);
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+      prepareDemoDir(earlier, real);
+      expect(readdirSync(earlier)).toEqual([DEMO_MARKER]);
+    },
+  );
 });
 
 describe("parseDemoArgs", () => {

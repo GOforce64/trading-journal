@@ -23,8 +23,17 @@ export function prepareDemoDir(dir: string, realDataDir: string): void {
       `${dir} holds files that aren't a demo's, so it's left alone. Set TJ_DEMO_DIR elsewhere.`,
     );
   }
-  rmSync(dir, { recursive: true, force: true });
+  // The marker goes last, so a wipe that fails partway leaves a directory the next run may still clear.
   mkdirSync(dir, { recursive: true });
+  try {
+    for (const entry of readdirSync(dir)) {
+      if (entry !== DEMO_MARKER) rmSync(join(dir, entry), { recursive: true, force: true });
+    }
+  } catch (error) {
+    throw new Error(
+      `${dir} couldn't be cleared (${(error as Error).message}). If a demo is still running, stop it first.`,
+    );
+  }
   writeFileSync(join(dir, DEMO_MARKER), "A demo journal made by `pnpm demo`. The next run replaces it.\n");
 }
 
