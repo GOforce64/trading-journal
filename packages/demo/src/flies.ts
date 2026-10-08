@@ -1,11 +1,20 @@
-import { bsPrice, expiryMoment, type Grade, nyWallClock, type OptionRight, type PriceBar } from "@tj/core";
+import {
+  bsPrice,
+  expiryMoment,
+  type Grade,
+  nyWallClock,
+  type OptionRight,
+  type PriceBar,
+  regularClose,
+} from "@tj/core";
 import { cents } from "./prices.js";
 import { chance, int, normal, pick, type Rng, uniform, weighted } from "./random.js";
 import { expiryFor, FEE_PER_CONTRACT_SIDE } from "./scalps.js";
 import { strikeStep } from "./symbols.js";
 
 const YEAR_MS = 365 * 86_400_000;
-const ENTRY_MINUTE = 15 * 60 + 45;
+/** Where a fly enters, in minutes before its entry day's close. */
+const ENTRY_BEFORE_CLOSE = 15;
 
 /** One earnings report, and the fly's days around it (demo spec §2). */
 export interface EarningsEvent {
@@ -42,7 +51,8 @@ export function earningsSchedule(rng: Rng, symbol: string, sessions: readonly st
     if (date && entryDate && reactionDate) {
       const ivBefore = uniform(rng, 0.7, 1.2);
       const expiry = expiryFor(symbol, reactionDate);
-      const years = (expiryMoment(expiry) - nyWallClock(entryDate, ENTRY_MINUTE)) / YEAR_MS;
+      const entryAt = nyWallClock(entryDate, regularClose(entryDate) - ENTRY_BEFORE_CLOSE);
+      const years = (expiryMoment(expiry) - entryAt) / YEAR_MS;
       const impliedMove = 0.8 * ivBefore * Math.sqrt(years);
       events.push({
         symbol,
@@ -126,8 +136,9 @@ export function planFly(
   entryStock: readonly PriceBar[],
   exitStock: readonly PriceBar[],
 ): FlyPlan {
-  const openedAt =
-    nyWallClock(event.entryDate, int(rng, 15 * 60 + 40, 15 * 60 + 54)) + int(rng, 0, 59) * 1_000;
+  // The last 20 minutes before the entry day's own close: 15:40–15:54, or 12:40–12:54 on a half day.
+  const close = regularClose(event.entryDate);
+  const openedAt = nyWallClock(event.entryDate, int(rng, close - 20, close - 6)) + int(rng, 0, 59) * 1_000;
   const closedAt = nyWallClock(event.exitDate, int(rng, 9 * 60 + 45, 10 * 60 + 29)) + int(rng, 0, 59) * 1_000;
   const entryPrice = barAt(entryStock, openedAt).c;
   const exitPrice = barAt(exitStock, closedAt).c;

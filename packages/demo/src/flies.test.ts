@@ -80,6 +80,27 @@ describe("planFly", () => {
     }
   });
 
+  it("opens before a half day's 13:00 close", () => {
+    const event = {
+      symbol: "NFLX",
+      date: "2026-11-27",
+      timing: "AMC" as const,
+      entryDate: "2026-11-27",
+      reactionDate: "2026-11-30",
+      exitDate: "2026-11-30",
+      ivBefore: 0.9,
+      impliedMove: 0.07,
+      gap: 0.03,
+    };
+    const entry = minuteBars(mulberry32(1), "2026-11-27", 998, 1_000, 0.35, 8_000);
+    const exit = minuteBars(mulberry32(2), "2026-11-30", 1_030, 1_030, 0.35, 8_000);
+    for (let seed = 1; seed <= 20; seed++) {
+      const plan = planFly(stream(seed, "half"), event, entry, exit);
+      expect(plan.openedAt).toBeGreaterThanOrEqual(nyWallClock("2026-11-27", 12 * 60 + 40));
+      expect(plan.openedAt).toBeLessThan(nyWallClock("2026-11-27", 13 * 60));
+    }
+  });
+
   it("wins more often than not, but not always", () => {
     let wins = 0;
     for (let seed = 1; seed <= 100; seed++) if (flyFor(seed).plan.netPnl > 0) wins++;

@@ -2,7 +2,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addDays, isTradingDay, nyDate, nyWallClock, reviewStatus } from "@tj/core";
+import {
+  addDays,
+  isTradingDay,
+  nyDate,
+  nyWallClock,
+  REGULAR_OPEN,
+  regularClose,
+  reviewStatus,
+} from "@tj/core";
 import { createBarsRepo, createTradesRepo, type Db, openDatabase, runMigrations } from "@tj/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { generateDemo, lastFinishedSession } from "./index.js";
@@ -18,6 +26,16 @@ function freshJournal(): Db {
   const file = join(dir, "journal.db");
   runMigrations(file, { migrationsFolder: MIGRATIONS });
   return openDatabase(file);
+}
+
+/** A trade's open and close each inside a session: 09:30 to that date's close. */
+function expectInSession(trade: { openedAt: number; closedAt: number | null }) {
+  for (const at of [trade.openedAt, trade.closedAt ?? trade.openedAt]) {
+    const date = nyDate(at);
+    expect(isTradingDay(date)).toBe(true);
+    expect(at).toBeGreaterThanOrEqual(nyWallClock(date, REGULAR_OPEN));
+    expect(at).toBeLessThan(nyWallClock(date, regularClose(date)));
+  }
 }
 
 const datesFrom = (from: string, to: string) => {
@@ -62,8 +80,8 @@ describe("generateDemo", () => {
     }
   });
 
-  it("trades only on sessions, and stops a half day's bars at 13:00", () => {
-    for (const trade of createTradesRepo(db).list()) expect(isTradingDay(nyDate(trade.openedAt))).toBe(true);
+  it("trades only inside sessions, and stops a half day's bars at 13:00", () => {
+    for (const trade of createTradesRepo(db).list()) expectInSession(trade);
     const halfDays = ["SPY", "QQQ", "NVDA", "TSLA"]
       .map((symbol) =>
         createBarsRepo(db).read(symbol, "1m", nyWallClock("2026-12-24", 0), nyWallClock("2026-12-25", 0)),
@@ -123,6 +141,16 @@ describe("generateDemo", () => {
         }));
     expect(content(again)).toEqual(content(db));
     again.$client.close();
+  });
+});
+
+describe("generateDemo around a half day", () => {
+  it("keeps a fly entering the day after Thanksgiving inside its 13:00 close", { timeout: 30_000 }, () => {
+    const journal = freshJournal();
+    // ADBE reports after the close on Nov 27, a 13:00 half day, with this seed and end.
+    expect(() => generateDemo(journal, { end: "2026-12-07", months: 1 })).not.toThrow();
+    for (const trade of createTradesRepo(journal).list()) expectInSession(trade);
+    journal.$client.close();
   });
 });
 
