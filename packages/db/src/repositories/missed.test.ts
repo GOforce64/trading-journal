@@ -150,6 +150,42 @@ describe("missed trades in the trades repository", () => {
     ).toEqual([hesitated.id, calm.id].sort());
   });
 
+  it("keeps a trade missed or taken: a patch can't move it across", () => {
+    const missed = repo().create(missedLong);
+    expect(() => repo().update(missed.id, { book: "live" })).toThrow(
+      "A missed trade can't become a taken one",
+    );
+    const taken = repo().create({ ...missedLong, book: "live", missed: null });
+    expect(() => repo().update(taken.id, { book: "missed" })).toThrow(
+      "A taken trade can't become a missed one",
+    );
+    expect(repo().update(taken.id, { book: "paper" })?.book).toBe("paper");
+    expect(repo().update(missed.id, { book: "missed", notes: "kept" })?.notes).toBe("kept");
+  });
+
+  it("gives a missed trade no P&L or other strategy through a patch", () => {
+    const { id } = repo().create(missedLong);
+    expect(() => repo().update(id, { netPnl: 50 })).toThrow("A missed trade is a scalp with no legs or P&L");
+    expect(() => repo().update(id, { strategy: "iron_fly" })).toThrow(
+      "A missed trade is a scalp with no legs or P&L",
+    );
+    expect(repo().get(id)?.netPnl).toBeNull();
+  });
+
+  it("allows one skip reason and one emotion on a new trade too", () => {
+    const hesitated = taxonomy().createTag({ name: "Hesitated", kind: "skip" });
+    const late = taxonomy().createTag({ name: "Saw it late", kind: "skip" });
+    const calm = taxonomy().createTag({ name: "Calm", kind: "emotion" });
+    const rushed = taxonomy().createTag({ name: "Rushed", kind: "emotion" });
+    expect(() => repo().create({ ...missedLong, tagIds: [hesitated.id, late.id] })).toThrow(
+      "A trade has at most one skip reason",
+    );
+    expect(() => repo().create({ ...missedLong, tagIds: [calm.id, rushed.id] })).toThrow(
+      "A trade has at most one emotion",
+    );
+    expect(repo().create({ ...missedLong, tagIds: [hesitated.id, calm.id] }).tagIds).toHaveLength(2);
+  });
+
   it("lists taken trades without the missed ones, and the missed ones alone", () => {
     const missed = repo().create(missedLong);
     const taken = repo().create({ ...missedLong, book: "live", missed: null });

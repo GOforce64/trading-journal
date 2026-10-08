@@ -256,6 +256,27 @@ export function mergeMissed(
   return levels;
 }
 
+/**
+ * A trade stays missed or taken (missed-trades spec §3): a patch can't move it across, nor give a missed trade legs,
+ * P&L or another strategy, which a new missed trade's schema already refuses.
+ */
+function checkBook(existing: Pick<TradeRecord, "book">, patch: TradePatch): void {
+  const missed = existing.book === "missed";
+  if (patch.book !== undefined && (patch.book === "missed") !== missed) {
+    throw new ReviewRuleError(
+      missed ? "A missed trade can't become a taken one" : "A taken trade can't become a missed one",
+    );
+  }
+  if (
+    missed &&
+    ((patch.legs?.length ?? 0) > 0 ||
+      (patch.netPnl ?? null) !== null ||
+      (patch.strategy ?? "scalp") !== "scalp")
+  ) {
+    throw new ReviewRuleError("A missed trade is a scalp with no legs or P&L");
+  }
+}
+
 /** What a scalp holds: the long leg's right when it's one long option, and its contracts. */
 export interface ScalpPosition {
   right: string | null;
@@ -553,8 +574,10 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
 
   return {
     create(input: NewTrade): TradeRecord {
-      // The order and date rules the schema can't check (missed-trades spec §5).
+      // The order and date rules the schema can't check (missed-trades spec §5), and the review's tag rules.
       if (input.missed) mergeMissed({ ...input, missed: input.missed }, {}, undefined);
+      checkOneEmotion(input.tagIds ?? []);
+      checkOneSkip(input.tagIds ?? []);
       const timestamp = now();
       const id = crypto.randomUUID();
       return db.transaction((tx) => {
@@ -628,6 +651,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       // Drop keys the caller never sent, so a patch only touches what it names.
       const columns = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined));
       // The review rules (scalp-review spec §6.2) are checked before anything is written.
+      checkBook(existing, patch);
       if (scalp && (patch.strategy ?? existing.strategy) !== "scalp") {
         throw new ReviewRuleError("Only a scalp has a stop and target");
       }
