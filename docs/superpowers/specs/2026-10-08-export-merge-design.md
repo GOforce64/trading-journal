@@ -181,6 +181,19 @@ Under the data directory line:
 - **The summary line names trades on its first trade count,** so a merge with nothing added reads "3 trades updated from the bundle".
 - **`Db` carries drizzle's raw `$client`,** which `openDatabase` already returned, so the bundle reads and writes plain rows.
 - **The 100 MB limit (413) has no test.** `hono/body-limit` enforces it.
+- **The final review's fixes:**
+  - **A changed tag is deleted and re-inserted,** not updated in place. Otherwise a tag renamed into a name another tag just freed, or two tags swapping names, failed on the (kind, name) index.
+  - **A bundle's child rows keep the local columns they lack,** as the trade row already did. An older bundle then settles to "Nothing to merge".
+  - **Columns a machine fills in** (a fly's fetched stock prices; a fill's trade and leg) take a value from either side over none. Writing them moves no timestamp, so a copy without them could win a tie.
+- **Deferred minors from the final review:**
+  - a bundle with broken references answers an opaque 500 after its backup;
+  - a merge that changes nothing still takes a backup;
+  - 3,000 trades merge in ~3.5 s, blocking the server;
+  - gunzip has no output cap;
+  - a tag renamed on the other machine counts as "added";
+  - a few test gaps;
+  - the web's hand-copied `MergeSummary`, and no focus ring on the file input;
+  - a future table in `BUNDLE_TABLES` would refuse older bundles.
 
 ## 10. Live check (2026-10-08)
 
