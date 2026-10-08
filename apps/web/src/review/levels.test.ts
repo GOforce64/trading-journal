@@ -1,5 +1,6 @@
+import type { ScalpRisk } from "@tj/core";
 import { describe, expect, it } from "vitest";
-import { parseAmount, parseContracts, parsePrice, targetId, targetIndex } from "./levels.js";
+import { approxLines, parseAmount, parseContracts, parsePrice, targetId, targetIndex } from "./levels.js";
 
 describe("parsePrice", () => {
   it("reads plain prices, to the cent", () => {
@@ -46,5 +47,22 @@ describe("parseAmount", () => {
     expect(parseAmount("0")).toBe("A planned risk must be above 0");
     for (const typed of ["$120", "-5", "abc", ""])
       expect(parseAmount(typed)).toBe("Enter an amount like 120");
+  });
+});
+
+describe("approxLines", () => {
+  it("draws a stock scalp's levels at the option prices R gives them, to the cent, without ids", () => {
+    const risk = {
+      optionAtStop: 0.5432,
+      targets: [{ optionAt: 1.2345 }, { optionAt: null }, { optionAt: 2.5 }],
+    } as unknown as ScalpRisk;
+    const lines = approxLines(risk);
+    expect(lines.map((line) => [line.label, line.price, line.dashed])).toEqual([
+      ["≈ STOP", 0.54, false],
+      ["≈ T1", 1.23, false],
+      ["≈ T3", 2.5, false],
+    ]);
+    expect(lines.every((line) => line.id === undefined)).toBe(true);
+    expect(approxLines(null)).toEqual([]);
   });
 });

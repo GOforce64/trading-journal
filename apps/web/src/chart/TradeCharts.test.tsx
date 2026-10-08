@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { addDays, nyWallClock, type PriceBar } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { todayNy } from "../market.js";
@@ -220,5 +220,127 @@ describe("TradeCharts", () => {
     fireEvent.click(await screen.findByRole("button", { name: "5m" }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem("tj.chart") ?? "{}").minutes).toBe(5));
     expect(screen.getByRole("button", { name: "5m" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("TradeCharts' option view", () => {
+  const CONTRACT = "NVDA260926C00232500";
+  const NAME = "NVDA 232.5C Sep 26";
+  const OPTION_BARS: PriceBar[] = [
+    { t: nyWallClock(DAY, 571), o: 0.97, h: 1.53, l: 0.97, c: 1.1, v: 50 },
+    { t: nyWallClock(DAY, 586), o: 1.1, h: 1.32, l: 0.64, c: 1.29, v: 30 },
+  ];
+  const OPTION_OK = {
+    contract: CONTRACT,
+    bars: OPTION_BARS,
+    partial: false,
+    delayMinutes: 16,
+    unavailable: null,
+  };
+  const EMPTY = { ...OPTION_OK, bars: [] };
+
+  /** Answers the stock's bars, and the contract's from `option` (one per call, the last repeating). */
+  function stubOption(option: (() => Promise<Response>)[]) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/bars/option/")) {
+        const next = option.length > 1 ? option.shift() : option[0];
+        if (!next) throw new Error("no reply");
+        return next();
+      }
+      if (url.includes("/daily")) return answer({ ...OK, bars: [] });
+      return answer(OK);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+  const reply =
+    (body: Record<string, unknown>, status = 200) =>
+    async () =>
+      answer(body, status);
+
+  function renderOption(view: "stock" | "option", trade: Parameters<typeof TradeCharts>[0]["trade"] = TRADE) {
+    const onView = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TradeCharts trade={trade} option={{ contract: CONTRACT, name: NAME, view, onView }} />
+      </QueryClientProvider>,
+    );
+    return onView;
+  }
+  // Any chart's candles: the daily chart has a candle series too.
+  const optionCandles = () =>
+    seriesOf("Candlestick").some((series) =>
+      (series.data as { open?: number }[]).some((bar) => bar.open === 0.97),
+    );
+
+  it("offers the switch on a scalp, and asks for the contract's bars over the stock's days", async () => {
+    const fetchMock = stubOption([reply(OPTION_OK)]);
+    const onView = renderOption("stock");
+    fireEvent.click(await screen.findByRole("button", { name: "Option" }));
+    expect(onView).toHaveBeenCalledWith("option");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map((call) => String(call[0]))).toContainEqual(
+        expect.stringContaining(`/api/bars/option/${CONTRACT}?from=2026-09-21&to=2026-09-28`),
+      ),
+    );
+    expect(optionCandles()).toBe(false);
+  });
+
+  it("draws the contract's candles on the option view", async () => {
+    stubOption([reply(OPTION_OK)]);
+    renderOption("option");
+    await waitFor(() => expect(optionCandles()).toBe(true));
+  });
+
+  it("says it's loading, then offers Retry when Alpaca didn't answer, and draws once it does", async () => {
+    stubOption([() => new Promise<Response>(() => {})]);
+    renderOption("option");
+    expect(await screen.findByText("Loading the option chart…")).toBeTruthy();
+    cleanup();
+    stubOption([reply({ error: "unreachable" }, 502), reply(OPTION_OK)]);
+    renderOption("option");
+    expect(await screen.findByText("Alpaca didn't answer.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry the option chart" }));
+    await waitFor(() => expect(optionCandles()).toBe(true));
+  });
+
+  it("says why there are no option bars: too old, none at all, or not out yet today", async () => {
+    stubOption([
+      reply({
+        ...EMPTY,
+        unavailable: { reason: "too_old", message: "Alpaca's option bars start on Jan 18, 2024." },
+      }),
+    ]);
+    renderOption("option");
+    expect(await screen.findByText("Alpaca's option bars start on Jan 18, 2024.")).toBeTruthy();
+    cleanup();
+    stubOption([
+      reply({ ...EMPTY, unavailable: { reason: "no_bars", message: `No option bars for ${CONTRACT}.` } }),
+    ]);
+    renderOption("option");
+    expect(await screen.findByText(`No option bars for ${NAME}.`)).toBeTruthy();
+    cleanup();
+    stubOption([reply({ ...EMPTY, partial: true })]);
+    const today = todayNy();
+    renderOption("option", { ...TRADE, openedAt: nyWallClock(today, 592) + 40_000, closedAt: null });
+    expect(await screen.findByText("This contract's bars from 09:52 arrive by 10:08.")).toBeTruthy();
+  });
+
+  it("notes how far behind today's option bars run", async () => {
+    stubOption([reply({ ...OPTION_OK, partial: true, delayMinutes: 80 })]);
+    renderOption("option");
+    expect(await screen.findByText("Alpaca's free option data runs up to 80 minutes behind.")).toBeTruthy();
+  });
+
+  it("asks for no option bars on a trade without a contract", async () => {
+    const fetchMock = stubOption([reply(OPTION_OK)]);
+    renderCharts();
+    await screen.findByTestId("intraday-chart");
+    expect(fetchMock.mock.calls.map((call) => String(call[0])).some((url) => url.includes("/option/"))).toBe(
+      false,
+    );
+    expect(screen.queryByRole("button", { name: "Option" })).toBeNull();
   });
 });
