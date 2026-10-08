@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,16 @@ export const MIGRATIONS = fileURLToPath(new URL("../migrations", import.meta.url
 export function journal(start = 1_000) {
   const file = join(mkdtempSync(join(tmpdir(), "tj-bundle-")), "journal.db");
   runMigrations(file, { migrationsFolder: MIGRATIONS });
+  const db = openDatabase(file);
+  const clock = { now: start };
+  const tick = () => clock.now;
+  return { file, db, clock, trades: createTradesRepo(db, tick), taxonomy: createTaxonomyRepo(db, tick) };
+}
+
+/** Another machine's journal that started as a copy of `source`'s, with its own clock from `start`. */
+export function copyOf(source: ReturnType<typeof journal>, start: number) {
+  const file = join(mkdtempSync(join(tmpdir(), "tj-bundle-")), "journal.db");
+  writeFileSync(file, source.db.$client.serialize());
   const db = openDatabase(file);
   const clock = { now: start };
   const tick = () => clock.now;
