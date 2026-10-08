@@ -51,4 +51,13 @@ describe("rangeWarning", () => {
     expect(rangeWarning(178.55, bar)).toBeNull();
     expect(rangeWarning(179, null)).toBeNull();
   });
+
+  it("judges by the range in cents, as it shows it, so a click on a sub-cent high or low isn't outside", () => {
+    // Alpaca's IEX bars carry prices like 237.2505; a point placed on that low is stored at 237.25.
+    const subCent = { t: bar.t, h: 237.3249, l: 237.2505 };
+    expect(rangeWarning(237.25, subCent)).toBeNull();
+    expect(rangeWarning(237.32, subCent)).toBeNull();
+    expect(rangeWarning(237.24, subCent)).toBe("Outside 09:41's range (237.25–237.32)");
+    expect(rangeWarning(237.33, subCent)).toBe("Outside 09:41's range (237.25–237.32)");
+  });
 });

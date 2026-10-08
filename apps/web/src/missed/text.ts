@@ -1,4 +1,4 @@
-import type { Direction, MissedRisk } from "@tj/core";
+import { type Direction, type MissedRisk, round2 } from "@tj/core";
 import { rText } from "../analytics/format.js";
 import { clockText } from "../chart/option.js";
 
@@ -36,8 +36,11 @@ export function excursionLine(risk: MissedRisk | null): string | null {
   return `MAE ${rText(risk.mae)} · MFE ${rText(risk.mfe)}`;
 }
 
-/** A typed price outside its minute's bar (spec §6.3): it still saves, with this under the field. */
+/**
+ * A typed price outside its minute's bar (spec §6.3): it still saves, with this under the field. The range is judged
+ * in cents, as it's shown, since a point placed on a sub-cent high or low (237.2505) is stored rounded (237.25).
+ */
 export function rangeWarning(price: number, bar: { t: number; h: number; l: number } | null): string | null {
-  if (!bar || (price >= bar.l && price <= bar.h)) return null;
+  if (!bar || (price >= round2(bar.l) && price <= round2(bar.h))) return null;
   return `Outside ${clockText(bar.t)}'s range (${bar.l.toFixed(2)}–${bar.h.toFixed(2)})`;
 }
