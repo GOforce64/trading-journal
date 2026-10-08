@@ -121,4 +121,20 @@ describe("Missed in the Analytics Book filter", () => {
     expect(kpi("net")).toBe("Net P&L—");
     expect(screen.getAllByTestId("bars").length).toBeGreaterThan(0);
   });
+
+  it("draws Missed alone in R, since missed trades have no dollars", async () => {
+    const onSearch = await render({ tab: "scalps", books: "missed" });
+    const bars = screen.getByRole("group", { name: "Bars" });
+    expect(within(bars).getByRole("button", { name: "Avg R" }).getAttribute("aria-pressed")).toBe("true");
+    const net = within(bars).getByRole("button", { name: "Net" }) as HTMLButtonElement;
+    expect(net.disabled).toBe(true);
+    expect(net.title).toBe("Missed trades have no dollars");
+    expect(screen.getByTestId("r-coverage").textContent).toBe("R covers 2 of 3 missed trades");
+    expect(onSearch).not.toHaveBeenCalled();
+  });
+
+  it("counts the missed trades' R beside the scalps' with Missed on", async () => {
+    await render({ tab: "scalps", books: "live,paper,missed" });
+    expect(screen.getByTestId("r-coverage").textContent).toContain("and 2 of 3 missed trades");
+  });
 });

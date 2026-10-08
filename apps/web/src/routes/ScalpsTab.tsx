@@ -44,7 +44,6 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   const { data: tags, isError: tagsFailed } = useTags();
   // Every scalp, not just the filtered ones: the backfill runs once a visit (spec §8).
   const fill = useBackfillPrices(useAllTrades().data);
-  const metric: Metric = search.metric ?? "net";
   const by = search.by ?? "setup";
   const costEdges = resolveEdges("cost", search.costEdges);
   const contractEdges = resolveEdges("contracts", search.contractEdges);
@@ -97,6 +96,9 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   );
   const none = summary.trades === 0;
   const empty = none && missed.length === 0;
+  // Missed alone has no dollars to draw, so its bars default to R and Net is off (missed-trades spec §6.8).
+  const dollarless = none && missed.length > 0;
+  const metric: Metric = search.metric ?? (dollarless ? "r" : "net");
 
   let edges: EdgeControl | undefined;
   if (by === "cost") {
@@ -164,7 +166,11 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p data-testid="r-coverage" className="text-[10px] text-muted">
-              {coverageText(summary.coverage, fill)}
+              {coverageText(
+                summary.coverage,
+                fill,
+                missed.length > 0 ? { total: missed.length, withR: missedWithR } : null,
+              )}
             </p>
             <fieldset aria-label="Bars" className="flex items-center gap-1 text-[11px]">
               <span className="mr-1 text-[9px] text-muted uppercase tracking-wider">Bars</span>
@@ -173,6 +179,8 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
                   key={each.id}
                   type="button"
                   aria-pressed={each.id === metric}
+                  disabled={dollarless && each.id === "net"}
+                  title={dollarless && each.id === "net" ? "Missed trades have no dollars" : undefined}
                   onClick={() => onSearch({ metric: each.id === "net" ? undefined : each.id })}
                   className={segmentClass(each.id === metric)}
                 >

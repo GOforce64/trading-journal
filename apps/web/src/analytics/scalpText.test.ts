@@ -100,6 +100,19 @@ describe("coverageText", () => {
     expect(coverageText({ total: 0, withR: 0, noStop: 0, noStockPrice: 0, cannotPrice: 0 })).toBe("");
   });
 
+  it("adds the missed trades' R when Missed is in the books, or speaks of them alone", () => {
+    const all = { total: 2, withR: 2, noStop: 0, noStockPrice: 0, cannotPrice: 0 };
+    expect(coverageText(all, undefined, { total: 2, withR: 2 })).toBe(
+      "R covers all 2 scalps and all 2 missed trades",
+    );
+    expect(coverageText(COVERAGE, undefined, { total: 3, withR: 2 })).toBe(
+      "R covers 31 of 38 scalps and 2 of 3 missed trades · 5 have no stop · 1 has no stock price · 1 can't be priced",
+    );
+    const none = { total: 0, withR: 0, noStop: 0, noStockPrice: 0, cannotPrice: 0 };
+    expect(coverageText(none, undefined, { total: 3, withR: 2 })).toBe("R covers 2 of 3 missed trades");
+    expect(coverageText(none, undefined, { total: 1, withR: 1 })).toBe("R covers the missed trade");
+  });
+
   it("says what the backfill is doing, or why it couldn't", () => {
     expect(coverageText(COVERAGE, { fetching: 7, problem: null })).toBe("Fetching prices for 7 scalps…");
     expect(coverageText(COVERAGE, { fetching: 1, problem: null })).toBe("Fetching prices for 1 scalp…");
