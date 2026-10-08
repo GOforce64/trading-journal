@@ -70,6 +70,9 @@ requests that don't come from `localhost`.
   mistake costs), and an Iron flies tab measured against max profit.
 - **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
   dollar statistics.
+- **Two machines** — Settings → Data exports the journal as one `.tjbundle` file, and
+  merges one from your other machine: the later edit of a trade wins, deletes travel,
+  IBKR fills are combined, and merging the same file twice changes nothing.
 
 Missed trades arrive in a later step; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
@@ -85,6 +88,9 @@ Missed trades arrive in a later step; see
 - **Option bars** come from Alpaca's free plan: regular hours only, from Jan 18, 2024, and
   sparse on thin strikes. Today's run 16 minutes behind after hours, and possibly up to 80
   during the session, when Alpaca refuses the shorter delay.
+- **Merging goes by each machine's clock**: the later edit wins, so keep both clocks set
+  right. A synced trade takes the winning side's numbers until the next IBKR sync
+  regroups its fills.
 - **Charts use raw prices**, not split-adjusted ones, to match your fills. A split inside
   the daily chart's three years steps its candles, and bends the daily EMAs for months.
 

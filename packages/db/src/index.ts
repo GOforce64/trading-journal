@@ -1,4 +1,5 @@
 export * from "./backup.js";
+export * from "./bundle.js";
 export * from "./client.js";
 export * from "./migrate.js";
 export * from "./repositories/bars.js";

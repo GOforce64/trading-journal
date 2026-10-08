@@ -3,7 +3,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 
 /** Why a backup was taken. Each kind keeps its own most recent copies. */
-export type BackupReason = "backup" | "import" | "migration";
+export type BackupReason = "backup" | "import" | "migration" | "merge";
 
 /**
  * A backup from before each kind had its name: `journal-` and the ISO time, made for migrations and imports alike.
