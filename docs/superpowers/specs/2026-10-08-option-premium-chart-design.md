@@ -282,6 +282,22 @@ For each gap, after the stock prices (which are unchanged):
 - **The analytics backfill** reads "Fetching prices for N scalps…", no longer "stock prices", since it fetches option ranges too.
 - **A scalp whose stock has no Alpaca bars**, such as an index, still shows the stock chart's message in place of both views, with no switch. Alpaca has no bars for index options either.
 
+- **The final review's fixes:**
+  - **"None out yet" means the trade's own minute isn't out.** It doesn't mean the answer is empty. Today's answer, while partial, can hold earlier days' bars of a weekly contract, and the fills would land on them. So the Option view waits, and the strip keeps premium levels typed until the bars reach the trade.
+  - **On the Option view, a fill marks a candle on its own day only.** That's the one holding it, else the day's first candle after it.
+  - **A wrong-side target draws no ≈ line.**
+  - **An OPRA refusal of finished days** answers 502 and is never reported, so the key isn't marked rejected.
+- **Deferred minors from the final review:**
+  - the option PD levels can come from days ago on a thin strike, and leave out SPY's 16:00–16:15;
+  - an option `no_key` discards stock prices just found;
+  - `useOptionBars` has no live flag for an overnight scalp opened before 09:30;
+  - the hover legend vanishes over empty minutes;
+  - no test for the option view's refresh-failure banner;
+  - `OPTION_EPOCH` is defined three times;
+  - `BACKFILL_COPY.no_key` still says "stock prices";
+  - a contract the route refuses (root over 5 letters) reads "Alpaca didn't answer";
+  - the first analytics visit fetches every closed scalp's option range in one sequential run.
+
 ## 13. Live check (2026-10-08)
 
 On a copy of the real journal with the user's key, through a stand-in server, after hours (01:00–02:00 UTC):
