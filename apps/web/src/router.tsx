@@ -10,6 +10,7 @@ import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.j
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
+import { MissedPage } from "./missed/MissedPage.js";
 import { NewMissed } from "./missed/NewMissed.js";
 import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
@@ -144,7 +145,7 @@ const tradeDetailRoute = createRoute({
         onEdit={editTrade}
         onSettle={settleTrade}
         onOpenTrade={openTrade}
-        onDeleted={() => router.navigate({ href: "/missed" })}
+        onDeleted={() => router.navigate({ to: "/missed" })}
         onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
       />
     );
@@ -191,15 +192,19 @@ const playbookRoute = createRoute({
   ),
 });
 
+const missedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missed",
+  component: () => (
+    <MissedPage
+      onOpenTrade={openTrade}
+      onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
+    />
+  ),
+});
+
 /** Nav destinations whose features arrive in later plans; better than a dead link. */
-const PLACEHOLDERS = [
-  {
-    path: "/missed",
-    title: "Missed",
-    phase: "Phase 2",
-    blurb: "Setups you spotted but skipped, marked on the chart and scored in R.",
-  },
-];
+const PLACEHOLDERS: { path: string; title: string; phase: string; blurb: string }[] = [];
 
 const placeholderRoutes = PLACEHOLDERS.map((page) =>
   createRoute({
@@ -223,6 +228,7 @@ export const router = createRouter({
     scalpsRoute,
     newScalpRoute,
     newMissedRoute,
+    missedRoute,
     tradeDetailRoute,
     editTradeRoute,
     importRoute,
