@@ -60,7 +60,7 @@ export function riskTileText(
   const excursion = (move: Excursion | null, sign: "−" | "+", where: string): TileText => {
     if (!move) return { value: "—", working: open ? "open" : rangeNote };
     const signed = (text: string) => (Number(text) === 0 ? text : `${sign}${text}`);
-    const value = signed(move.stock.toFixed(2));
+    const value = signed(move.move.toFixed(2));
     return { value, working: move.r == null ? where : `${signed(move.r.toFixed(2))}R · ${where}` };
   };
 

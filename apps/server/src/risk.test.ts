@@ -41,7 +41,7 @@ interface RiskView {
     plannedRisk: number | null;
     r: number | null;
     rewardRisk: number | null;
-    mae: { stock: number; r: number | null } | null;
+    mae: { move: number; r: number | null } | null;
   } | null;
 }
 
@@ -136,7 +136,7 @@ describe("POST /api/risk/fill", () => {
       },
     });
     const { risk } = await app.trade(id);
-    expect(risk).toMatchObject({ problem: null, plannedRisk: 104.05, mae: { stock: 0.12 } });
+    expect(risk).toMatchObject({ problem: null, plannedRisk: 104.05, mae: { move: 0.12 } });
     expect(risk?.r).toBeCloseTo(0.43, 3);
     expect(risk?.rewardRisk).toBeCloseTo(2.77, 2);
   });
