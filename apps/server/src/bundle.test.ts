@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import { type Entry, tarChunks, tarEntries } from "./archive.js";
@@ -289,20 +290,27 @@ describe("screenshots in the bundle", () => {
     expect(readdirSync(b.dir)).toEqual([]);
   });
 
-  it("merges a bundle whose screenshots come to more than 100 MB", { timeout: 60_000 }, async () => {
+  it("reads a bundle of more than 100 MB as a stream, with no cap on the whole", {
+    timeout: 30_000,
+  }, async () => {
     const a = machine();
     const b = machine();
-    await a.create();
-    const exported = (await a.exported()).bytes;
-    const files: Entry[] = [];
-    for (let index = 0; index < 6; index++) {
-      const bytes = new Uint8Array(20 * 1024 * 1024).fill(index + 1);
-      files.push({ name: `attachments/${sha256Of(bytes)}.png`, bytes });
-    }
-    const big = await rewritten(exported, () => {}, files);
-    expect(big.length).toBeGreaterThan(100 * 1024 * 1024);
-    expect(await b.merge(big)).toMatchObject({ status: 200, body: { added: 1 } });
-    expect(readdirSync(b.dir)).toHaveLength(6);
+    const { sha256 } = await a.attach(await a.create(), PNG);
+    const entries = await entriesOf((await a.exported()).bytes);
+    // An entry from a later version, which this one reads past: the size without writing 100 MB of images.
+    const later = { name: "later/padding.bin", bytes: new Uint8Array(101 * 1024 * 1024) };
+    const body = Readable.toWeb(Readable.from(tarChunks([...entries, later], 0)));
+    const res = await b.app.request(
+      new Request("http://localhost/api/bundle/merge", {
+        method: "POST",
+        headers: { ...LOCAL, "content-type": "application/octet-stream" },
+        body: body as ReadableStream<Uint8Array>,
+        duplex: "half",
+      } as RequestInit),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ added: 1, screenshotsAdded: 1 });
+    expect(readdirSync(b.dir)).toEqual([`${sha256}.png`]);
   });
 
   it("merges a gzipped bundle from before screenshots", async () => {
