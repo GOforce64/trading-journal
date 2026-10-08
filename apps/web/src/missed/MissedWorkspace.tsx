@@ -58,12 +58,15 @@ function Field({
   value,
   onCommit,
   warning,
+  refused,
 }: {
   label: string;
   value: string;
   /** Saves the text, or answers why it can't. */
   onCommit: (text: string) => string | null;
   warning?: string | null;
+  /** Why the server refused the field's last save (spec §9). */
+  refused?: string | null;
 }) {
   const [text, setText] = useState(value);
   const [problem, setProblem] = useState<string | null>(null);
@@ -85,9 +88,9 @@ function Field({
         }}
         className={INPUT}
       />
-      {(problem ?? warning) && (
-        <span className={`text-[10px] ${problem ? "text-down" : "text-[#f5b041]"}`}>
-          {problem ?? warning}
+      {(problem ?? refused ?? warning) && (
+        <span className={`text-[10px] ${(problem ?? refused) ? "text-down" : "text-[#f5b041]"}`}>
+          {problem ?? refused ?? warning}
         </span>
       )}
     </span>
@@ -133,15 +136,33 @@ export function MissedWorkspace({
     stored.stopPrice == null && Date.now() - trade.createdAt < JUST_CREATED_MS ? "stop" : null,
   );
   const [exitDraft, setExitDraft] = useState<{ time: string; price: string }>({ time: "", price: "" });
+  const [refused, setRefused] = useState<{ field: string; message: string } | null>(null);
   // A dragged or clicked level shows where it went until the saved trade comes back with it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the stored levels arriving is the signal
   useEffect(() => setLive({}), [trade.missed]);
+  // A new exit is typed from scratch: a half typed before the exit was set or cleared is stale.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the stored exit changing is the signal
+  useEffect(() => setExitDraft({ time: "", price: "" }), [trade.closedAt, stored.exitPrice]);
   useAutoFillPrices(trade);
   const rangeUnavailable = useRangeUnavailable(trade.id);
 
   const levels: MissedLevels = { ...stored, ...live };
   const risk = missedRisk(trade, live);
-  const send = (body: TradePatchBody) => save.mutate(body, { onError: () => setLive({}) });
+  /** Saves, and on a refusal puts the server's reason under the field that sent it, if one did. */
+  const send = (body: TradePatchBody, field?: string) => {
+    setRefused(null);
+    save.mutate(body, {
+      onError: (error) => {
+        setLive({});
+        if (field) setRefused({ field, message: error.message });
+      },
+    });
+  };
+  const refusedFor = (field: string) => (refused?.field === field ? refused.message : null);
+  /** A level placed, clicked or typed: placing goes on from the stop to an unmarked exit, as on a new trade. */
+  const placed = (what: Exclude<Placing, null>) => {
+    if (placing === what) setPlacing(what === "stop" && trade.closedAt == null ? "exit" : null);
+  };
 
   // An exit not marked yet charts the entry's day to its close, not up to today.
   const chartTrade = useMemo(
@@ -195,11 +216,11 @@ export function MissedWorkspace({
         const direction: Direction = at < levels.entryPrice ? "long" : "short";
         setLive((now) => ({ ...now, stopPrice: at, ...(first ? { direction } : {}) }));
         send({ missed: { stopPrice: at, ...(first ? { direction } : {}) } });
-        setPlacing(trade.closedAt == null ? "exit" : null);
+        placed("stop");
       } else if (id === "target") {
         setLive((now) => ({ ...now, targetPrice: at }));
         send({ missed: { targetPrice: at } });
-        setPlacing(null);
+        placed("target");
       }
     },
     onDrag(id, at) {
@@ -224,14 +245,17 @@ export function MissedWorkspace({
     },
   };
 
-  const commitPrice = (key: "entryPrice" | "stopPrice" | "targetPrice", text: string, clearable: boolean) => {
+  const FIELDS = { entryPrice: "Entry price", stopPrice: "Stop", targetPrice: "Target" } as const;
+  const commitPrice = (key: keyof typeof FIELDS, text: string, clearable: boolean) => {
     if (clearable && text.trim() === "") {
-      send({ missed: { [key]: null } });
+      send({ missed: { [key]: null } }, FIELDS[key]);
       return null;
     }
     const parsed = parsePrice(text);
     if (typeof parsed === "string") return parsed;
-    send({ missed: { [key]: parsed } });
+    send({ missed: { [key]: parsed } }, FIELDS[key]);
+    if (key === "stopPrice") placed("stop");
+    if (key === "targetPrice") placed("target");
     return null;
   };
   const commitExit = (part: "time" | "price", text: string) => {
@@ -241,11 +265,11 @@ export function MissedWorkspace({
       if (part === "time") {
         const t = parseTime(text, date);
         if (typeof t === "string") return t;
-        send({ closedAt: t });
+        send({ closedAt: t }, "Exit time");
       } else {
         const parsed = parsePrice(text);
         if (typeof parsed === "string") return parsed;
-        send({ missed: { exitPrice: parsed } });
+        send({ missed: { exitPrice: parsed } }, "Exit price");
       }
       return null;
     }
@@ -255,7 +279,8 @@ export function MissedWorkspace({
     if (typeof t === "string") return t;
     const parsed = parsePrice(next.price);
     if (typeof parsed === "string") return parsed;
-    send({ closedAt: t, missed: { exitPrice: parsed } });
+    send({ closedAt: t, missed: { exitPrice: parsed } }, part === "time" ? "Exit time" : "Exit price");
+    placed("exit");
     return null;
   };
   const place = (what: Exclude<Placing, null>, name: string) => (
@@ -350,14 +375,16 @@ export function MissedWorkspace({
                 onCommit={(text) => {
                   const t = parseTime(text, date);
                   if (typeof t === "string") return t;
-                  send({ openedAt: t });
+                  send({ openedAt: t }, "Entry time");
                   return null;
                 }}
+                refused={refusedFor("Entry time")}
               />
               <Field
                 label="Entry price"
                 value={price(levels.entryPrice)}
                 onCommit={(text) => commitPrice("entryPrice", text, false)}
+                refused={refusedFor("Entry price")}
                 warning={rangeWarning(levels.entryPrice, barAt(trade.openedAt) ?? null)}
               />
             </Row>
@@ -370,6 +397,7 @@ export function MissedWorkspace({
                     label="Stop"
                     value={price(levels.stopPrice)}
                     onCommit={(text) => commitPrice("stopPrice", text, true)}
+                    refused={refusedFor("Stop")}
                   />
                   {levels.stopPrice != null && (
                     <button
@@ -393,6 +421,7 @@ export function MissedWorkspace({
                     label="Target"
                     value={price(levels.targetPrice)}
                     onCommit={(text) => commitPrice("targetPrice", text, true)}
+                    refused={refusedFor("Target")}
                   />
                   {levels.targetPrice != null && (
                     <button
@@ -412,11 +441,13 @@ export function MissedWorkspace({
                 label="Exit time"
                 value={trade.closedAt != null && stored.exitPrice != null ? clockText(trade.closedAt) : ""}
                 onCommit={(text) => commitExit("time", text)}
+                refused={refusedFor("Exit time")}
               />
               <Field
                 label="Exit price"
                 value={price(levels.exitPrice)}
                 onCommit={(text) => commitExit("price", text)}
+                refused={refusedFor("Exit price")}
                 warning={
                   trade.closedAt != null && levels.exitPrice != null
                     ? rangeWarning(levels.exitPrice, barAt(trade.closedAt) ?? null)
@@ -493,7 +524,7 @@ export function MissedWorkspace({
                 Exclude from stats
               </label>
             </div>
-            {save.error && <p className="text-down">Couldn't save: {save.error.message}</p>}
+            {save.error && !refused && <p className="text-down">Couldn't save: {save.error.message}</p>}
             {deletion.error && <p className="text-down">Couldn't delete: {deletion.error.message}</p>}
           </div>
         </Panel>

@@ -71,7 +71,7 @@ const TAGS = [
   { id: "calm", name: "Calm", kind: "emotion", archived: false },
 ];
 
-function setup(trade = missedTrade(), deleteStatus = 200) {
+function setup(trade = missedTrade(), deleteStatus = 200, patchRefusal: string | null = null) {
   const patches: unknown[] = [];
   const onDeleted = vi.fn();
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,6 +87,11 @@ function setup(trade = missedTrade(), deleteStatus = 200) {
       });
     if (init?.method === "PATCH") {
       patches.push(JSON.parse(String(init.body)));
+      if (patchRefusal)
+        return new Response(JSON.stringify({ error: "invalid", message: patchRefusal }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
       return json(trade);
     }
     if (url.includes("/api/bars") || url.includes("/api/risk"))
@@ -96,12 +101,13 @@ function setup(trade = missedTrade(), deleteStatus = 200) {
   vi.stubGlobal("fetch", fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["trade", trade.id], trade);
-  render(
+  const page = (shown: TradeDetailView) => (
     <QueryClientProvider client={client}>
-      <MissedWorkspace trade={trade} onDeleted={onDeleted} />
-    </QueryClientProvider>,
+      <MissedWorkspace trade={shown} onDeleted={onDeleted} />
+    </QueryClientProvider>
   );
-  return { patches, client, onDeleted };
+  const { rerender } = render(page(trade));
+  return { patches, client, onDeleted, rerender: (next: TradeDetailView) => rerender(page(next)) };
 }
 
 const editing = () => {
@@ -207,5 +213,58 @@ describe("MissedWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByText("Couldn't delete: delete failed: 404")).toBeTruthy();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  const type = (label: string, text: string) => {
+    const field = screen.getByLabelText(label);
+    fireEvent.change(field, { target: { value: text } });
+    fireEvent.blur(field);
+    return field;
+  };
+  const justCreated = () =>
+    missedTrade(
+      {
+        createdAt: Date.now(),
+        closedAt: null,
+        missedRisk: { risk: null, r: null, plannedRR: null, mae: null, mfe: null, problem: "no_stop" },
+      },
+      { stopPrice: null, targetPrice: null, exitPrice: null },
+    );
+
+  it("forgets a typed exit time once the exit is cleared, so a new exit needs its time again", async () => {
+    const { patches, rerender } = setup();
+    type("Exit time", "10:30");
+    await waitFor(() => expect(patches).toEqual([{ closedAt: nyWallClock("2026-09-30", 10 * 60 + 30) }]));
+    // × cleared the exit: the trade comes back without one, and the time field shows empty.
+    rerender(missedTrade({}, { exitPrice: null }));
+    type("Exit price", "179");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(patches).toHaveLength(1);
+  });
+
+  it("goes on to the exit when the stop being placed is typed instead", async () => {
+    const { patches } = setup(justCreated());
+    expect(editing().placing).toBe("stop");
+    type("Stop", "177.9");
+    await waitFor(() => expect(patches).toEqual([{ missed: { stopPrice: 177.9 } }]));
+    expect(editing().placing).toBe("exit");
+  });
+
+  it("stops placing the target once it's typed", async () => {
+    const { patches } = setup(missedTrade({}, { targetPrice: null }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Target" }));
+    expect(editing().placing).toBe("target");
+    type("Target", "181");
+    await waitFor(() => expect(patches).toEqual([{ missed: { targetPrice: 181 } }]));
+    expect(editing().placing).toBeNull();
+  });
+
+  it("shows a refused save under the field that sent it", async () => {
+    setup(missedTrade(), 200, "The exit can't be before the entry");
+    const time = type("Exit time", "09:30");
+    await waitFor(() =>
+      expect(time.parentElement?.textContent).toContain("The exit can't be before the entry"),
+    );
+    expect(screen.queryByText(/Couldn't save/)).toBeNull();
   });
 });

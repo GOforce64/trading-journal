@@ -70,6 +70,16 @@ function levelsShownAtOnce(before: TradeDetailView, body: TradePatchBody) {
   };
 }
 
+/** A missed trade's levels and times a save sends, shown at once, so a dropped point doesn't jump back (§6.4). */
+function missedShownAtOnce(before: TradeDetailView, body: TradePatchBody) {
+  if (before.book !== "missed") return {};
+  return {
+    ...(body.openedAt === undefined ? {} : { openedAt: body.openedAt }),
+    ...(body.closedAt === undefined ? {} : { closedAt: body.closedAt }),
+    ...(body.missed && before.missed ? { missed: { ...before.missed, ...body.missed } } : {}),
+  };
+}
+
 /**
  * Saves part of a trade (scalp-review spec §7.3). The review's fields and levels change on the page at once and go
  * back if the server refuses. Afterwards the trade, the lists and the queue refetch, after a refusal too.
@@ -91,6 +101,7 @@ export function useSaveTrade(tradeId: string) {
           ...before,
           ...shownAtOnce(body),
           ...levelsShownAtOnce(before, body),
+          ...missedShownAtOnce(before, body),
         });
       }
       return { before };
