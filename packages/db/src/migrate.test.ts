@@ -35,6 +35,8 @@ describe("runMigrations", () => {
       "hold_high",
       "hold_low",
       "fetched_at",
+      "option_high",
+      "option_low",
     ]);
     expect(columns("trades")).toContain("reviewed_at");
   });
@@ -46,7 +48,7 @@ describe("runMigrations", () => {
     cpSync(MIGRATIONS, before, { recursive: true });
     const journalFile = join(before, "meta", "_journal.json");
     const journal = JSON.parse(readFileSync(journalFile, "utf8")) as { entries: { tag: string }[] };
-    journal.entries = journal.entries.filter((entry) => entry.tag !== "0006_scalp_r");
+    journal.entries = journal.entries.filter((entry) => entry.tag < "0006");
     writeFileSync(journalFile, JSON.stringify(journal));
     const file = join(dir, "journal.db");
     runMigrations(file, { migrationsFolder: before });
@@ -66,6 +68,37 @@ describe("runMigrations", () => {
     expect(db.all(sql`select trade_id, stop_price from scalp_details order by trade_id`)).toEqual([
       { trade_id: "amd", stop_price: 150 },
       { trade_id: "nvda", stop_price: 229 },
+    ]);
+  });
+
+  it("adds the option's range to the stored scalp prices, keeping what's there", () => {
+    const dir = tempDir();
+    // The migrations up to 0006, so a stored price is there first.
+    const before = join(dir, "migrations");
+    cpSync(MIGRATIONS, before, { recursive: true });
+    const journalFile = join(before, "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(journalFile, "utf8")) as { entries: { tag: string }[] };
+    journal.entries = journal.entries.filter((entry) => entry.tag < "0007");
+    writeFileSync(journalFile, JSON.stringify(journal));
+    const file = join(dir, "journal.db");
+    runMigrations(file, { migrationsFolder: before });
+    const old = openDatabase(file);
+    old.run(sql`insert into trades (id, strategy, book, underlying, opened_at, created_at, updated_at)
+      values ('nvda', 'scalp', 'paper', 'NVDA', 1, 1, 1)`);
+    old.run(sql`insert into scalp_prices (trade_id, entry_price, hold_high, hold_low, fetched_at)
+      values ('nvda', 230.83, 233.21, 230.71, 5)`);
+
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    expect(openDatabase(file).all(sql`select * from scalp_prices`)).toEqual([
+      {
+        trade_id: "nvda",
+        entry_price: 230.83,
+        hold_high: 233.21,
+        hold_low: 230.71,
+        fetched_at: 5,
+        option_high: null,
+        option_low: null,
+      },
     ]);
   });
 

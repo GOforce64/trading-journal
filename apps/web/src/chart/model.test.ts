@@ -1,4 +1,4 @@
-import { nyWallClock, type PriceBar } from "@tj/core";
+import { nyWallClock, type PriceBar, sessionSlots } from "@tj/core";
 import { describe, expect, it } from "vitest";
 import { type ChartTrade, dailyModel, intradayModel, priceText, tradeMarks } from "./model.js";
 
@@ -75,6 +75,45 @@ describe("tradeMarks", () => {
       ],
     });
     expect(fly.map((mark) => mark.text)).toEqual(["Open", "Close"]);
+  });
+});
+
+describe("tradeMarks' prices, for the option view", () => {
+  it("gives each fill its price, and a trade typed in by hand its open and close prices", () => {
+    expect(tradeMarks(NVDA).map((mark) => mark.price)).toEqual([1.06, 1.06, 1.44, 1.15]);
+    expect(tradeMarks({ ...NVDA, fills: [] }).map((mark) => mark.price)).toEqual([1.06, 1.295]);
+  });
+});
+
+describe("intradayModel with session slots", () => {
+  // A thin strike: three trades in the morning.
+  const thin = [
+    { t: nyWallClock(DAY, 570), o: 1, h: 1.1, l: 0.9, c: 1, v: 10 },
+    { t: nyWallClock(DAY, 585), o: 1.2, h: 1.3, l: 1.1, c: 1.2, v: 5 },
+    { t: nyWallClock(DAY, 630), o: 1.1, h: 1.1, l: 1, c: 1, v: 2 },
+  ];
+
+  it("counts the opening window in slots, empty ones included, so the trade keeps its place in time", () => {
+    const model = intradayModel(thin, NVDA, 3, [8], { slots: true });
+    expect(model.candles.map((candle) => candle.t)).toEqual(thin.map((bar) => bar.t));
+    expect(model.slots).toEqual(sessionSlots(model.candles, 3));
+    // The entry, 09:31, sits in the 09:30 slot (index 0); the exit, 09:46, in the 09:45 slot (index 5).
+    expect(model.window).toEqual({ from: 0, to: 25 });
+    expect(intradayModel(thin, NVDA, 3, [8]).slots).toBeNull();
+  });
+
+  it("marks a fill on its own day only: the day's first candle when it came before it, nothing on a day without one", () => {
+    const later = [{ t: nyWallClock(DAY, 605), o: 1, h: 1.1, l: 0.9, c: 1, v: 10 }];
+    const yesterday = [{ t: nyWallClock("2026-09-25", 955), o: 1, h: 1.1, l: 0.9, c: 1, v: 10 }];
+    // Fills at 09:31 and 09:46; the day's only trade is at 10:05.
+    expect(intradayModel(later, NVDA, 1, [8], { slots: true }).markers.map((marker) => marker.t)).toEqual([
+      nyWallClock(DAY, 605),
+      nyWallClock(DAY, 605),
+      nyWallClock(DAY, 605),
+      nyWallClock(DAY, 605),
+    ]);
+    // Only Friday's bars are out: Monday's fills wait for Monday's bars.
+    expect(intradayModel(yesterday, NVDA, 1, [8], { slots: true }).markers).toEqual([]);
   });
 });
 

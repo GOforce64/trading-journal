@@ -6,9 +6,11 @@ import {
   dailyFromMinutes,
   ema,
   nyClock,
+  optionClose,
   PREMARKET_OPEN,
   type PriceBar,
   sessionLevels,
+  sessionSlots,
   vwap,
 } from "./chart.js";
 import { nyDate } from "./marks.js";
@@ -241,5 +243,41 @@ describe("dailyFromMinutes", () => {
     ];
     expect(dailyFromMinutes(bars, DAY)).toEqual({ t: at(DAY, "00:00"), o: 10, h: 12, l: 9.5, c: 11, v: 300 });
     expect(dailyFromMinutes(bars, "2026-09-29")).toBeNull();
+  });
+});
+
+describe("optionClose", () => {
+  it("is 16:15, or 13:15 on a half day", () => {
+    expect(optionClose("2026-10-06")).toBe(16 * 60 + 15);
+    expect(optionClose("2026-11-27")).toBe(13 * 60 + 15);
+  });
+});
+
+describe("sessionSlots", () => {
+  const at = (date: string, minute: number) => ({ t: nyWallClock(date, minute) });
+
+  it("fills a day's session with empty 3-minute slots, from 09:30 to 16:12, around its candles", () => {
+    const slots = sessionSlots([at("2026-10-06", 576), at("2026-10-06", 600)], 3);
+    expect(slots[0]).toBe(nyWallClock("2026-10-06", 570));
+    expect(slots.at(-1)).toBe(nyWallClock("2026-10-06", 972));
+    expect(slots).toHaveLength((972 - 570) / 3 + 1);
+    expect(slots).toContain(nyWallClock("2026-10-06", 573));
+  });
+
+  it("starts an hour's slots at 09:00, on aggregate's boundaries", () => {
+    const slots = sessionSlots([at("2026-10-06", 600)], 60);
+    expect(slots[0]).toBe(nyWallClock("2026-10-06", 540));
+    expect(slots.at(-1)).toBe(nyWallClock("2026-10-06", 960));
+  });
+
+  it("ends a half day at 13:12, and reaches a candle past the close", () => {
+    expect(sessionSlots([at("2026-11-27", 600)], 3).at(-1)).toBe(nyWallClock("2026-11-27", 792));
+    expect(sessionSlots([at("2026-10-06", 990)], 3).at(-1)).toBe(nyWallClock("2026-10-06", 990));
+  });
+
+  it("covers each day that has candles, and nothing else", () => {
+    const slots = sessionSlots([at("2026-10-05", 600), at("2026-10-06", 600)], 30);
+    expect(new Set(slots.map((t) => nyClock(t).date))).toEqual(new Set(["2026-10-05", "2026-10-06"]));
+    expect(sessionSlots([], 3)).toEqual([]);
   });
 });

@@ -78,6 +78,15 @@ describe("RiskTiles", () => {
     expect(tile("mfe")).toBe("—fetching the stock's range…");
   });
 
+  it("says MAE and MFE run from the entry minute, and on premium waits for the option's range", () => {
+    renderTiles(nvda({}, { levelBasis: "premium", stopPrice: 0.6 }));
+    const tip =
+      "From the entry minute through the exit minute. Trades in your entry minute before your fill count too.";
+    expect(screen.getByTestId("tile-mae").parentElement?.getAttribute("title")).toBe(tip);
+    expect(screen.getByTestId("tile-mfe").parentElement?.getAttribute("title")).toBe(tip);
+    expect(tile("mae")).toBe("—fetching the option's range…");
+  });
+
   it("shows nothing for a trade without R", () => {
     renderTiles(nvda({ strategy: "iron_fly" }));
     expect(screen.queryByTestId("tile-r")).toBeNull();

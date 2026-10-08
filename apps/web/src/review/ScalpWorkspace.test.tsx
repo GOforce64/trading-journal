@@ -13,13 +13,22 @@ const drawn = vi.hoisted(() => [] as unknown[]);
 vi.mock("../chart/TradeCharts.js", () => ({
   TradeCharts: ({
     levels,
+    option,
   }: {
     levels?: { lines: { label: string; price: number }[]; editing: ChartEditing };
+    option?: { view: string; onView: (view: "stock" | "option") => void };
   }) => {
     drawn.push(levels?.lines);
     const edit = levels?.editing;
     return (
       <div data-testid="trade-charts">
+        <span data-testid="chart-view">{option?.view ?? "none"}</span>
+        <button type="button" onClick={() => option?.onView("stock")}>
+          chart: view stock
+        </button>
+        <button type="button" onClick={() => option?.onView("option")}>
+          chart: view option
+        </button>
         <span data-testid="chart-lines">
           {levels?.lines.map((line) => `${line.label} ${line.price}`).join(", ")}
         </span>
@@ -118,12 +127,34 @@ const liveRisk = () => screen.getByTestId("live-risk").textContent;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-/** Answers the trade, an empty queue, and patches. */
-function stubApi({ trade = SCALP as unknown, patch = () => json(trade) } = {}) {
+/** The contract's bars: none, unless a test gives some. */
+const NO_OPTION_BARS = {
+  contract: "NVDA260928C00232500",
+  bars: [],
+  partial: false,
+  delayMinutes: 16,
+  unavailable: { reason: "no_bars", message: "No option bars for NVDA260928C00232500." },
+};
+const OPTION_BARS = {
+  ...NO_OPTION_BARS,
+  bars: [{ t: Date.UTC(2026, 8, 28, 13, 31), o: 0.97, h: 1.53, l: 0.97, c: 1.1, v: 50 }],
+  unavailable: null,
+};
+
+/** Answers the trade (or what `trade` makes of it now), an empty queue, the contract's bars, and patches. */
+function stubApi({
+  trade = SCALP as unknown,
+  patch = () => json(typeof trade === "function" ? trade() : trade),
+  option = NO_OPTION_BARS as unknown,
+} = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes("/api/risk/fill")) return json({ filled: 0, missing: [], unavailable: null });
+    if (String(input).includes("/api/risk/fill"))
+      return json({ filled: 0, missing: [], optionMissing: [], unavailable: null });
+    if (String(input).includes("/api/bars/option/")) return json(option);
     if (String(init?.method).toUpperCase() === "PATCH") return patch();
-    return json(String(input).includes("review=pending") ? [] : trade);
+    return json(
+      String(input).includes("review=pending") ? [] : typeof trade === "function" ? trade() : trade,
+    );
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -229,13 +260,13 @@ describe("ScalpWorkspace levels", () => {
     expect(patches(fetchMock)).toEqual([]);
   });
 
-  it("takes 0 on the premium basis, and draws no premium lines", async () => {
+  it("takes 0 on the premium basis, and with no option bars draws no premium lines, saying so", async () => {
     const premium = { ...STOCK, levelBasis: "premium", stopPrice: 0.8, targets: [] };
     const fetchMock = stubApi({ trade: { ...SCALP, scalp: premium } });
     renderWorkspace();
     const stop = await screen.findByRole("textbox", { name: "Stop" });
     expect(screen.getByTestId("chart-lines").textContent).toBe("");
-    expect(screen.getByText("Premium levels aren't drawn yet: there's no option chart.")).toBeTruthy();
+    expect(await screen.findByText("No option bars for this contract: type the levels.")).toBeTruthy();
     act(() => stop.focus());
     fireEvent.change(stop, { target: { value: "0" } });
     fireEvent.blur(stop);
@@ -600,5 +631,85 @@ describe("ScalpWorkspace R", () => {
     });
     renderWorkspace();
     await waitFor(() => expect(liveRisk()).toMatch(/^Risk \$104\.\d\d · R \+0\.43 · R:R 2\.8$/));
+  });
+});
+
+describe("ScalpWorkspace's option view", () => {
+  const PREMIUM = { ...STOCK, levelBasis: "premium", stopPrice: 0.8, targets: [] };
+  const PREMIUM_NO_STOP = { ...PREMIUM, stopPrice: null };
+
+  it("opens a premium scalp on the option view, and follows the basis to the stock view", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    let current: unknown = { ...SCALP, scalp: PREMIUM };
+    stubApi({
+      trade: () => current,
+      option: OPTION_BARS,
+      patch: () => {
+        current = { ...SCALP, scalp: { ...STOCK, stopPrice: null, targets: [] } };
+        return json(current);
+      },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId("chart-view").textContent).toBe("option"));
+    await waitFor(() => expect(screen.getByTestId("chart-lines").textContent).toBe("STOP 0.8"));
+    fireEvent.click(screen.getByRole("button", { name: "Stock" }));
+    await waitFor(() => expect(screen.getByTestId("chart-view").textContent).toBe("stock"));
+  });
+
+  it("draws and arms premium levels on the option view only: flipping to stock leaves nothing to click", async () => {
+    stubApi({ trade: { ...SCALP, scalp: PREMIUM_NO_STOP }, option: OPTION_BARS });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId("chart-view").textContent).toBe("option"));
+    // Wait for the bars, which make the option chart one to place on.
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole("button", { name: "+ Stop" }));
+      expect(screen.getByTestId("chart-placing").textContent).toBe("stop");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "chart: view stock" }));
+    expect(screen.getByTestId("chart-view").textContent).toBe("stock");
+    expect(screen.getByTestId("chart-placing").textContent).toBe("none");
+    expect(screen.getByTestId("chart-lines").textContent).toBe("");
+  });
+
+  it("brings the option view back for + Stop on a premium scalp", async () => {
+    stubApi({ trade: { ...SCALP, scalp: PREMIUM_NO_STOP }, option: OPTION_BARS });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId("chart-view").textContent).toBe("option"));
+    fireEvent.click(screen.getByRole("button", { name: "chart: view stock" }));
+    expect(screen.getByTestId("chart-view").textContent).toBe("stock");
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole("button", { name: "+ Stop" }));
+      expect(screen.getByTestId("chart-placing").textContent).toBe("stop");
+    });
+    expect(screen.getByTestId("chart-view").textContent).toBe("option");
+  });
+
+  it("types premium levels while today's option bars haven't reached the trade, saying when they will", async () => {
+    const now = new Date();
+    const openedAt = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 6 * 3_600_000;
+    const behind = {
+      ...OPTION_BARS,
+      partial: true,
+      bars: [{ ...OPTION_BARS.bars[0], t: openedAt - 3_600_000 }],
+    };
+    stubApi({ trade: { ...SCALP, openedAt, closedAt: null, scalp: PREMIUM_NO_STOP }, option: behind });
+    renderWorkspace();
+    expect(
+      await screen.findByText(/^The option chart's bars arrive by \d\d:\d\d: type the levels or wait\.$/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "+ Stop" }));
+    expect(screen.getByTestId("chart-placing").textContent).toBe("none");
+  });
+
+  it("shows a stock scalp's levels on the option view as estimates, which can't be placed or dragged", async () => {
+    stubApi({ trade: WORKED, option: OPTION_BARS });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId("chart-view").textContent).toBe("stock"));
+    fireEvent.click(screen.getByRole("button", { name: "chart: view option" }));
+    expect(screen.getByTestId("chart-lines").textContent).toMatch(
+      /^≈ STOP 0\.54, ≈ T1 \d+\.\d+, ≈ T2 \d+\.\d+$/,
+    );
+    expect(screen.getByTestId("chart-placing").textContent).toBe("none");
   });
 });

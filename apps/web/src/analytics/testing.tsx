@@ -102,7 +102,7 @@ export function tradeRow(spec: RowSpec) {
         ? spec.scalpPrices
         : fly
           ? null
-          : { entryPrice: 10, holdHigh: 11, holdLow: 9 },
+          : { entryPrice: 10, holdHigh: 11, holdLow: 9, optionHigh: 1.5, optionLow: 0.5 },
   };
 }
 

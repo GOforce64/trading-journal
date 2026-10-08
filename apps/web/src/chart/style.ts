@@ -19,6 +19,9 @@ export const COLORS = {
   pm: "#82a8ff",
   pd: "#ffb74d",
   held: "#2962ff",
+  /** A stock scalp's levels on the option view, as estimates (premium-chart spec §7). */
+  upFaint: "rgba(38, 166, 154, 0.55)",
+  downFaint: "rgba(239, 83, 80, 0.55)",
 };
 /** EMA 1–4 (8, 20, 50, 167 by default). */
 export const EMA_COLORS = ["#f7c948", "#26c6da", "#ab47bc", "#ff7043"] as const;

@@ -69,14 +69,20 @@ export function Tile({
   children,
   testId,
   empty = false,
+  title,
 }: {
   label: string;
   children: ReactNode;
   testId?: string;
   empty?: boolean;
+  /** A tooltip over the whole tile. */
+  title?: string;
 }) {
   return (
-    <div className={`rounded-sm border bg-panel p-2 ${empty ? "border-line border-dashed" : "border-line"}`}>
+    <div
+      title={title}
+      className={`rounded-sm border bg-panel p-2 ${empty ? "border-line border-dashed" : "border-line"}`}
+    >
       <div className="text-[10px] text-muted uppercase tracking-wider">{label}</div>
       <div
         className={`num mt-1 font-semibold text-[15px] ${empty ? "text-[#4b5263]" : ""}`}

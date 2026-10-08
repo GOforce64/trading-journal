@@ -155,8 +155,8 @@ describe("scalpRisk", () => {
     ]);
     expect(risk?.r).toBeCloseTo(0.43, 3);
     expect(risk?.rewardRisk).toBeCloseTo(2.77, 2);
-    expect(risk?.mae).toEqual({ stock: 0.12, r: expect.closeTo(0.0645, 4) });
-    expect(risk?.mfe).toEqual({ stock: 2.38, r: expect.closeTo(1.3032, 4) });
+    expect(risk?.mae).toEqual({ move: 0.12, r: expect.closeTo(0.0645, 4) });
+    expect(risk?.mfe).toEqual({ move: 2.38, r: expect.closeTo(1.3032, 4) });
   });
 
   it("counts contracts no target trims as a runner at the last target", () => {
@@ -266,8 +266,8 @@ describe("scalpRisk", () => {
       optionAtStop: 0.6,
       plannedRisk: 92,
       plannedReward: 108,
-      mae: { stock: 0.12, r: null },
-      mfe: { stock: 2.38, r: null },
+      mae: null,
+      mfe: null,
     });
     expect(risk?.rewardRisk).toBeCloseTo(1.174, 3);
     expect(scalpRisk(nvda({}, { levelBasis: "premium", stopPrice: 1.06 }))?.problem).toBe("wrong_side");
@@ -306,7 +306,7 @@ describe("scalpRisk", () => {
   it("finds a stop on the wrong side: above a call's entry, at it, or below a put's", () => {
     const above = scalpRisk(nvda({}, { stopPrice: 231.5 }));
     expect(above).toMatchObject({ problem: "wrong_side", plannedRisk: null, r: null, rewardRisk: null });
-    expect(above?.mae).toEqual({ stock: 0.12, r: null });
+    expect(above?.mae).toEqual({ move: 0.12, r: null });
     expect(scalpRisk(nvda({}, { stockEntryOverride: 230, stopPrice: 230 }))?.problem).toBe("wrong_side");
     const put = nvda({ legs: [leg({ right: "P", strike: 229 })] }, { stopPrice: 230, targets: [] });
     expect(scalpRisk(put)?.problem).toBe("wrong_side");
@@ -317,8 +317,53 @@ describe("scalpRisk", () => {
       nvda({ legs: [leg({ right: "P", strike: 229 })] }, { stopPrice: 232, targets: [] }),
     );
     expect(risk?.problem).toBeNull();
-    expect(risk?.mae).toEqual({ stock: 2.38, r: expect.closeTo(2.032, 3) });
-    expect(risk?.mfe).toEqual({ stock: 0.12, r: expect.closeTo(0.1006, 4) });
+    expect(risk?.mae).toEqual({ move: 2.38, r: expect.closeTo(2.032, 3) });
+    expect(risk?.mfe).toEqual({ move: 0.12, r: expect.closeTo(0.1006, 4) });
+  });
+
+  const WITH_OPTION = {
+    entryPrice: STOCK,
+    holdHigh: 233.21,
+    holdLow: 230.71,
+    optionHigh: 1.37,
+    optionLow: 0.64,
+  };
+
+  it("measures a premium scalp's MAE and MFE on the option's own range, in R against the premium stop", () => {
+    const premium = { levelBasis: "premium" as const, stopPrice: 0.6, targets: [] };
+    const risk = scalpRisk(nvda({ scalpPrices: WITH_OPTION }, premium));
+    expect(risk?.mae).toEqual({ move: 0.42, r: expect.closeTo(0.913, 3) });
+    expect(risk?.mfe).toEqual({ move: 0.31, r: expect.closeTo(0.674, 3) });
+    // A put loses as its own price falls too: the same reading.
+    const put = scalpRisk(
+      nvda({ scalpPrices: WITH_OPTION, legs: [leg({ right: "P", strike: 229 })] }, premium),
+    );
+    expect(put?.mae).toEqual({ move: 0.42, r: expect.closeTo(0.913, 3) });
+  });
+
+  it("gives premium MAE and MFE no R without a stop under the entry, and none without the option's range", () => {
+    const premium = (stopPrice: number | null) => ({ levelBasis: "premium" as const, stopPrice });
+    expect(scalpRisk(nvda({ scalpPrices: WITH_OPTION }, premium(1.2)))?.mae).toEqual({ move: 0.42, r: null });
+    expect(scalpRisk(nvda({ scalpPrices: WITH_OPTION }, premium(null)))?.mfe).toEqual({
+      move: 0.31,
+      r: null,
+    });
+    expect(scalpRisk(nvda({}, premium(0.6)))).toMatchObject({ mae: null, mfe: null });
+    // A stop at 0 risks the whole premium: 1R is 1.06.
+    expect(scalpRisk(nvda({ scalpPrices: WITH_OPTION }, premium(0)))?.mae?.r).toBeCloseTo(0.3962, 4);
+    // Never below the entry: no adverse move at all.
+    const low = { ...WITH_OPTION, optionLow: 1.1 };
+    expect(scalpRisk(nvda({ scalpPrices: low }, premium(0.6)))?.mae).toEqual({ move: 0, r: 0 });
+    expect(
+      scalpRisk(nvda({ closedAt: null, netPnl: null, scalpPrices: WITH_OPTION }, premium(0.6)))?.mae,
+    ).toBeNull();
+  });
+
+  it("keeps the stock basis on the stock's range, whatever the option's", () => {
+    expect(scalpRisk(nvda({ scalpPrices: WITH_OPTION }))?.mae).toEqual({
+      move: 0.12,
+      r: expect.closeTo(0.0645, 4),
+    });
   });
 
   it("uses both typed overrides", () => {

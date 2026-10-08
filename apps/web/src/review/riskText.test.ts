@@ -157,3 +157,23 @@ describe("liveLine", () => {
     expect(liveLine(nvda({}, { stopPrice: null }).risk, false)).toBeNull();
   });
 });
+
+describe("riskTileText on the premium basis", () => {
+  it("reads a premium scalp's MAE and MFE on the option's range", () => {
+    const prices = {
+      entryPrice: STOCK,
+      holdHigh: 233.21,
+      holdLow: 230.71,
+      optionHigh: 1.37,
+      optionLow: 0.64,
+    };
+    const text = tiles({ scalpPrices: prices }, { levelBasis: "premium", stopPrice: 0.6, targets: [] });
+    expect(text.mae).toEqual({ value: "−0.42", working: "−0.91R · option low 0.64" });
+    expect(text.mfe).toEqual({ value: "+0.31", working: "+0.67R · option high 1.37" });
+    const waiting = nvda({}, { levelBasis: "premium", stopPrice: 0.6 });
+    expect(riskTileText(waiting.risk, waiting.trade, "waits for Alpaca's option delay").mae).toEqual({
+      value: "—",
+      working: "waits for Alpaca's option delay",
+    });
+  });
+});

@@ -1,5 +1,5 @@
 import { addDays, isTradingDay, nyWallClock, type PriceBar } from "@tj/core";
-import { AlpacaError, type BarHistory } from "@tj/market-data";
+import { AlpacaError, type BarHistory, type OptionBarHistory } from "@tj/market-data";
 import { describe, expect, it, vi } from "vitest";
 import { createMarketData } from "./marketData.js";
 import { fakeSources, LOCAL, testApp } from "./testing.js";
@@ -205,5 +205,133 @@ describe("GET /api/bars/:symbol/daily", () => {
     const { dailyBars, get } = setup();
     await get("/api/bars/SPY/daily?to=2026-07-17");
     expect(dailyBars).toHaveBeenCalledWith("SPY", "2023-07-18", "2026-07-17");
+  });
+});
+
+describe("GET /api/bars/option/:contract", () => {
+  const CONTRACT = "NVDA260928C00232500";
+  const OPRA = () => new AlpacaError(403, "OPRA agreement is not signed");
+  const TODAY_START = nyWallClock("2026-09-29", 0);
+  interface OptionAnswer extends Omit<Answer, "symbol"> {
+    contract: string;
+    delayMinutes: number;
+  }
+
+  function setupOption(minuteBars: OptionBarHistory["minuteBars"], withKey = true, now = NOW) {
+    const fetchBars = vi.fn(minuteBars);
+    const market = createMarketData(withKey ? { keyId: "PKTEST", secretKey: "s" } : null, {
+      build: () => fakeSources({ optionHistory: { minuteBars: fetchBars } }),
+      log: () => {},
+    });
+    const app = testApp({ market, now: () => now });
+    const get = async (query: string, contract = CONTRACT) => {
+      const res = await app.request(`/api/bars/option/${contract}?${query}`, { headers: LOCAL });
+      return { status: res.status, body: (await res.json()) as OptionAnswer };
+    };
+    return { market, fetchBars, get };
+  }
+
+  it("fetches a past range's finished days once, then serves them from the cache", async () => {
+    const { fetchBars, get } = setupOption(async () => [MONDAY]);
+    expect((await get("from=2026-09-21&to=2026-09-28")).body).toEqual({
+      contract: CONTRACT,
+      bars: [MONDAY],
+      partial: false,
+      delayMinutes: 16,
+      unavailable: null,
+    });
+    expect(fetchBars).toHaveBeenCalledWith(
+      CONTRACT,
+      nyWallClock("2026-09-21", 0),
+      nyWallClock("2026-09-29", 0),
+    );
+    await get("from=2026-09-21&to=2026-09-28");
+    expect(fetchBars).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for today up to 16 minutes ago, never caching it, and calls it partial until the options close", async () => {
+    const { fetchBars, get } = setupOption(async (_contract, start) =>
+      start === TODAY_START ? [TODAY] : [MONDAY],
+    );
+    const answer = await get("from=2026-09-28&to=2026-09-29");
+    expect(answer.body).toMatchObject({ bars: [MONDAY, TODAY], partial: true, delayMinutes: 16 });
+    expect(fetchBars).toHaveBeenLastCalledWith(CONTRACT, TODAY_START, NOW - 16 * 60_000);
+  });
+
+  it("asks again 80 minutes back when Alpaca refuses, and keeps the long delay for the day without blaming the key", async () => {
+    const { market, fetchBars, get } = setupOption(async (_contract, start, end) => {
+      if (start === TODAY_START && end > NOW - 80 * 60_000) throw OPRA();
+      return start === TODAY_START ? [TODAY] : [MONDAY];
+    });
+    expect((await get("from=2026-09-28&to=2026-09-29")).body).toMatchObject({
+      bars: [MONDAY, TODAY],
+      partial: true,
+      delayMinutes: 80,
+    });
+    expect(fetchBars).toHaveBeenCalledTimes(3);
+    await get("from=2026-09-28&to=2026-09-29");
+    // Straight to the long delay: one request, not a refusal first.
+    expect(fetchBars).toHaveBeenCalledTimes(4);
+    expect(fetchBars).toHaveBeenLastCalledWith(CONTRACT, TODAY_START, NOW - 80 * 60_000);
+    expect(market.status().state).toBe("on");
+  });
+
+  it("answers no bars yet, still partial, when Alpaca refuses both delays", async () => {
+    const { get } = setupOption(async (_contract, start) => {
+      if (start === TODAY_START) throw OPRA();
+      return [];
+    });
+    expect(await get("from=2026-09-29&to=2026-09-29")).toMatchObject({
+      status: 200,
+      body: { bars: [], partial: true, delayMinutes: 80, unavailable: null },
+    });
+  });
+
+  it("never asks for days before Jan 18, 2024", async () => {
+    const { fetchBars, get } = setupOption(async () => []);
+    expect((await get("from=2023-12-01&to=2023-12-10")).body).toMatchObject({
+      bars: [],
+      unavailable: { reason: "too_old", message: "Alpaca's option bars start on Jan 18, 2024." },
+    });
+    expect(fetchBars).not.toHaveBeenCalled();
+    await get("from=2024-01-10&to=2024-01-20");
+    expect(fetchBars).toHaveBeenCalledWith(
+      CONTRACT,
+      nyWallClock("2024-01-18", 0),
+      nyWallClock("2024-01-21", 0),
+    );
+  });
+
+  it("says when Alpaca has no bars for the contract, and when there's no key", async () => {
+    expect((await setupOption(async () => []).get("from=2026-09-21&to=2026-09-28")).body.unavailable).toEqual(
+      {
+        reason: "no_bars",
+        message: `No option bars for ${CONTRACT}.`,
+      },
+    );
+    expect(
+      (await setupOption(async () => [], false).get("from=2026-09-21&to=2026-09-28")).body.unavailable
+        ?.reason,
+    ).toBe("no_key");
+  });
+
+  it("never blames the key for a refusal of finished days, answering 502 instead", async () => {
+    const { market, get } = setupOption(async () => {
+      throw OPRA();
+    });
+    expect((await get("from=2026-09-21&to=2026-09-28")).status).toBe(502);
+    expect(market.status().state).toBe("on");
+  });
+
+  it("refuses a bad contract or range, and answers 502 without storing anything when Alpaca fails", async () => {
+    const { fetchBars, get } = setupOption(async () => {
+      throw new AlpacaError(500, "");
+    });
+    expect((await get("from=2026-09-21&to=2026-09-28", "NVDA")).status).toBe(400);
+    expect((await get("from=2026-09-28&to=2026-09-21")).status).toBe(400);
+    expect((await get("from=2026-07-01&to=2026-09-28")).status).toBe(400);
+    expect((await get("from=2026-09-21&to=2026-09-28")).status).toBe(502);
+    await get("from=2026-09-21&to=2026-09-28");
+    expect(fetchBars).toHaveBeenCalledTimes(2);
   });
 });

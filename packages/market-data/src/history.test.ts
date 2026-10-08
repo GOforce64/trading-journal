@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alpacaHistory, tooRecent } from "./history.js";
+import { alpacaHistory, alpacaOptionHistory, optionTooRecent, tooRecent } from "./history.js";
 import { AlpacaError } from "./http.js";
 import { fakeFetch, json } from "./testing.js";
 
@@ -100,5 +100,62 @@ describe("alpacaHistory.dailyBars", () => {
       start: "2024-09-29",
       end: "2026-09-28",
     });
+  });
+});
+
+describe("alpacaOptionHistory.minuteBars", () => {
+  const CONTRACT = "SPY261006C00779000";
+
+  it("asks the option bars endpoint for 1-minute bars, 10,000 at a time, and follows next_page_token", async () => {
+    const { fetch, calls } = fakeFetch(
+      json({
+        bars: { [CONTRACT]: [raw("2026-10-06T13:30:00Z", 0.83, 1.09, 0.76, 1.07)] },
+        next_page_token: "abc",
+      }),
+      json({
+        bars: { [CONTRACT]: [raw("2026-10-06T13:31:00Z", 1.07, 1.1, 1, 1.02)] },
+        next_page_token: null,
+      }),
+    );
+    const bars = await alpacaOptionHistory(KEYS, { fetch }).minuteBars(
+      CONTRACT,
+      Date.UTC(2026, 9, 6, 4),
+      Date.UTC(2026, 9, 7, 4),
+    );
+    expect(bars).toEqual([
+      { t: Date.UTC(2026, 9, 6, 13, 30), o: 0.83, h: 1.09, l: 0.76, c: 1.07, v: 1200 },
+      { t: Date.UTC(2026, 9, 6, 13, 31), o: 1.07, h: 1.1, l: 1, c: 1.02, v: 1200 },
+    ]);
+    const url = calls[0]?.url;
+    expect(`${url?.origin}${url?.pathname}`).toBe("https://data.alpaca.markets/v1beta1/options/bars");
+    expect(Object.fromEntries(url?.searchParams ?? [])).toEqual({
+      symbols: CONTRACT,
+      timeframe: "1Min",
+      start: "2026-10-06T04:00:00.000Z",
+      end: "2026-10-07T04:00:00.000Z",
+      limit: "10000",
+    });
+    expect(calls[1]?.url.searchParams.get("page_token")).toBe("abc");
+  });
+
+  it("answers [] for a contract Alpaca doesn't know, as an empty reply or a refused code", async () => {
+    const empty = fakeFetch(json({ bars: {}, next_page_token: null }));
+    expect(await alpacaOptionHistory(KEYS, { fetch: empty.fetch }).minuteBars(CONTRACT, 0, 1)).toEqual([]);
+    const refused = fakeFetch(
+      json({ message: 'invalid symbol: "SPXW1" does not match ^[A-Z]{1,5}\\d{6,7}[CP]\\d{8}$' }, 400),
+    );
+    expect(await alpacaOptionHistory(KEYS, { fetch: refused.fetch }).minuteBars("SPXW1", 0, 1)).toEqual([]);
+  });
+
+  it("throws Alpaca's refusals, telling the OPRA delay apart", async () => {
+    const { fetch } = fakeFetch(json({ message: "OPRA agreement is not signed" }, 403));
+    const error = await alpacaOptionHistory(KEYS, { fetch })
+      .minuteBars(CONTRACT, 0, 1)
+      .catch((caught: unknown) => caught);
+    expect(optionTooRecent(error)).toBe(true);
+    expect(optionTooRecent(new AlpacaError(403, "forbidden"))).toBe(false);
+    expect(
+      optionTooRecent(new AlpacaError(403, "subscription does not permit querying recent SIP data")),
+    ).toBe(false);
   });
 });

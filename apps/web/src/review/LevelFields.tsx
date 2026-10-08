@@ -12,7 +12,16 @@ const ADD = "rounded-sm border border-line border-dashed px-2 py-0.5 text-muted 
  * The review strip's levels column (scalp-review spec §8, scalp-R spec §9.2): the basis, the stop, and the targets
  * with their trims. `risk` is priced where the lines are now, for the wrong-side flags and the runner.
  */
-export function LevelFields({ levels, risk = null }: { levels: Levels; risk?: ScalpRisk | null }) {
+export function LevelFields({
+  levels,
+  risk = null,
+  premiumNote = null,
+}: {
+  levels: Levels;
+  risk?: ScalpRisk | null;
+  /** Why premium levels are typed for now (premium-chart spec §7). */
+  premiumNote?: string | null;
+}) {
   const switchTo = (next: LevelBasis) => {
     if (next === levels.basis) return;
     const set = levels.stop.saved != null || levels.targets.saved.length > 0;
@@ -67,10 +76,8 @@ export function LevelFields({ levels, risk = null }: { levels: Levels; risk?: Sc
           {runner.contracts} runner{runner.contracts === 1 ? "" : "s"}, counted at T{runner.atTarget}
         </p>
       )}
-      {levels.basis === "premium" && (
-        <p className="max-w-60 text-[10px] text-muted">
-          Premium levels aren't drawn yet: there's no option chart.
-        </p>
+      {levels.basis === "premium" && premiumNote && (
+        <p className="max-w-60 text-[10px] text-muted">{premiumNote}</p>
       )}
       {overTrimmed && !levels.problem && (
         <p className="max-w-60 text-[11px] text-down">
@@ -96,7 +103,7 @@ function StopRow({ levels }: { levels: Levels }) {
           type="button"
           onClick={() => {
             setOpened(true);
-            if (levels.basis === "stock") levels.setPlacing("stop");
+            if (levels.drawable) levels.setPlacing("stop");
           }}
           className={ADD}
         >

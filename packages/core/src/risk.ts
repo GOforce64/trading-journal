@@ -104,8 +104,14 @@ export interface RiskTrade {
     riskOverride: number | null;
     targets: readonly TargetLevel[];
   } | null;
-  /** The stock prices the filler fetched (spec §5). */
-  scalpPrices: { entryPrice: number | null; holdHigh: number | null; holdLow: number | null } | null;
+  /** The stock prices the filler fetched (spec §5), and the option's range over the hold (premium-chart spec §9). */
+  scalpPrices: {
+    entryPrice: number | null;
+    holdHigh: number | null;
+    holdLow: number | null;
+    optionHigh?: number | null;
+    optionLow?: number | null;
+  } | null;
 }
 
 /** Levels where the page has them while a line is dragged, over what's saved. */
@@ -122,9 +128,12 @@ export interface RiskTarget extends TargetLevel {
   wrongSide: boolean;
 }
 
-/** How far the stock went during the hold, in dollars and, against a stock stop, in R. */
+/**
+ * How far the trade went against or for the entry during the hold: in stock dollars on the stock basis, in the option's
+ * price on premium (premium-chart spec §9.3), and in R against a stop on the losing side.
+ */
 export interface Excursion {
-  stock: number;
+  move: number;
   r: number | null;
 }
 
@@ -277,18 +286,32 @@ export function scalpRisk(trade: RiskTrade, live: LiveLevels = {}): ScalpRisk | 
     runner = { contracts: left, atTarget: (reach.at(-1)?.index ?? 0) + 1 };
   }
 
-  const high = trade.scalpPrices?.holdHigh ?? null;
-  const low = trade.scalpPrices?.holdLow ?? null;
-  // In R, MAE and MFE need a stock stop on the losing side: its distance from the entry is the stock's 1R.
-  const oneR = basis === "stock" && stop != null && S != null && loses(stop) ? Math.abs(S - stop) : null;
-  const excursion = (stock: number): Excursion => ({ stock: round2(stock), r: oneR ? stock / oneR : null });
+  const excursion = (move: number, oneR: number | null): Excursion => ({
+    move: round2(move),
+    r: oneR ? move / oneR : null,
+  });
   let mae: Excursion | null = null;
   let mfe: Excursion | null = null;
-  if (trade.closedAt != null && S != null && high != null && low != null) {
-    const down = Math.max(0, S - low);
-    const up = Math.max(0, high - S);
-    mae = excursion(right === "C" ? down : up);
-    mfe = excursion(right === "C" ? up : down);
+  if (trade.closedAt != null && basis === "premium") {
+    // A long option loses as its own price falls, call or put; a stop under the entry is 1R (premium-chart spec §9.3).
+    const high = trade.scalpPrices?.optionHigh ?? null;
+    const low = trade.scalpPrices?.optionLow ?? null;
+    const oneR = stop != null && loses(stop) ? premium - stop : null;
+    if (high != null && low != null) {
+      mae = excursion(Math.max(0, premium - low), oneR);
+      mfe = excursion(Math.max(0, high - premium), oneR);
+    }
+  } else if (trade.closedAt != null && S != null) {
+    const high = trade.scalpPrices?.holdHigh ?? null;
+    const low = trade.scalpPrices?.holdLow ?? null;
+    // In R, MAE and MFE need a stock stop on the losing side: its distance from the entry is the stock's 1R.
+    const oneR = stop != null && loses(stop) ? Math.abs(S - stop) : null;
+    if (high != null && low != null) {
+      const down = Math.max(0, S - low);
+      const up = Math.max(0, high - S);
+      mae = excursion(right === "C" ? down : up, oneR);
+      mfe = excursion(right === "C" ? up : down, oneR);
+    }
   }
 
   return {

@@ -1,4 +1,11 @@
-import { contractsHeld, type LevelBasis, round2, type TargetLevel, trimProblem } from "@tj/core";
+import {
+  contractsHeld,
+  type LevelBasis,
+  round2,
+  type ScalpRisk,
+  type TargetLevel,
+  trimProblem,
+} from "@tj/core";
 import { useMemo, useState } from "react";
 import type { TradeView } from "../api.js";
 import type { ChartEditing, LineId } from "../chart/drag.js";
@@ -38,6 +45,8 @@ export const targetIndex = (id: LineId): number | null =>
 
 export interface Levels {
   basis: LevelBasis;
+  /** Whether the basis's levels have a chart to be placed on: always on stock, on premium once the option has bars. */
+  drawable: boolean;
   /** The contracts the scalp holds. */
   size: number;
   /** `shown` follows a line the chart is moving or placing, until its save settles. */
@@ -65,7 +74,7 @@ export interface Levels {
   error: string | null;
   /** How often the chart has placed or moved each line. A field drops what was typed in it when this changes. */
   chartEdits: Record<LineId, number>;
-  /** For the intraday chart: the stock-basis lines, and what placing and dragging them does. */
+  /** For the basis's chart: its lines, and what placing and dragging them does. */
   chart: { lines: readonly PriceLine[]; editing: ChartEditing };
 }
 
@@ -78,9 +87,12 @@ interface Moved {
 
 /**
  * A scalp's stop and targets (scalp-review spec §8, scalp-R spec §9.2–9.3), shared by the strip's fields and the
- * intraday chart.
+ * intraday chart. `premiumChart` says the option has bars to place premium levels on (premium-chart spec §7).
  */
-export function useLevels(trade: TradeView): Levels {
+export function useLevels(
+  trade: TradeView,
+  { premiumChart = false }: { premiumChart?: boolean } = {},
+): Levels {
   const [defaultBasis] = useDefaultBasis();
   const mutation = useSaveTrade(trade.id);
   const [placing, setPlacing] = useState<LineId | null>(null);
@@ -92,6 +104,7 @@ export function useLevels(trade: TradeView): Levels {
   const [problem, setProblem] = useState<string | null>(null);
   const edited = (id: LineId) => setChartEdits((counts) => ({ ...counts, [id]: (counts[id] ?? 0) + 1 }));
   const basis = trade.scalp?.levelBasis ?? defaultBasis;
+  const drawable = basis === "stock" || premiumChart;
   const stop = trade.scalp?.stopPrice ?? null;
   const saved = trade.scalp?.targets ?? NO_TARGETS;
   const size = contractsHeld(trade.legs);
@@ -136,7 +149,7 @@ export function useLevels(trade: TradeView): Levels {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: redraw asks for a fresh array after a refused save
   const lines = useMemo<PriceLine[]>(() => {
-    if (basis !== "stock") return [];
+    if (!drawable) return [];
     const stopLine: PriceLine[] =
       stop == null ? [] : [{ id: "stop", price: stop, dashed: true, color: COLORS.down, label: "STOP" }];
     return [
@@ -149,10 +162,11 @@ export function useLevels(trade: TradeView): Levels {
         label: `T${index + 1} ×${target.contracts}`,
       })),
     ];
-  }, [basis, stop, saved, redraw]);
+  }, [drawable, stop, saved, redraw]);
 
   return {
     basis,
+    drawable,
     size,
     stop: { saved: stop, shown: moved?.id === "stop" ? moved.price : stop },
     targets: { saved, shown: shownTargets },
@@ -161,7 +175,7 @@ export function useLevels(trade: TradeView): Levels {
     startTarget: () => {
       setProblem(null);
       setDraft(nextContracts);
-      if (basis === "stock") setPlacing(targetId(saved.length));
+      if (drawable) setPlacing(targetId(saved.length));
     },
     setDraft,
     cancelDraft: () => setDraft(null),
@@ -182,8 +196,8 @@ export function useLevels(trade: TradeView): Levels {
     chart: {
       lines,
       editing: {
-        // Premium levels are typed: there's no option chart to place them on.
-        placing: basis === "stock" ? placing : null,
+        // Premium levels are typed until the option has bars to place them on.
+        placing: drawable ? placing : null,
         onPlace: (id, price) => {
           const contracts = draft ?? nextContracts;
           setPlacing(null);
@@ -207,4 +221,32 @@ export function useLevels(trade: TradeView): Levels {
       },
     },
   };
+}
+
+/**
+ * A stock scalp's levels on the option view (premium-chart spec §7): faint, solid, not draggable, at the option
+ * prices R estimates for them. A level with no option price draws nothing.
+ */
+export function approxLines(risk: ScalpRisk | null): PriceLine[] {
+  if (!risk) return [];
+  const stop: PriceLine[] =
+    risk.optionAtStop == null
+      ? []
+      : [{ price: round2(risk.optionAtStop), dashed: false, color: COLORS.downFaint, label: "≈ STOP" }];
+  return [
+    ...stop,
+    ...risk.targets.flatMap((target, index): PriceLine[] =>
+      // A target on the wrong side earns nothing, so it draws nothing either (premium-chart spec §7).
+      target.optionAt == null || target.wrongSide
+        ? []
+        : [
+            {
+              price: round2(target.optionAt),
+              dashed: false,
+              color: COLORS.upFaint,
+              label: `≈ T${index + 1}`,
+            },
+          ],
+    ),
+  ];
 }

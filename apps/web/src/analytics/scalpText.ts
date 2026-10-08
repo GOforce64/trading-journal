@@ -62,7 +62,7 @@ export interface FillState {
 /** The line under the KPI strip saying which scalps lack R, and why (spec §6.2). Empty without scalps. */
 export function coverageText(coverage: Coverage, fill: FillState = { fetching: 0, problem: null }): string {
   if (coverage.total === 0) return "";
-  if (fill.fetching > 0) return `Fetching stock prices for ${count(fill.fetching, "scalp", "scalps")}…`;
+  if (fill.fetching > 0) return `Fetching prices for ${count(fill.fetching, "scalp", "scalps")}…`;
   const { total, withR } = coverage;
   let text =
     withR === total

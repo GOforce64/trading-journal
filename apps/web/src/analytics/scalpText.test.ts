@@ -101,10 +101,8 @@ describe("coverageText", () => {
   });
 
   it("says what the backfill is doing, or why it couldn't", () => {
-    expect(coverageText(COVERAGE, { fetching: 7, problem: null })).toBe(
-      "Fetching stock prices for 7 scalps…",
-    );
-    expect(coverageText(COVERAGE, { fetching: 1, problem: null })).toBe("Fetching stock prices for 1 scalp…");
+    expect(coverageText(COVERAGE, { fetching: 7, problem: null })).toBe("Fetching prices for 7 scalps…");
+    expect(coverageText(COVERAGE, { fetching: 1, problem: null })).toBe("Fetching prices for 1 scalp…");
     expect(
       coverageText(
         { total: 2, withR: 1, noStop: 0, noStockPrice: 1, cannotPrice: 0 },
