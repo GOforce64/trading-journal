@@ -1,12 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { nyWallClock, type PriceBar } from "@tj/core";
+import { nyWallClock, type PriceBar, snapToBar } from "@tj/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChartToolbar } from "./ChartToolbar.js";
 import { DailyChart } from "./DailyChart.js";
 import { IntradayChart } from "./IntradayChart.js";
 import { type ChartTrade, dailyModel, intradayModel } from "./model.js";
 import { DEFAULT_PREFS } from "./prefs.js";
-import { library, resetLibrary, seriesOf, yOf } from "./testing.js";
+import { BAR_PX, library, resetLibrary, seriesOf, yOf } from "./testing.js";
 
 vi.mock("lightweight-charts", async (importOriginal) => {
   const { fakeLibrary } = await import("./testing.js");
@@ -57,8 +57,11 @@ describe("IntradayChart", () => {
       "PM L",
       "PD H",
       "PD L",
+      null,
     ]);
     expect(lines[5]?.data).toHaveLength(MODEL.levelTimes.length);
+    // The last line is a missed trade's dotted entry-to-exit, empty on any other trade.
+    expect(lines[9]?.data).toEqual([]);
   });
 
   it("hides the VWAP line between sessions, so it never bridges the night", () => {
@@ -408,5 +411,135 @@ describe("ChartToolbar's view switch", () => {
   it("has no switch without a view", () => {
     render(toolbar());
     expect(screen.queryByRole("button", { name: "Option" })).toBeNull();
+  });
+});
+
+describe("IntradayChart and a missed trade's points", () => {
+  const editing = (placing: string | null = null) => ({
+    placing,
+    onPlace: vi.fn(),
+    onDrag: vi.fn(),
+    onDrop: vi.fn(),
+    onCancel: vi.fn(),
+    onPlacePoint: vi.fn(),
+    onDropPoint: vi.fn(),
+  });
+  const chart = () => screen.getByTestId("intraday-chart");
+  const candle = (index: number) => {
+    const found = MODEL.candles[index];
+    if (!found) throw new Error(`no candle ${index}`);
+    return found;
+  };
+  const last = MODEL.candles.length - 1;
+  const ENTRY = 200;
+  const EXIT = 210;
+  const points = [
+    { id: "entry" as const, t: candle(ENTRY).t, price: candle(ENTRY).c, label: "Entry" },
+    { id: "exit" as const, t: candle(EXIT).t, price: candle(EXIT).c, label: "Exit" },
+  ];
+  type Drawn = { time: number; shape: string; position: string; price?: number; text: string; color: string };
+  const drawn = () => (library.markers.at(-1) ?? []) as Drawn[];
+  const renderPoints = (edit: ReturnType<typeof editing> | undefined, extra: Record<string, unknown> = {}) =>
+    render(
+      <IntradayChart
+        model={MODEL}
+        show={DEFAULT_PREFS.show}
+        fitKey={0}
+        points={points}
+        editing={edit}
+        {...extra}
+      />,
+    );
+
+  it("draws the entry and exit as circles at their prices, joined by a dotted line", () => {
+    renderPoints(undefined);
+    expect(drawn()).toContainEqual(
+      expect.objectContaining({
+        time: candle(ENTRY).t / 1000,
+        shape: "circle",
+        position: "atPriceMiddle",
+        price: candle(ENTRY).c,
+        text: "Entry",
+      }),
+    );
+    expect(seriesOf("Line").at(-1)?.data).toEqual([
+      { time: candle(ENTRY).t / 1000, value: candle(ENTRY).c },
+      { time: candle(EXIT).t / 1000, value: candle(EXIT).c },
+    ]);
+  });
+
+  it("places the entry at the bar under the pointer, on the minute inside it that traded the price", () => {
+    const edit = editing("entry");
+    renderPoints(edit, { points: [] });
+    expect(screen.getByTestId("placing-hint").textContent).toBe(
+      "Click the chart to place the entry · Esc to cancel",
+    );
+    // A 3-minute candle whose high is its last minute's: the point goes on that minute, kept inside its range.
+    fireEvent.mouseDown(chart(), { clientX: ENTRY * BAR_PX + 0.6, clientY: yOf(239.5), button: 0 });
+    expect(edit.onPlacePoint).toHaveBeenCalledWith(
+      "entry",
+      candle(ENTRY).t + 120_000,
+      expect.closeTo(candle(ENTRY).h, 2),
+    );
+    expect(edit.onPlace).not.toHaveBeenCalled();
+  });
+
+  it("drags a point in time and price, onto the last candle when pulled past the end", () => {
+    const edit = editing();
+    renderPoints(edit);
+    fireEvent.mouseDown(chart(), { clientX: EXIT * BAR_PX, clientY: yOf(candle(EXIT).c), button: 0 });
+    fireEvent.mouseMove(window, {
+      clientX: (MODEL.candles.length + 20) * BAR_PX,
+      clientY: yOf(candle(last).c),
+      buttons: 1,
+    });
+    expect(drawn()).toContainEqual(expect.objectContaining({ time: candle(last).t / 1000, text: "Exit" }));
+    fireEvent.mouseUp(window);
+    expect(edit.onDropPoint).toHaveBeenCalledTimes(1);
+    const [id, t, price] = edit.onDropPoint.mock.calls[0] as [string, number, number];
+    expect([id, t]).toEqual(["exit", candle(last).t]);
+    expect(price).toBeCloseTo(snapToBar(candle(last).c, { high: candle(last).h, low: candle(last).l }), 2);
+    expect(edit.onDrop).not.toHaveBeenCalled();
+  });
+
+  it("puts a dragged point back on Esc, saving nothing", () => {
+    const edit = editing();
+    renderPoints(edit);
+    fireEvent.mouseDown(chart(), { clientX: ENTRY * BAR_PX, clientY: yOf(candle(ENTRY).c), button: 0 });
+    fireEvent.mouseMove(window, { clientX: (ENTRY + 5) * BAR_PX, clientY: yOf(candle(ENTRY).c), buttons: 1 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(edit.onDropPoint).not.toHaveBeenCalled();
+    expect(edit.onCancel).toHaveBeenCalled();
+    expect(drawn()).toContainEqual(expect.objectContaining({ time: candle(ENTRY).t / 1000, text: "Entry" }));
+  });
+
+  it("shows another trade faintly, says what it was on hover, and opens it on a click", () => {
+    const onOpenTrade = vi.fn();
+    const mark = {
+      tradeId: "m9",
+      t: candle(220).t,
+      price: candle(220).c,
+      kind: "missed" as const,
+      label: "Missed short −0.62R",
+      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R", "Click to open"],
+    };
+    render(
+      <IntradayChart
+        model={MODEL}
+        show={DEFAULT_PREFS.show}
+        fitKey={0}
+        context={[mark]}
+        onOpenTrade={onOpenTrade}
+      />,
+    );
+    const faint = drawn().find((each) => each.text === "Missed short −0.62R");
+    expect(faint).toMatchObject({ shape: "circle", position: "atPriceMiddle", price: candle(220).c });
+    expect(faint?.color).toMatch(/^#[0-9a-f]{8}$/);
+    fireEvent.mouseMove(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c) });
+    expect(screen.getByTestId("context-tip").textContent).toBe(
+      "Missed · Short10:52 → 11:06−0.62RClick to open",
+    );
+    fireEvent.mouseDown(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c), button: 0 });
+    expect(onOpenTrade).toHaveBeenCalledWith("m9");
   });
 });

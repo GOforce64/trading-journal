@@ -31,7 +31,7 @@ interface Draft {
 
 export interface PlaybookProps {
   /** Opens Analytics filtered to a setup, on its tab. */
-  onOpenSetup?: (setupId: string, tab: "scalps" | "flies") => void;
+  onOpenSetup?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
 }
 
 /** Each setup's stats (scalp-analytics spec §7), then setups and tags to manage (scalp-review spec §10). */
@@ -241,9 +241,10 @@ function TagsPanel() {
   const [showArchived, setShowArchived] = useState(false);
   return (
     <Section title="Tags" right={<ShowArchived checked={showArchived} onChange={setShowArchived} />}>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <TagList kind="mistake" title="Mistakes" showArchived={showArchived} />
         <TagList kind="emotion" title="Emotions" showArchived={showArchived} />
+        <TagList kind="skip" title="Skip reasons" showArchived={showArchived} />
       </div>
     </Section>
   );
@@ -254,7 +255,7 @@ function TagList({
   title,
   showArchived,
 }: {
-  kind: "mistake" | "emotion";
+  kind: "mistake" | "emotion" | "skip";
   title: string;
   showArchived: boolean;
 }) {
@@ -310,7 +311,7 @@ function TagList({
       <div className="mt-1">
         {adding ? (
           <NameField
-            label={`New ${kind} tag`}
+            label={kind === "skip" ? "New skip reason" : `New ${kind} tag`}
             onClose={() => setAdding(false)}
             onSubmit={(name) => create.mutateAsync({ name, kind })}
           />

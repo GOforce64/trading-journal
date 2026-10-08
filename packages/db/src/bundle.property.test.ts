@@ -10,6 +10,7 @@ type Journal = ReturnType<typeof journal>;
 /** One thing a person or a sync does on one machine. */
 type Op =
   | { kind: "create"; underlying: string }
+  | { kind: "miss"; underlying: string }
   | { kind: "edit"; pick: number; field: "grade" | "notes" | "stop"; value: number }
   | { kind: "delete"; pick: number }
   | { kind: "tag"; pick: number; tag: number }
@@ -26,6 +27,7 @@ const op: fc.Arbitrary<Op> = fc.oneof(
     name: fc.constantFrom("Calm", "Rushed", "Zen", "Bored"),
   }),
   fc.record({ kind: fc.constant("create" as const), underlying: fc.constantFrom("NVDA", "AMD", "TSLA") }),
+  fc.record({ kind: fc.constant("miss" as const), underlying: fc.constantFrom("NVDA", "SPY") }),
   fc.record({
     kind: fc.constant("edit" as const),
     pick: fc.nat(9),
@@ -64,11 +66,24 @@ function apply(j: Journal, ops: readonly Op[], step: number): void {
       case "create":
         j.trades.create({ ...scalp, underlying: each.underlying });
         break;
+      case "miss":
+        j.trades.create({
+          ...scalp,
+          underlying: each.underlying,
+          book: "missed",
+          legs: [],
+          netPnl: null,
+          closedAt: null,
+          missed: { direction: "long", entryPrice: 230, stopPrice: null, targetPrice: null, exitPrice: null },
+        });
+        break;
       case "edit":
         if (!trade) break;
         if (each.field === "grade")
           j.trades.update(trade, { grade: (["A", "B", "C", "D", "F"] as const)[each.value] });
         else if (each.field === "notes") j.trades.update(trade, { notes: `note ${each.value}` });
+        else if (j.trades.get(trade)?.book === "missed")
+          j.trades.update(trade, { missed: { stopPrice: 225 + each.value } });
         else j.trades.update(trade, { scalp: { levelBasis: "stock", stopPrice: 225 + each.value } });
         break;
       case "delete":

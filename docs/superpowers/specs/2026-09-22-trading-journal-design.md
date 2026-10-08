@@ -160,7 +160,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
   - context: the stock at entry and its range over the hold are in `scalp_prices` (`entry_price`, `hold_high`, `hold_low`), fetched from minute bars ([2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md)). Calls count as long the stock, puts as short.
   - plan: `level_basis` (`stock` | `premium`), `stop_price`, `stock_entry_override` and `risk_override`, with the targets as rows of `scalp_targets` (`position`, `price`, `contracts`).
   - risk model and outcome: worked out on read by `scalpRisk` in `core`, never stored. That's IV at entry, the option at the stop and at each target, planned risk and reward, R, R:R, and MAE/MFE in stock dollars and in R. Minutes after open, hold time and option cost are worked out on read too, by the scalp analytics ([2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-analytics-design.md)).
-  - missed trades only: `planned_entry_at`, `planned_entry_price`, `planned_exit_at`, `planned_exit_price`, `skip_reason`
+  - missed trades: built in [the missed-trades spec](2026-10-08-missed-trades-design.md) as their own 1:1 table, **missed_details** (`direction`, `entry_price`, `stop_price`, `target_price`, `exit_price`), with the entry and exit times on the trade's `opened_at` and `closed_at`, and the skip reason a tag of kind `skip`.
 - **iron_fly_details** (1:1 with trade). All fields are nullable, because historical imports will be incomplete:
   - structure: `body_put_strike`, `body_call_strike` (equal for a standard fly, different for a broken one), `put_wing_strike`, `call_wing_strike`, `contracts`, `credit` (per share). **Wings do not have to be the same width**, so put-side and call-side risk are tracked separately.
   - cash: `net_cost` (negative = credit received, matching oQuants' Cost column), `pnl_pct_of_cost`
@@ -304,6 +304,8 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 
 ### 8.4 Missed trades
 
+Built: see [the missed-trades spec](2026-10-08-missed-trades-design.md). The user marks the exit (no rule-based exit); the direction follows the side the first stop is placed on, and a toggle flips it; R is on the stock and sits apart from taken trades' option R, except under the Analytics Book filter's Missed opt-in.
+
 - Created from **New → Missed trade**: pick the underlying, session date and direction; the chart loads.
 - **Chart-marking mode:** click to place **Entry** (time + price), drag a horizontal line for **Stop**, click to place **Exit**. An optional **Target** can be added too. Every value stays editable in the side form.
 - **R** = (exit − entry) ÷ |entry − stop|, sign-adjusted for direction.
@@ -335,7 +337,7 @@ Scalps are detailed in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-a
 - **Global filter bar** (persisted in the URL): book (Live / Paper / Missed, multi-select), strategy, account, date range, ticker, setup, tag, and **include excluded**.
 - **Two separate surfaces:**
   - the **Dashboard** is the landing page: how the current period is going, recent trades, and anything sitting in the review queue;
-  - **Analytics** is its own page for aggregated stats, with tabs for **Overview, Scalps and Iron flies** (Missed to come), the global filter bar applied across all of them, and CSV export of any table it shows.
+  - **Analytics** is its own page for aggregated stats, with tabs for **Overview, Scalps, Iron flies and Missed**, the global filter bar applied across all of them, and CSV export of any table it shows.
 - **Dashboard and Analytics Overview share these:**
   - KPIs: net P&L, win rate, profit factor, expectancy ($/trade), avg R, trade count, max drawdown;
   - equity curve with drawdown shading;

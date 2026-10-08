@@ -1,4 +1,4 @@
-import { scalpRisk } from "@tj/core";
+import { nyDate, scalpRisk } from "@tj/core";
 import { useEffect, useMemo, useState } from "react";
 import type { TradeDetailView } from "../api.js";
 import { barRange, useOptionBars } from "../chart/bars.js";
@@ -25,9 +25,12 @@ import { RiskLine } from "./RiskLine.js";
 export function ScalpWorkspace({
   trade,
   onOpenTrade,
+  onNewMissed,
 }: {
   trade: TradeDetailView;
   onOpenTrade?: (id: string) => void;
+  /** + Missed on the chart's toolbar: a missed trade on this ticker and day (missed-trades spec §6.4). */
+  onNewMissed?: (symbol: string, date: string) => void;
 }) {
   const contract = contractOf(trade);
   const { from, lastDay } = barRange(trade);
@@ -74,6 +77,18 @@ export function ScalpWorkspace({
         trade={trade}
         levels={chart}
         option={contract ? { contract, name: contractName(trade), view, onView: setView } : undefined}
+        toolbarExtra={
+          onNewMissed && (
+            <button
+              type="button"
+              title="Mark a setup you passed on this day"
+              onClick={() => onNewMissed(trade.underlying, nyDate(trade.openedAt))}
+              className="rounded-[2px] border border-line px-1.5 py-0.5 text-[10px] text-muted hover:border-accent hover:text-fg"
+            >
+              + Missed
+            </button>
+          )
+        }
       />
       <ReviewPanel
         trade={trade}

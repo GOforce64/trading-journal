@@ -14,6 +14,7 @@ export const BUNDLE_TABLES = [
   "iron_fly_details",
   "scalp_details",
   "scalp_targets",
+  "missed_details",
   "trade_tags",
   "attachments",
   "fills",
@@ -56,6 +57,7 @@ export const BUNDLE_KEYS: Record<BundleTable, readonly string[]> = {
   iron_fly_details: ["trade_id"],
   scalp_details: ["trade_id"],
   scalp_targets: ["trade_id", "position"],
+  missed_details: ["trade_id"],
   trade_tags: ["trade_id", "tag_id"],
   attachments: ["id"],
   fills: ["id"],
@@ -242,7 +244,14 @@ function collapse(rows: Map<string, Row>, nameOf: (row: Row) => string) {
  * screenshots aren't among them: each is resolved by its own id, so one added on either machine is never lost to the
  * other's later edit of the trade (screenshots spec §4).
  */
-const CHILDREN = ["legs", "iron_fly_details", "scalp_details", "scalp_targets", "trade_tags"] as const;
+const CHILDREN = [
+  "legs",
+  "iron_fly_details",
+  "scalp_details",
+  "scalp_targets",
+  "missed_details",
+  "trade_tags",
+] as const;
 type Child = (typeof CHILDREN)[number];
 
 interface Aggregate {
@@ -260,6 +269,7 @@ function aggregates(tables: Record<BundleTable, Row[]>): Map<string, Aggregate> 
         iron_fly_details: [],
         scalp_details: [],
         scalp_targets: [],
+        missed_details: [],
         trade_tags: [],
       },
     });
@@ -438,6 +448,7 @@ export function mergeBundle(db: Db, bundle: IncomingBundle): MergeSummary {
       iron_fly_details: new Map(),
       scalp_details: new Map(),
       scalp_targets: new Map(),
+      missed_details: new Map(),
       trade_tags: new Map(),
       attachments,
       fills,

@@ -2,9 +2,13 @@ import {
   type BreakdownContext,
   bucketStats,
   closedTrades,
+  type MissedRow,
+  missedRows,
   mistakeCost,
   scalpBreakdown,
   scalpSummary,
+  withMissed,
+  withMissedGroups,
 } from "@tj/core";
 import { useMemo } from "react";
 import { BreakdownPanel } from "../analytics/Breakdown.js";
@@ -58,14 +62,41 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
     [setups, tags, costKey, contractKey],
   );
   const summary = useMemo(() => scalpSummary(scalps), [scalps]);
-  const openRows = useMemo(() => bucketStats(scalps, "open"), [scalps]);
-  const holdRows = useMemo(() => bucketStats(scalps, "hold"), [scalps]);
-  const breakdown = useMemo(() => scalpBreakdown(scalps, by, context), [scalps, by, context]);
+  // With Missed in the books, missed trades join N, win % and Avg R, never the dollars (missed-trades spec §6.8).
+  const missed = useMemo(() => trades.filter((trade) => trade.book === "missed"), [trades]);
+  const mixed = useMemo(() => (missed.length > 0 ? withMissed(scalps, missed) : null), [scalps, missed]);
+  const join = <R extends Parameters<typeof withMissedGroups>[0][number]>(
+    rows: readonly R[],
+    extra: MissedRow[] | null,
+  ) => (missed.length > 0 && extra ? withMissedGroups(rows, extra) : rows);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
+  const openRows = useMemo(
+    () => join(bucketStats(scalps, "open"), missedRows(missed, "open", context)),
+    [scalps, missed, context],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
+  const holdRows = useMemo(
+    () => join(bucketStats(scalps, "hold"), missedRows(missed, "hold", context)),
+    [scalps, missed, context],
+  );
+  const missedByDimension = useMemo(() => missedRows(missed, by, context), [missed, by, context]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
+  const breakdown = useMemo(
+    () => join(scalpBreakdown(scalps, by, context), missedByDimension),
+    [scalps, by, context, missedByDimension, missed],
+  );
+  const contractNote =
+    missed.length > 0 && missedByDimension === null
+      ? "Missed trades have no contract, so they aren't in this breakdown."
+      : undefined;
+  const counted = mixed ?? summary;
+  const missedWithR = mixed ? mixed.rCount - summary.rCount : 0;
   const mistakes = useMemo(
     () => (tags ? mistakeCost(scalps, tagNames(tags, "mistake")) : null),
     [scalps, tags],
   );
   const none = summary.trades === 0;
+  const empty = none && missed.length === 0;
 
   let edges: EdgeControl | undefined;
   if (by === "cost") {
@@ -93,12 +124,17 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
       <KpiStrip
         kpis={[
           { id: "net", label: "Net P&L", value: none ? "—" : <Money value={summary.net} /> },
-          { id: "win-rate", label: "Win rate", value: winRateText(summary.winRate) },
+          { id: "win-rate", label: "Win rate", value: winRateText(counted.winRate) },
           {
             id: "avg-r",
             label: "Avg R",
-            value: summary.avgR == null ? "—" : rText(summary.avgR),
-            sub: none ? undefined : `over ${summary.rCount} of ${summary.trades}`,
+            value: counted.avgR == null ? "—" : rText(counted.avgR),
+            sub:
+              missedWithR > 0
+                ? `includes ${missedWithR} missed (stock R)`
+                : none
+                  ? undefined
+                  : `over ${summary.rCount} of ${summary.trades}`,
           },
           {
             id: "avg-return",
@@ -119,10 +155,10 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
             sub:
               summary.medianHoldMinutes == null ? undefined : `median ${holdText(summary.medianHoldMinutes)}`,
           },
-          { id: "scalps", label: "Scalps", value: summary.trades },
+          { id: "scalps", label: "Scalps", value: counted.trades },
         ]}
       />
-      {none ? (
+      {empty ? (
         <p className="text-muted">No closed scalps in this range.</p>
       ) : (
         <>
@@ -159,6 +195,7 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
             rows={breakdown}
             metric={metric}
             edges={edges}
+            note={contractNote}
           />
           {mistakes ? (
             <MistakeCost rows={mistakes} />

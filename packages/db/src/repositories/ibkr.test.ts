@@ -87,6 +87,7 @@ function scalp(overrides: Partial<NewTrade> = {}, id = "trade-nvda"): SyncedTrad
       },
     ],
     ironFly: null,
+    missed: null,
     ...overrides,
   };
   return { id, trade, legIds: [`${id}-leg`] };

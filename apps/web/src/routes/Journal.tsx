@@ -12,6 +12,8 @@ export interface JournalFilter {
   strategy?: "scalp" | "iron_fly";
   book?: "live" | "paper" | "missed";
   includeExcluded?: boolean;
+  /** Taken trades only, the missed ones left out (missed-trades spec §6.5). */
+  taken?: boolean;
   /** Only the scalps waiting for review, oldest first (scalp-review spec §9.3). */
   review?: "pending";
 }
@@ -27,6 +29,7 @@ export function useTrades(filter: JournalFilter) {
           strategy: filter.strategy,
           book: filter.book,
           includeExcluded: filter.includeExcluded ? "true" : undefined,
+          taken: filter.taken ? "true" : undefined,
           review: filter.review,
         },
       });
@@ -205,10 +208,18 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
                   )}
                 </td>
                 <td className="num text-right" data-testid={`r-${trade.id}`}>
-                  <RMultiple r={trade.risk?.r ?? null} />
+                  <RMultiple r={trade.risk?.r ?? trade.missedRisk?.r ?? null} />
                 </td>
                 <td className="text-right" data-testid={`pct-${trade.id}`}>
-                  <Pct value={trade.strategy === "scalp" ? returnOnCost(trade) : pctKept(trade)} />
+                  <Pct
+                    value={
+                      trade.book === "missed"
+                        ? null
+                        : trade.strategy === "scalp"
+                          ? returnOnCost(trade)
+                          : pctKept(trade)
+                    }
+                  />
                 </td>
                 <td className="num text-right text-muted">{trade.grade ?? "—"}</td>
               </tr>

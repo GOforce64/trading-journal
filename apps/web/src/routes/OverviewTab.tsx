@@ -15,6 +15,7 @@ import {
   summarize,
   tickerSplit,
   weekdaySplit,
+  withMissed,
 } from "@tj/core";
 import { MonthBars, RollingLine } from "../analytics/Charts.js";
 import { EquityCurve } from "../analytics/EquityCurve.js";
@@ -44,6 +45,10 @@ export interface TabProps {
 export function OverviewTab({ trades, search, onSearch, onOpenTrade }: TabProps) {
   const closed = closedTrades(trades);
   const summary = summarize(closed);
+  // With Missed in the books, missed trades join the counts, win rate and Avg R, never the dollars (spec §6.8).
+  const missed = trades.filter((trade) => trade.book === "missed");
+  const mixed = missed.length > 0 ? withMissed(closed, missed) : summary;
+  const missedWithR = mixed.rCount - summary.rCount;
   const none = summary.trades === 0;
   const rolling = rollingExpectancy(closed);
   const contractEdges = resolveEdges("contracts", search.contractEdges);
@@ -53,7 +58,7 @@ export function OverviewTab({ trades, search, onSearch, onOpenTrade }: TabProps)
       <KpiStrip
         kpis={[
           { id: "net", label: "Net P&L", value: none ? "—" : <Money value={summary.net} /> },
-          { id: "win-rate", label: "Win rate", value: winRateText(summary.winRate) },
+          { id: "win-rate", label: "Win rate", value: winRateText(mixed.winRate) },
           { id: "profit-factor", label: "Profit factor", value: profitFactorText(summary.profitFactor) },
           {
             id: "expectancy",
@@ -63,11 +68,13 @@ export function OverviewTab({ trades, search, onSearch, onOpenTrade }: TabProps)
           {
             id: "avg-r",
             label: "Avg R",
-            value: summary.avgR == null ? "—" : rText(summary.avgR),
+            value: mixed.avgR == null ? "—" : rText(mixed.avgR),
             sub:
-              summary.rCount > 0
-                ? `over ${summary.rCount} scalp${summary.rCount === 1 ? "" : "s"}`
-                : undefined,
+              missedWithR > 0
+                ? `includes ${missedWithR} missed (stock R)`
+                : summary.rCount > 0
+                  ? `over ${summary.rCount} scalp${summary.rCount === 1 ? "" : "s"}`
+                  : undefined,
           },
           {
             id: "avg-win-loss",
@@ -85,7 +92,7 @@ export function OverviewTab({ trades, search, onSearch, onOpenTrade }: TabProps)
               </>
             ),
           },
-          { id: "trades", label: "Trades", value: summary.trades },
+          { id: "trades", label: "Trades", value: mixed.trades },
           {
             id: "max-drawdown",
             label: "Max drawdown",

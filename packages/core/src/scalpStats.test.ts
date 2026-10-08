@@ -335,3 +335,48 @@ describe("setupCards", () => {
     ]);
   });
 });
+
+describe("setupCards with missed trades", () => {
+  const names = new Map([
+    ["orb", "ORB"],
+    ["vwap", "VWAP"],
+    ["pull", "Pullback"],
+  ]);
+  const missed = (id: string, setupId: string, r: number | null, openedAt = ny("2026-09-30 09:41")) => ({
+    id,
+    underlying: "NVDA",
+    openedAt,
+    closedAt: r == null ? null : openedAt + 600_000,
+    setupId,
+    grade: null,
+    tagIds: [],
+    missedRisk: { r, mfe: null },
+  });
+
+  it("adds each setup's missed trades beside its taken ones, leaving the taken stats alone", () => {
+    const plain = setupCards(SCALPS, names);
+    const cards = setupCards(SCALPS, names, [
+      missed("m1", "orb", 2.39),
+      missed("m2", "orb", -1),
+      missed("m3", "orb", null),
+    ]);
+    const orb = cards.find((card) => card.setupId === "orb");
+    const before = plain.find((card) => card.setupId === "orb");
+    expect(orb?.missed).toEqual({ trades: 3, winRate: 0.5, avgR: expect.closeTo(0.695, 9) });
+    expect({ ...orb, missed: undefined, lastClosedAt: undefined }).toEqual({
+      ...before,
+      missed: undefined,
+      lastClosedAt: undefined,
+    });
+    expect(cards.find((card) => card.setupId === "vwap")?.missed).toBeNull();
+  });
+
+  it("gives a setup with only missed trades its own card, dated by its last entry", () => {
+    const late = ny("2026-10-02 10:05");
+    const cards = setupCards(SCALPS, names, [missed("m1", "pull", 1), missed("m2", "pull", 0.5, late)]);
+    const pull = cards.find((card) => card.setupId === "pull");
+    expect(pull).toMatchObject({ trades: 0, kind: "scalp", points: [], lastClosedAt: late });
+    expect(pull?.missed).toEqual({ trades: 2, winRate: 1, avgR: 0.75 });
+    expect(cards.at(-1)?.setupId).toBe("pull");
+  });
+});

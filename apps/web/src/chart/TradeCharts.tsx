@@ -4,8 +4,9 @@ import { Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
 import { barRange, useDailyBars, useMinuteBars, useOptionBars } from "./bars.js";
 import { ChartToolbar } from "./ChartToolbar.js";
+import type { ContextMark } from "./context.js";
 import { DailyChart } from "./DailyChart.js";
-import type { ChartEditing } from "./drag.js";
+import type { ChartEditing, PointMark } from "./drag.js";
 import { IntradayChart, type PriceLine } from "./IntradayChart.js";
 import { type ChartFill, type ChartTrade, dailyModel, intradayModel } from "./model.js";
 import { arriveBy, type ChartView, clockText, optionBarsState } from "./option.js";
@@ -39,6 +40,13 @@ export function TradeCharts({
   trade,
   levels,
   option,
+  daily: withDaily = true,
+  points,
+  context,
+  onOpenTrade,
+  showDay = false,
+  toolbarExtra,
+  emptyText,
 }: {
   trade: {
     underlying: string;
@@ -51,6 +59,19 @@ export function TradeCharts({
   levels?: { lines: readonly PriceLine[]; editing: ChartEditing };
   /** A scalp's contract and the Stock | Option switch (premium-chart spec §6). */
   option?: { contract: string; name: string; view: ChartView; onView: (view: ChartView) => void };
+  /** False draws the intraday chart alone, full width, as a missed trade's page does (missed-trades spec §6.3). */
+  daily?: boolean;
+  /** A missed trade's entry and exit, placed and dragged through `levels.editing` (spec §6.4). */
+  points?: readonly PointMark[];
+  /** The day's other trades, faint; a click opens one. */
+  context?: readonly ContextMark[];
+  onOpenTrade?: (id: string) => void;
+  /** The Day's trades toggle in the toolbar. */
+  showDay?: boolean;
+  /** The page's own toolbar buttons, such as a scalp's + Missed. */
+  toolbarExtra?: ReactNode;
+  /** What an empty chart says, in place of "No stock bars for X." */
+  emptyText?: string;
 }) {
   const [prefs, setPrefs] = useChartPrefs();
   const [fitKey, setFitKey] = useState(0);
@@ -61,7 +82,7 @@ export function TradeCharts({
   const clock = nyMinuteOfDay(Date.now());
   const live = lastDay === today && isTradingDay(today) && clock >= PREMARKET_OPEN && clock < LIVE_UNTIL;
   const minute = useMinuteBars(symbol, from, lastDay, live);
-  const daily = useDailyBars(symbol, lastDay);
+  const daily = useDailyBars(symbol, lastDay, withDaily);
   const optionBars = useOptionBars(option?.contract ?? null, from, lastDay);
 
   const fills = trade.fills ?? NO_FILLS;
@@ -76,6 +97,8 @@ export function TradeCharts({
     () => intradayModel(bars, chartTrade, prefs.minutes, prefs.emaLengths),
     [bars, chartTrade, prefs.minutes, prefs.emaLengths],
   );
+  // A missed trade's chart draws its own points; the open and close marks are a taken trade's (missed-trades spec §6.4).
+  const stockModel = useMemo(() => (points ? { ...intraday, markers: [] } : intraday), [intraday, points]);
   const optionModel = useMemo(
     () => intradayModel(contractBars, chartTrade, prefs.minutes, prefs.emaLengths, { slots: true }),
     [contractBars, chartTrade, prefs.minutes, prefs.emaLengths],
@@ -112,11 +135,13 @@ export function TradeCharts({
     );
   }
   if (minute.isPending) return message("Loading the chart…");
-  if (bars.length === 0) return message(minute.data?.unavailable?.message ?? `No stock bars for ${symbol}.`);
+  if (bars.length === 0) {
+    return message(minute.data?.unavailable?.message ?? emptyText ?? `No stock bars for ${symbol}.`);
+  }
 
   const onOption = option?.view === "option";
   const optionState = optionBarsState(optionBars.data, trade.openedAt);
-  const shown = onOption ? optionModel : intraday;
+  const shown = onOption ? optionModel : stockModel;
   // An EMA needs more history when its chart has nothing of it to draw; the stock view looks at the daily chart too.
   const hiddenEmas = shown.emas.flatMap((line, index) =>
     line.points.length === 0 ||
@@ -194,9 +219,11 @@ export function TradeCharts({
         hiddenEmas={hiddenEmas}
         onFit={() => setFitKey((key) => key + 1)}
         view={option ? { current: option.view, onChange: option.onView } : undefined}
+        showDay={showDay}
+        extra={toolbarExtra}
       />
       {banner}
-      <div className="grid gap-2 min-[1100px]:grid-cols-[2fr_1fr]">
+      <div className={withDaily ? "grid gap-2 min-[1100px]:grid-cols-[2fr_1fr]" : "grid gap-2"}>
         {optionCell ?? (
           <IntradayChart
             model={shown}
@@ -207,10 +234,13 @@ export function TradeCharts({
             editing={levels?.editing}
             markersAtPrice={onOption}
             viewKey={onOption ? "option" : "stock"}
+            points={points}
+            context={showDay && !prefs.show.day ? undefined : context}
+            onOpenTrade={onOpenTrade}
           />
         )}
         {/* Only once the daily bars are in: before, today's candle alone would stand for the whole chart. */}
-        {daily.isSuccess && !daily.data.unavailable && dayChart.candles.length > 0 ? (
+        {!withDaily ? null : daily.isSuccess && !daily.data.unavailable && dayChart.candles.length > 0 ? (
           <DailyChart model={dayChart} show={prefs.show} fitKey={fitKey} />
         ) : daily.isError ? (
           <div className="flex items-center justify-center gap-2 self-center">

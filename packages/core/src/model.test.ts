@@ -134,3 +134,85 @@ describe("tradePatchSchema for the scalp review", () => {
     expect(tradePatchSchema.parse({ scalp: { targetPrice: 234.5 } }).scalp).toEqual({});
   });
 });
+
+describe("missed trades in the trade schemas", () => {
+  /** A missed long marked at 09:41 on Sep 30, with only its entry so far. */
+  const missedTrade = {
+    strategy: "scalp" as const,
+    book: "missed" as const,
+    underlying: "nvda",
+    openedAt: 1_790_775_660_000,
+    missed: {
+      direction: "long" as const,
+      entryPrice: 178.42,
+      stopPrice: null,
+      targetPrice: null,
+      exitPrice: null,
+    },
+  };
+  const issues = (input: unknown) =>
+    newTradeSchema.safeParse(input).error?.issues.map((issue) => issue.message) ?? [];
+
+  it("takes a missed trade with only its entry", () => {
+    const parsed = newTradeSchema.parse(missedTrade);
+    expect(parsed.missed).toEqual(missedTrade.missed);
+    expect(parsed.closedAt).toBeNull();
+    expect(parsed.underlying).toBe("NVDA");
+  });
+
+  it("defaults a taken trade's missed details to null", () => {
+    const { ironFly, ...rest } = sampleFly;
+    expect(newTradeSchema.parse({ ...rest, strategy: "scalp" }).missed).toBeNull();
+  });
+
+  it("needs the details on a missed trade, and refuses them on any other", () => {
+    expect(issues({ ...missedTrade, missed: undefined })).toContain("missed trades need missed details");
+    expect(issues({ ...missedTrade, book: "live" })).toContain("only a missed trade has missed details");
+  });
+
+  it("keeps a missed trade a scalp with no legs, P&L or fly details", () => {
+    expect(issues({ ...missedTrade, strategy: "iron_fly", ironFly: sampleFly.ironFly })).toContain(
+      "a missed trade is a scalp with no legs or P&L",
+    );
+    expect(issues({ ...missedTrade, legs: sampleFly.legs.slice(0, 1) })).toContain(
+      "a missed trade is a scalp with no legs or P&L",
+    );
+    expect(issues({ ...missedTrade, netPnl: 12 })).toContain("a missed trade is a scalp with no legs or P&L");
+  });
+
+  it("sets the exit's time and price together", () => {
+    const exit = { ...missedTrade.missed, stopPrice: 177.8, exitPrice: 179.9 };
+    expect(issues({ ...missedTrade, missed: exit })).toContain("an exit needs both a time and a price");
+    expect(issues({ ...missedTrade, closedAt: missedTrade.openedAt + 60_000 })).toContain(
+      "an exit needs both a time and a price",
+    );
+    expect(
+      newTradeSchema.safeParse({ ...missedTrade, missed: exit, closedAt: missedTrade.openedAt + 60_000 })
+        .success,
+    ).toBe(true);
+  });
+
+  it("refuses prices at or below zero, and an unknown direction", () => {
+    expect(
+      newTradeSchema.safeParse({ ...missedTrade, missed: { ...missedTrade.missed, entryPrice: 0 } }).success,
+    ).toBe(false);
+    expect(
+      newTradeSchema.safeParse({ ...missedTrade, missed: { ...missedTrade.missed, stopPrice: -1 } }).success,
+    ).toBe(false);
+    expect(
+      newTradeSchema.safeParse({ ...missedTrade, missed: { ...missedTrade.missed, direction: "up" } })
+        .success,
+    ).toBe(false);
+  });
+
+  it("patches part of a missed trade's levels, and clears one with null", () => {
+    expect(tradePatchSchema.parse({ missed: { stopPrice: 177.8 } })).toEqual({
+      missed: { stopPrice: 177.8 },
+    });
+    expect(tradePatchSchema.parse({ missed: { exitPrice: null }, closedAt: null })).toEqual({
+      missed: { exitPrice: null },
+      closedAt: null,
+    });
+    expect(tradePatchSchema.safeParse({ missed: { direction: "sideways" } }).success).toBe(false);
+  });
+});

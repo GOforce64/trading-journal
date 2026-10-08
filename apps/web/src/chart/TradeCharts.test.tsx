@@ -4,7 +4,7 @@ import { addDays, nyWallClock, type PriceBar } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { todayNy } from "../market.js";
 import { TradeCharts } from "./TradeCharts.js";
-import { resetLibrary, seriesOf } from "./testing.js";
+import { library, resetLibrary, seriesOf } from "./testing.js";
 
 vi.mock("lightweight-charts", async (importOriginal) => {
   const { fakeLibrary } = await import("./testing.js");
@@ -351,5 +351,53 @@ describe("TradeCharts' option view", () => {
       false,
     );
     expect(screen.queryByRole("button", { name: "Option" })).toBeNull();
+  });
+});
+
+describe("TradeCharts for a missed trade", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function renderMissed(props: Partial<Parameters<typeof TradeCharts>[0]> = {}) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TradeCharts trade={{ ...TRADE, legs: [] }} daily={false} showDay {...props} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("draws the intraday chart alone, with the Day's trades toggle and whatever the page adds", async () => {
+    const fetchMock = stub([answer(OK)]);
+    renderMissed({ toolbarExtra: <button type="button">+ Missed</button> });
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/daily"))).toBe(false);
+    expect(screen.queryByText("Loading the daily chart…")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Day's trades" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "Day's trades" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "+ Missed" })).toBeTruthy();
+  });
+
+  it("draws only a missed trade's own points, none of a taken trade's open and close marks", async () => {
+    stub([answer(OK)]);
+    const point = { id: "entry" as const, t: nyWallClock(DAY, 575), price: 229.1, label: "Entry 229.10" };
+    renderMissed({ points: [point] });
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    const drawn = (library.markers.at(-1) ?? []) as { text: string }[];
+    expect(drawn.map((marker) => marker.text)).toEqual(["Entry 229.10"]);
+  });
+
+  it("says what the page asks when there are no bars", async () => {
+    stub([answer({ ...OK, bars: [] })]);
+    renderMissed({ emptyText: "No bars for XYZ on Sep 30. Check the ticker." });
+    expect(await screen.findByText("No bars for XYZ on Sep 30. Check the ticker.")).toBeTruthy();
+  });
+
+  it("leaves the Day's trades toggle off other trades' toolbars", async () => {
+    stub([answer(OK)]);
+    renderCharts();
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Day's trades" })).toBeNull();
   });
 });

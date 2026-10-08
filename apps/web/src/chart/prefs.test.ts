@@ -10,9 +10,31 @@ describe("chart preferences", () => {
   it("starts on 3m with every indicator on and EMAs 8, 20, 50 and 167", () => {
     expect(loadPrefs()).toEqual({
       minutes: 3,
-      show: { ema0: true, ema1: true, ema2: true, ema3: true, vwap: true, pm: true, pd: true, volume: true },
+      show: {
+        ema0: true,
+        ema1: true,
+        ema2: true,
+        ema3: true,
+        vwap: true,
+        pm: true,
+        pd: true,
+        volume: true,
+        day: true,
+      },
       emaLengths: [8, 20, 50, 167],
     });
+  });
+
+  it("shows the day's trades for choices saved before there was such a toggle", () => {
+    localStorage.setItem(
+      "tj.chart",
+      JSON.stringify({
+        minutes: 5,
+        show: { ...DEFAULT_PREFS.show, vwap: false, day: undefined },
+        emaLengths: [8, 20, 50, 167],
+      }),
+    );
+    expect(loadPrefs().show).toMatchObject({ vwap: false, day: true });
   });
 
   it("remembers the last choices in this browser", () => {

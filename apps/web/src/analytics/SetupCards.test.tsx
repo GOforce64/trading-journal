@@ -175,3 +175,45 @@ describe("SetupCards", () => {
     expect(screen.getByText("Loading…")).toBeTruthy();
   });
 });
+
+describe("SetupCards and missed trades", () => {
+  const missedRow = (id: string, setupId: string, r: number | null, opened = "2026-09-29 09:41") => ({
+    ...tradeRow({ id, strategy: "scalp", underlying: "NVDA", opened, closed: opened, netPnl: 0, setupId }),
+    book: "missed",
+    netPnl: null,
+    legs: [],
+    missed: { direction: "long", entryPrice: 100, stopPrice: 99, targetPrice: null, exitPrice: 101 },
+    missedRisk: { risk: 1, r, plannedRR: null, mae: null, mfe: null, problem: r == null ? "no_exit" : null },
+  });
+  const PULL = {
+    id: "pull",
+    name: "ORB pullback",
+    strategy: "scalp",
+    description: null,
+    archived: false,
+    tradeCount: 0,
+  };
+
+  it("adds a dashed Missed row to a setup's card", () => {
+    renderCards({
+      trades: [...TRADES, missedRow("m1", "orb", 2.4), missedRow("m2", "orb", -1)] as unknown as TradeView[],
+    });
+    const row = within(screen.getByRole("article", { name: "ORB breakout" })).getByTestId("card-missed");
+    expect(row.textContent).toBe("Missed2Would win %50.0%Missed avg R+0.70R");
+    expect(
+      within(screen.getByRole("article", { name: "VWAP reclaim" })).queryByTestId("card-missed"),
+    ).toBeNull();
+  });
+
+  it("gives a setup only missed trades have a card of its own", () => {
+    const onOpen = renderCards({
+      trades: [...TRADES, missedRow("m1", "pull", 1)] as unknown as TradeView[],
+      setups: [...SETUPS, PULL] as Setup[],
+    });
+    const pull = within(screen.getByRole("article", { name: "ORB pullback" }));
+    expect(pull.getByText("No taken trades yet")).toBeTruthy();
+    expect(pull.getByTestId("card-missed").textContent).toContain("Missed1");
+    fireEvent.click(pull.getByRole("button", { name: "1 missed →" }));
+    expect(onOpen).toHaveBeenCalledWith("pull", "missed");
+  });
+});

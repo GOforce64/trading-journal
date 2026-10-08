@@ -119,7 +119,8 @@ export function TagChips({
   onPick,
 }: {
   trade: TradeView;
-  kind: "mistake" | "emotion";
+  /** Emotions and skip reasons are one a trade; mistakes, any number. */
+  kind: "mistake" | "emotion" | "skip";
   onPick: (tagIds: string[]) => void;
 }) {
   const { data: tags = [] } = useTags();
@@ -130,7 +131,7 @@ export function TagChips({
   // An archived tag shows only on a trade that has it, and can only be taken off.
   const shown = tags.filter((tag) => tag.kind === kind && (!tag.archived || mine.has(tag.id)));
   const add = (id: string) =>
-    onPick([...trade.tagIds.filter((each) => kind === "mistake" || kindOf.get(each) !== "emotion"), id]);
+    onPick([...trade.tagIds.filter((each) => kind === "mistake" || kindOf.get(each) !== kind), id]);
   const toggle = (tag: Tag) =>
     mine.has(tag.id) ? onPick(trade.tagIds.filter((id) => id !== tag.id)) : add(tag.id);
   return (

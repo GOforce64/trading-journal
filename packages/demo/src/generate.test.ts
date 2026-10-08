@@ -63,7 +63,7 @@ describe("generateDemo", () => {
     expect(summary.scalps).toBeLessThanOrEqual(80);
     expect(summary.flies).toBeGreaterThanOrEqual(1);
     expect(summary.to).toBe(END);
-    const trades = createTradesRepo(db).list();
+    const trades = createTradesRepo(db).list({ taken: true });
     expect(trades).toHaveLength(summary.scalps + summary.flies);
     for (const trade of trades) {
       expect(trade.closedAt).not.toBeNull();
@@ -72,7 +72,7 @@ describe("generateDemo", () => {
   });
 
   it("adds up every trade's P&L from its legs less its fees", () => {
-    for (const trade of createTradesRepo(db).list()) {
+    for (const trade of createTradesRepo(db).list({ taken: true })) {
       const legs = trade.legs.reduce(
         (sum, leg) => sum + ((leg.closePrice ?? 0) - leg.openPrice) * leg.quantity * leg.multiplier,
         0,
@@ -97,7 +97,7 @@ describe("generateDemo", () => {
 
   it("knows every day each trade's charts ask for, so they draw without a key", () => {
     const bars = createBarsRepo(db);
-    for (const trade of createTradesRepo(db).list()) {
+    for (const trade of createTradesRepo(db).list({ taken: true })) {
       const lastDay = nyDate(trade.closedAt ?? trade.openedAt);
       const minuteDays = datesFrom(addDays(nyDate(trade.openedAt), -7), lastDay);
       expect(bars.knownDays(trade.underlying, "1m", minuteDays).size).toBe(minuteDays.length);
@@ -107,7 +107,7 @@ describe("generateDemo", () => {
   });
 
   it("leaves the last three sessions' scalps to review, and the rest reviewed, each with its prices", () => {
-    const scalps = createTradesRepo(db).list({ strategy: "scalp" });
+    const scalps = createTradesRepo(db).list({ strategy: "scalp", taken: true });
     const statuses = scalps.map((trade) => ({
       date: nyDate(trade.openedAt),
       status: reviewStatus(trade)?.status,

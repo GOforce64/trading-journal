@@ -41,10 +41,10 @@ describe("parseAnalyticsSearch", () => {
   it("drops hand-edited or stale values instead of failing", () => {
     expect(
       parseAnalyticsSearch({
-        tab: "missed",
+        tab: "setups",
         from: "2026-02-30",
         to: "yesterday",
-        books: "missed",
+        books: "missing",
         ticker: "SPX INDEX",
         excluded: "no",
         creditEdges: "abc",
@@ -170,5 +170,31 @@ describe("dashboard periods", () => {
     expect(calendarMonth("month", "2026-08-10", "2026-09-27")).toBe("2026-08");
     expect(calendarMonth("year", "2025-03-01", "2026-09-27")).toBe("2025-12");
     expect(calendarMonth("all", "2026-09-27", "2026-09-27")).toBe("2026-09");
+  });
+});
+
+describe("the Missed tab's search", () => {
+  it("keeps the tab and its breakdown, leaving the default skip reason out", () => {
+    expect(parseAnalyticsSearch({ tab: "missed", mby: "setup" })).toEqual({ tab: "missed", mby: "setup" });
+    expect(parseAnalyticsSearch({ tab: "missed", mby: "skip" })).toEqual({ tab: "missed" });
+    expect(parseAnalyticsSearch({ mby: "dte" })).toEqual({});
+  });
+});
+
+describe("the books list", () => {
+  it("keeps the books named, once each, in the filter's order", () => {
+    expect(parseAnalyticsSearch({ books: "missed,live" })).toEqual({ books: "live,missed" });
+    expect(parseAnalyticsSearch({ books: "live" })).toEqual({ books: "live" });
+    expect(parseAnalyticsSearch({ books: "missed" })).toEqual({ books: "missed" });
+  });
+
+  it("leaves the default and junk out of the URL", () => {
+    expect(parseAnalyticsSearch({ books: "live,paper" })).toEqual({});
+    expect(parseAnalyticsSearch({ books: "nope" })).toEqual({});
+  });
+
+  it("filters on the books it names", () => {
+    expect(toFilter({ books: "paper,missed" }).books).toEqual(["paper", "missed"]);
+    expect(toFilter({}).books).toEqual(["live", "paper"]);
   });
 });

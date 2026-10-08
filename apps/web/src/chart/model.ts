@@ -62,6 +62,8 @@ export interface IntradayModel {
   window: ViewWindow | null;
   /** The option view's slots, empty ones included, which the chart's logical range counts in. */
   slots: number[] | null;
+  /** The 1-minute bars the candles are made of, which a missed trade's points are placed on (missed-trades §6.4). */
+  bars: readonly PriceBar[];
 }
 export interface DailyModel {
   candles: PriceBar[];
@@ -208,6 +210,7 @@ export function intradayModel(
     markers,
     window: openingWindow(slots ? slots.map((t) => ({ t })) : candles, marks),
     slots,
+    bars,
   };
 }
 

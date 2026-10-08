@@ -1,4 +1,4 @@
-import type { GroupStats } from "@tj/core";
+import type { GroupStats, MissedOnlyRow } from "@tj/core";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { DOWN, TICK, TOOLTIP, UP, WITH_ZERO } from "./Charts.js";
 import { type Metric, metricValue, rowSummary, shortLabel, tickText } from "./scalpText.js";
@@ -11,6 +11,9 @@ const ROW_BAND = 22;
 export interface MetricRow extends GroupStats {
   label: string;
 }
+
+/** A bar's row: a taken trades' group, or one only missed trades have, with blank dollars. */
+type BarRow = MetricRow | MissedOnlyRow;
 
 /**
  * One bar per row under the chosen metric (scalp-analytics spec §6.3): net and avg R coloured by sign from a zero line,
@@ -26,7 +29,7 @@ export function MetricBars({
   height = 140,
   layout = "columns",
 }: {
-  rows: readonly MetricRow[];
+  rows: readonly BarRow[];
   metric: Metric;
   /** The tooltip's heading for a row, such as "0–5 min". */
   title?: (label: string) => string;

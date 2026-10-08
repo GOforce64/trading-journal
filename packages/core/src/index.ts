@@ -3,6 +3,8 @@ export * from "./chart.js";
 export * from "./ironFly.js";
 export * from "./kept.js";
 export * from "./marks.js";
+export * from "./missed.js";
+export * from "./missedStats.js";
 export * from "./model.js";
 export * from "./money.js";
 export * from "./moves.js";

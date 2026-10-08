@@ -28,6 +28,7 @@ const TAGS = [
   { id: "fomo", name: "FOMO entry", kind: "mistake", archived: false, tradeCount: 4 },
   { id: "calm", name: "Calm", kind: "emotion", archived: false, tradeCount: 7 },
   { id: "bored", name: "Bored", kind: "emotion", archived: true, tradeCount: 1 },
+  { id: "hes", name: "Hesitated", kind: "skip", archived: false, tradeCount: 6 },
 ];
 
 const json = (body: unknown, status = 200) =>
@@ -254,6 +255,25 @@ describe("Playbook", () => {
     await waitFor(() =>
       expect(sent(fetchMock, "POST")).toEqual([
         [expect.stringContaining("/api/risk/fill"), { tradeIds: ["m1"] }],
+      ]),
+    );
+  });
+});
+
+describe("Playbook's skip reasons", () => {
+  it("lists the skip reasons beside mistakes and emotions, and adds one", async () => {
+    const fetchMock = stubApi();
+    renderPlaybook();
+    const skips = await screen.findByRole("list", { name: "Skip reasons" });
+    await waitFor(() => expect(skips.textContent).toContain("Hesitated"));
+    expect(screen.getByRole("list", { name: "Emotions" }).textContent).not.toContain("Hesitated");
+    fireEvent.click(within(tagsPanel()).getAllByRole("button", { name: "+ New" })[2] as HTMLElement);
+    const added = screen.getByRole("textbox", { name: "New skip reason" });
+    fireEvent.change(added, { target: { value: "Spread too wide" } });
+    fireEvent.keyDown(added, { key: "Enter" });
+    await waitFor(() =>
+      expect(sent(fetchMock, "POST")).toEqual([
+        [expect.stringContaining("/api/tags"), { name: "Spread too wide", kind: "skip" }],
       ]),
     );
   });

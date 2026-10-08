@@ -66,10 +66,12 @@ export function useFillScalpPrices() {
  * and, from Alpaca's option history on, the contract's (premium-chart spec §9.1).
  */
 export function needsPrices(
-  trade: Pick<TradeView, "strategy" | "openedAt" | "closedAt" | "legs" | "scalpPrices">,
+  trade: Pick<TradeView, "strategy" | "openedAt" | "closedAt" | "legs" | "scalpPrices"> & { book?: string },
 ): boolean {
   if (trade.strategy !== "scalp") return false;
   const prices = trade.scalpPrices;
+  // A missed trade's entry is typed or clicked: only its hold range is fetched (missed-trades spec §3).
+  if (trade.book === "missed") return trade.closedAt != null && prices?.holdHigh == null;
   if (prices == null || prices.entryPrice == null) return true;
   if (trade.closedAt == null) return false;
   return (
@@ -115,6 +117,12 @@ function lastWord(
     if (outcome.result.unavailable) return { message: outcome.result.unavailable.message };
   }
   return null;
+}
+
+/** Whether the newest fill couldn't run at all for this trade, such as without an Alpaca key. */
+export function useRangeUnavailable(tradeId: string): boolean {
+  const word = lastWord(useFillResults(), tradeId);
+  return typeof word === "object" && word !== null;
 }
 
 /** The newest finished fill's word on this scalp's option range (premium-chart spec §9.4). */

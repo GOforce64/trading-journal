@@ -1,4 +1,4 @@
-import { nyClock } from "@tj/core";
+import { nyClock, round2, snapToBar, snapToMinute } from "@tj/core";
 import {
   CandlestickSeries,
   createChart,
@@ -10,10 +10,23 @@ import {
   type ISeriesMarkersPluginApi,
   LineSeries,
   LineStyle,
+  type SeriesMarker,
   type Time,
 } from "lightweight-charts";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { type ChartEditing, inPane, type LineId, lineName, nearestLine, priceAt } from "./drag.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ContextMark, nearestMark } from "./context.js";
+import {
+  type ChartEditing,
+  inPane,
+  isPointId,
+  type LineId,
+  lineName,
+  nearestLine,
+  nearestPoint,
+  type PointId,
+  type PointMark,
+  priceAt,
+} from "./drag.js";
 import type { IntradayModel, LevelLine, Marker, Point } from "./model.js";
 import type { Toggle } from "./prefs.js";
 import { COLORS, chartOptions, EMA_COLORS, nyTimeText, seconds } from "./style.js";
@@ -29,6 +42,100 @@ export interface PriceLine {
 
 const LEVELS: LevelLine["label"][] = ["PM H", "PM L", "PD H", "PD L"];
 const NO_LINES: readonly PriceLine[] = [];
+const NO_POINTS: readonly PointMark[] = [];
+const NO_CONTEXT: readonly ContextMark[] = [];
+
+/** A missed trade's own points, bright (missed-trades spec §6.4). */
+const POINT_COLOR = "#8fb3ff";
+/** The day's other trades, faint: the fill arrows' colours and a grey, at about 45% (spec §6.4). */
+const FAINT = { buy: "#26a69a73", sell: "#ef535073", missed: "#9aa3b599" } as const;
+/** How far a taken scalp's faint arrow sits from its candle, for hovering it. */
+const ARROW_PX = 12;
+
+/** The index of the last candle at or before `t`, or the first. */
+function candleIndex(times: readonly number[], t: number): number {
+  let low = 0;
+  let high = times.length - 1;
+  let found = 0;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    if ((times[middle] ?? 0) <= t) {
+      found = middle;
+      low = middle + 1;
+    } else high = middle - 1;
+  }
+  return found;
+}
+
+/** A point moved by a drag that hasn't been saved yet. */
+interface PointAt {
+  id: PointId;
+  t: number;
+  price: number;
+}
+
+/** The fills' arrows, the day's other trades and the missed trade's own points, in time order. */
+function allMarkers(
+  model: IntradayModel,
+  markersAtPrice: boolean,
+  points: readonly PointMark[],
+  context: readonly ContextMark[],
+): SeriesMarker<Time>[] {
+  const times = model.candles.map((candle) => candle.t);
+  // Points and context markers sit on their candle, so a typed 09:41 shows on the 3-minute chart's 09:39 bar.
+  const at = (t: number) => seconds(model.candles[candleIndex(times, t)]?.t ?? t) as Time;
+  const marks: SeriesMarker<Time>[] = [
+    ...model.markers.map(
+      (marker) =>
+        ({
+          time: seconds(marker.t),
+          text: marker.text,
+          ...markerLook(marker, markersAtPrice),
+        }) as SeriesMarker<Time>,
+    ),
+    ...context.map((mark): SeriesMarker<Time> => {
+      if (mark.kind === "missed" && mark.price != null) {
+        return {
+          time: at(mark.t),
+          text: mark.label,
+          position: "atPriceMiddle",
+          shape: "circle",
+          color: FAINT.missed,
+          price: mark.price,
+        };
+      }
+      return mark.kind === "sell"
+        ? { time: at(mark.t), text: mark.label, position: "aboveBar", shape: "arrowDown", color: FAINT.sell }
+        : { time: at(mark.t), text: mark.label, position: "belowBar", shape: "arrowUp", color: FAINT.buy };
+    }),
+    ...points.map(
+      (point): SeriesMarker<Time> => ({
+        time: at(point.t),
+        text: point.label,
+        position: "atPriceMiddle",
+        shape: "circle",
+        color: POINT_COLOR,
+        price: point.price,
+      }),
+    ),
+  ];
+  return marks.sort((a, b) => Number(a.time) - Number(b.time));
+}
+
+/** The dotted line from the entry to the exit, on their candles; nothing without both. */
+function holdLine(model: IntradayModel, points: readonly PointMark[]) {
+  const times = model.candles.map((candle) => candle.t);
+  const entry = points.find((point) => point.id === "entry");
+  const exit = points.find((point) => point.id === "exit");
+  if (!entry || !exit) return [];
+  const from = model.candles[candleIndex(times, entry.t)]?.t;
+  const to = model.candles[candleIndex(times, exit.t)]?.t;
+  if (from === undefined || to === undefined || to <= from) return [];
+  return [
+    { time: seconds(from) as Time, value: entry.price },
+    { time: seconds(to) as Time, value: exit.price },
+  ];
+}
 
 interface Parts {
   chart: IChartApi;
@@ -39,6 +146,8 @@ interface Parts {
   levels: Map<LevelLine["label"], ISeriesApi<"Line">>;
   markers: ISeriesMarkersPluginApi<Time>;
   priceLines: IPriceLine[];
+  /** The dotted line from a missed trade's entry to its exit. */
+  hold: ISeriesApi<"Line">;
 }
 
 /** A line being dragged: where it started, and where it is now (scalp-review spec §8.3). */
@@ -89,6 +198,9 @@ export function IntradayChart({
   height = 420,
   markersAtPrice = false,
   viewKey = "stock",
+  points = NO_POINTS,
+  context = NO_CONTEXT,
+  onOpenTrade,
 }: {
   model: IntradayModel;
   show: Record<Toggle, boolean>;
@@ -101,21 +213,41 @@ export function IntradayChart({
   markersAtPrice?: boolean;
   /** Which view the model is, so a switch keeps the time range in view (premium-chart spec §6.1). */
   viewKey?: string;
+  /** A missed trade's entry and exit (missed-trades spec §6.4), placed and dragged through `editing`. */
+  points?: readonly PointMark[];
+  /** The day's other trades, faint, with a tooltip; a click opens one through `onOpenTrade`. */
+  context?: readonly ContextMark[];
+  onOpenTrade?: (id: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const parts = useRef<Parts | null>(null);
   const times = useRef<number[]>([]);
   // The mouse handlers are attached once, so they read the latest lines and editing from here.
-  const current = useRef({ lines, editing });
+  const current = useRef({ lines, editing, points, context, onOpenTrade, model, markersAtPrice });
   const [hovered, setHovered] = useState<number | null>(null);
-  const [grab, setGrab] = useState(false);
+  const [grab, setGrab] = useState<"line" | "point" | null>(null);
+  const [tip, setTip] = useState<{ mark: ContextMark; x: number; y: number } | null>(null);
   // The view the chart last drew, and the view whose time range was kept on a switch (premium-chart spec §6.1).
   const drawnView = useRef<string | null>(null);
   const keptFor = useRef<string | null>(null);
 
   useEffect(() => {
-    current.current = { lines, editing };
+    current.current = { lines, editing, points, context, onOpenTrade, model, markersAtPrice };
   });
+
+  /** Draws the markers and the hold line from the latest props, with a dragged point where the drag has it. */
+  const paint = useCallback((moved?: PointAt) => {
+    const chart = parts.current;
+    if (!chart) return;
+    const latest = current.current;
+    const shown = moved
+      ? latest.points.map((point) =>
+          point.id === moved.id ? { ...point, t: moved.t, price: moved.price } : point,
+        )
+      : latest.points;
+    chart.markers.setMarkers(allMarkers(latest.model, latest.markersAtPrice, shown, latest.context));
+    chart.hold.setData(holdLine(latest.model, shown));
+  }, []);
 
   useEffect(() => {
     const element = container.current;
@@ -157,6 +289,14 @@ export function IntradayChart({
         }),
       ]),
     );
+    const hold = chart.addSeries(LineSeries, {
+      color: "#9aa3b5",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
     const markers = createSeriesMarkers(candles, []);
     chart.subscribeCrosshairMove((param) => {
       if (typeof param.time !== "number") {
@@ -165,14 +305,55 @@ export function IntradayChart({
       }
       setHovered(times.current.indexOf(param.time * 1000));
     });
-    parts.current = { chart, candles, volume, emas, vwap, levels, markers, priceLines: [] };
+    parts.current = { chart, candles, volume, emas, vwap, levels, markers, priceLines: [], hold };
 
     // Placing and dragging the review's lines (scalp-review spec §8.2–8.3). Lightweight Charts listens to mouse
     // events, so a press on a line is caught on its way down (capture) and kept from the chart, and the drag
     // follows the window, so it goes on outside the chart.
     let drag: Drag | null = null;
+    // A missed trade's point being dragged, in time and price (missed-trades spec §6.4).
+    let pointDrag: { id: PointId; from: { t: number; price: number }; at: PointAt } | null = null;
     const toY = (price: number) => candles.priceToCoordinate(price);
     const toPrice = (y: number) => candles.coordinateToPrice(y);
+    const candleTimes = () => current.current.model.candles.map((candle) => candle.t);
+    const xOf = (t: number) => chart.timeScale().logicalToCoordinate(candleIndex(candleTimes(), t) as never);
+    /** The candle under x, the nearest one past either end, and the minute inside it that traded the price. */
+    function pointAt(id: PointId, x: number, y: number): PointAt | null {
+      const { candles: all, bars } = current.current.model;
+      const logical = chart.timeScale().coordinateToLogical(x);
+      const price = priceAt(y, toPrice);
+      if (all.length === 0 || logical == null || price == null) return null;
+      const index = Math.min(all.length - 1, Math.max(0, Math.round(Number(logical))));
+      const candle = all[index];
+      if (!candle) return null;
+      const end = all[index + 1]?.t ?? Number.POSITIVE_INFINITY;
+      const inside = bars.filter((bar) => bar.t >= candle.t && bar.t < end);
+      const at = snapToMinute(
+        price,
+        inside.map((bar) => ({ t: bar.t, high: bar.h, low: bar.l })),
+      ) ?? { t: candle.t, price: snapToBar(price, { high: candle.h, low: candle.l }) };
+      return { id, t: at.t, price: round2(at.price) };
+    }
+    function placedPoints() {
+      return current.current.points.flatMap((point) => {
+        const x = xOf(point.t);
+        const y = toY(point.price);
+        return x == null || y == null ? [] : [{ id: point.id, x, y }];
+      });
+    }
+    function placedContext() {
+      const all = current.current.model.candles;
+      const known = candleTimes();
+      return current.current.context.flatMap((mark) => {
+        const x = xOf(mark.t);
+        const candle = all[candleIndex(known, mark.t)];
+        let y: number | null = null;
+        if (mark.price != null) y = toY(mark.price);
+        else if (candle && mark.kind === "sell") y = (toY(candle.h) ?? 0) - ARROW_PX;
+        else if (candle) y = (toY(candle.l) ?? 0) + ARROW_PX;
+        return x == null || y == null ? [] : [{ mark, x, y }];
+      });
+    }
     const pointOf = (event: MouseEvent) => {
       const box = element.getBoundingClientRect();
       return { x: event.clientX - box.left, y: event.clientY - box.top };
@@ -181,6 +362,18 @@ export function IntradayChart({
       return current.current.lines.flatMap((each) => (each.id ? [{ id: each.id, price: each.price }] : []));
     }
     function follow(event: MouseEvent) {
+      if (pointDrag) {
+        if (event.buttons === 0) {
+          finishPoint(true);
+          return;
+        }
+        const { x, y } = pointOf(event);
+        const at = pointAt(pointDrag.id, x, y);
+        if (!at) return;
+        pointDrag.at = at;
+        paint(at);
+        return;
+      }
       if (!drag) return;
       // No button held: the release happened where the window couldn't hear it (over another window), so the
       // drag ends where the line last was.
@@ -196,6 +389,22 @@ export function IntradayChart({
     }
     function release() {
       finish(true);
+      finishPoint(true);
+    }
+    function finishPoint(save: boolean) {
+      const done = pointDrag;
+      if (!done) return;
+      pointDrag = null;
+      window.removeEventListener("mousemove", follow);
+      window.removeEventListener("mouseup", release);
+      chart.applyOptions({ handleScroll: true, handleScale: true });
+      const moved = done.at.t !== done.from.t || done.at.price !== done.from.price;
+      if (save && moved) {
+        current.current.editing?.onDropPoint?.(done.id, done.at.t, done.at.price);
+        return;
+      }
+      paint();
+      if (!save) current.current.editing?.onCancel();
     }
     function finish(save: boolean) {
       const done = drag;
@@ -212,61 +421,100 @@ export function IntradayChart({
       if (!save) current.current.editing?.onCancel();
     }
     function press(event: MouseEvent) {
+      if (event.button !== 0) return;
       const edit = current.current.editing;
-      if (!edit || event.button !== 0) return;
       const { x, y } = pointOf(event);
       const onPlot = inPane(x, y, chart.paneSize());
-      if (edit.placing) {
+      if (edit?.placing) {
         // While placing, every press is the review's: the typed field keeps its focus, and a press on an axis is
         // ignored, with placing going on (spec §8.2).
         event.preventDefault();
         event.stopPropagation();
-        const price = onPlot ? priceAt(y, toPrice) : null;
+        if (!onPlot) return;
+        if (isPointId(edit.placing)) {
+          const at = pointAt(edit.placing, x, y);
+          if (at) edit.onPlacePoint?.(at.id, at.t, at.price);
+          return;
+        }
+        const price = priceAt(y, toPrice);
         if (price != null) edit.onPlace(edit.placing, price);
         return;
       }
       if (!onPlot) return;
-      const id = nearestLine(grabbable(), y, toY);
+      const grabbed = (start: () => void) => {
+        event.preventDefault();
+        event.stopPropagation();
+        chart.applyOptions({ handleScroll: false, handleScale: false });
+        start();
+        window.addEventListener("mousemove", follow);
+        window.addEventListener("mouseup", release);
+      };
+      // A point first: it sits on a price, where a line may run through it too.
+      const point = edit?.onDropPoint
+        ? current.current.points.find((each) => each.id === nearestPoint(x, y, placedPoints()))
+        : undefined;
+      if (point) {
+        const from = { t: point.t, price: point.price };
+        grabbed(() => {
+          pointDrag = { id: point.id, from, at: { id: point.id, ...from } };
+        });
+        return;
+      }
+      const id = edit ? nearestLine(grabbable(), y, toY) : null;
       const index = current.current.lines.findIndex((each) => each.id === id);
       const line = parts.current?.priceLines[index];
       const from = current.current.lines[index]?.price;
-      if (!id || !line || from === undefined) return;
-      event.preventDefault();
-      event.stopPropagation();
-      chart.applyOptions({ handleScroll: false, handleScale: false });
-      drag = { id, line, from, price: from };
-      window.addEventListener("mousemove", follow);
-      window.addEventListener("mouseup", release);
+      if (id && line && from !== undefined) {
+        grabbed(() => {
+          drag = { id, line, from, price: from };
+        });
+        return;
+      }
+      const mark = current.current.onOpenTrade ? nearestMark({ x, y }, placedContext()) : null;
+      if (mark) {
+        event.preventDefault();
+        event.stopPropagation();
+        current.current.onOpenTrade?.(mark.tradeId);
+      }
     }
     function hover(event: MouseEvent) {
-      if (drag) return;
+      if (drag || pointDrag) return;
       const { x, y } = pointOf(event);
-      const over =
-        current.current.editing != null &&
-        inPane(x, y, chart.paneSize()) &&
-        nearestLine(grabbable(), y, toY) != null;
-      setGrab(over);
+      const edit = current.current.editing;
+      const inside = inPane(x, y, chart.paneSize());
+      const overPoint = edit?.onDropPoint != null && inside && nearestPoint(x, y, placedPoints()) != null;
+      const overLine = edit != null && inside && nearestLine(grabbable(), y, toY) != null;
+      setGrab(overPoint ? "point" : overLine ? "line" : null);
+      const mark = inside ? nearestMark({ x, y }, placedContext()) : null;
+      setTip(mark ? { mark, x, y } : null);
+    }
+    function leave() {
+      setTip(null);
     }
     function onEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (drag) finish(false);
+      else if (pointDrag) finishPoint(false);
       else if (current.current.editing?.placing) current.current.editing.onCancel();
     }
     element.addEventListener("mousedown", press, true);
     element.addEventListener("mousemove", hover);
+    element.addEventListener("mouseleave", leave);
     window.addEventListener("keydown", onEscape);
 
     return () => {
       element.removeEventListener("mousedown", press, true);
       element.removeEventListener("mousemove", hover);
+      element.removeEventListener("mouseleave", leave);
       window.removeEventListener("keydown", onEscape);
       window.removeEventListener("mousemove", follow);
       window.removeEventListener("mouseup", release);
       chart.remove();
       parts.current = null;
     };
-  }, []);
+  }, [paint]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: markersAtPrice reaches paint through the ref; a change must repaint
   useEffect(() => {
     const chart = parts.current;
     if (!chart) return;
@@ -315,13 +563,7 @@ export function IntradayChart({
       const level = model.levels.find((each) => each.label === label);
       series.setData(level ? model.levelTimes.map((t) => ({ time: seconds(t), value: level.price })) : []);
     }
-    chart.markers.setMarkers(
-      model.markers.map((marker) => ({
-        time: seconds(marker.t),
-        text: marker.text,
-        ...markerLook(marker, markersAtPrice),
-      })),
-    );
+    paint();
     // A switch keeps the time range the reader was looking at, when this view has candles there.
     if (
       range &&
@@ -332,7 +574,12 @@ export function IntradayChart({
       chart.chart.timeScale().setVisibleRange(range);
       keptFor.current = viewKey;
     }
-  }, [model, markersAtPrice, viewKey]);
+  }, [model, markersAtPrice, viewKey, paint]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: paint reads the points and context from the ref; a change to either repaints
+  useEffect(() => {
+    paint();
+  }, [points, context, paint]);
 
   // The opening view: on first data, on a new timeframe, and on Fit trade.
   const from = model.window?.from;
@@ -391,8 +638,41 @@ export function IntradayChart({
         ref={container}
         className="absolute inset-0"
         data-testid="intraday-chart"
-        data-cursor={editing?.placing ? "crosshair" : grab ? "ns-resize" : undefined}
+        data-cursor={
+          editing?.placing
+            ? "crosshair"
+            : grab === "line"
+              ? "ns-resize"
+              : grab === "point"
+                ? "move"
+                : tip
+                  ? "pointer"
+                  : undefined
+        }
       />
+      {tip && (
+        <div
+          data-testid="context-tip"
+          className="pointer-events-none absolute z-20 rounded-sm border border-[#2f3646] bg-[#1c2230] px-2 py-1 text-[10px] leading-snug shadow-lg"
+          style={{ left: tip.x + 12, top: tip.y + 12 }}
+        >
+          {tip.mark.tip.map((line, index) => (
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: a tooltip's lines are fixed in order
+              key={index}
+              className={
+                index === 0
+                  ? "font-semibold text-fg"
+                  : index === tip.mark.tip.length - 1
+                    ? "text-muted"
+                    : "num text-fg"
+              }
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
       {editing?.placing && (
         <div
           data-testid="placing-hint"

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DIRECTIONS } from "./missed.js";
 import { LEVEL_BASES } from "./review.js";
 
 export const STRATEGIES = ["scalp", "iron_fly"] as const;
@@ -50,6 +51,15 @@ export const ironFlyDetailsSchema = z.object({
   sourceNotes: z.string().nullable().default(null),
 });
 
+/** A missed trade's levels (missed-trades spec §3); its entry and exit times are `openedAt` and `closedAt`. */
+export const missedLevelsSchema = z.object({
+  direction: z.enum(DIRECTIONS),
+  entryPrice: z.number().positive(),
+  stopPrice: z.number().positive().nullable(),
+  targetPrice: z.number().positive().nullable(),
+  exitPrice: z.number().positive().nullable(),
+});
+
 /**
  * The fields of a trade, without creation defaults. A patch must carry defaults
  * nowhere: parsing `{ grade: "B" }` against a defaulted shape would fill in
@@ -82,6 +92,7 @@ const tradeFields = {
   tagIds: z.array(z.uuid()),
   legs: z.array(legInputSchema).max(8),
   ironFly: ironFlyDetailsSchema.nullish(),
+  missed: missedLevelsSchema.nullish(),
 };
 
 /** Creation takes the same fields, with everything optional defaulted. */
@@ -103,6 +114,7 @@ const newTradeShape = z.object({
   tagIds: tradeFields.tagIds.default([]),
   legs: tradeFields.legs.default([]),
   ironFly: tradeFields.ironFly.default(null),
+  missed: tradeFields.missed.default(null),
 });
 
 export const newTradeSchema = newTradeShape
@@ -113,6 +125,28 @@ export const newTradeSchema = newTradeShape
   .refine((trade) => trade.strategy !== "iron_fly" || trade.ironFly != null, {
     message: "iron_fly trades require ironFly details",
     path: ["ironFly"],
+  })
+  // Missed trades (missed-trades spec §3, §5): scalps with no fills or P&L, scored from their own levels.
+  .refine((trade) => trade.book !== "missed" || trade.missed != null, {
+    message: "missed trades need missed details",
+    path: ["missed"],
+  })
+  .refine((trade) => trade.book === "missed" || trade.missed == null, {
+    message: "only a missed trade has missed details",
+    path: ["missed"],
+  })
+  .refine(
+    (trade) =>
+      trade.book !== "missed" ||
+      (trade.strategy === "scalp" &&
+        trade.legs.length === 0 &&
+        trade.netPnl == null &&
+        trade.ironFly == null),
+    { message: "a missed trade is a scalp with no legs or P&L", path: ["book"] },
+  )
+  .refine((trade) => trade.missed == null || (trade.missed.exitPrice == null) === (trade.closedAt == null), {
+    message: "an exit needs both a time and a price",
+    path: ["closedAt"],
   });
 
 /** A profit target on the trade's basis, trimming whole contracts (scalp-R spec §8). */
@@ -140,6 +174,8 @@ export const scalpLevelsPatchSchema = z
 
 /** Every field optional, no defaults; `source` is provenance and is never patched. */
 export const tradePatchSchema = z.object(tradeFields).omit({ source: true }).partial().extend({
+  /** Part of a missed trade's levels; the repository checks the result against the stored row. */
+  missed: missedLevelsSchema.partial().optional(),
   scalp: scalpLevelsPatchSchema.optional(),
   /** true stamps the trade reviewed with the server's clock; false puts it back in the queue. */
   reviewed: z.boolean().optional(),

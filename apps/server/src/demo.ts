@@ -25,7 +25,7 @@ try {
   db.$client.close();
   const seconds = ((performance.now() - started) / 1000).toFixed(1);
   console.log(
-    `Demo journal: ${summary.scalps} scalps and ${summary.flies} iron flies from ${summary.from} to ${summary.to}, with ${summary.bars.toLocaleString("en-US")} bars, made in ${seconds} s.`,
+    `Demo journal: ${summary.scalps} scalps, ${summary.flies} iron flies and ${summary.missed} missed trades from ${summary.from} to ${summary.to}, with ${summary.bars.toLocaleString("en-US")} bars, made in ${seconds} s.`,
   );
   console.log(`It lives in ${dir}; the next \`pnpm demo\` replaces it. Your own journal isn't touched.`);
   process.env.TJ_DATA_DIR = dir;

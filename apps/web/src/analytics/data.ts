@@ -14,7 +14,8 @@ export function useAllTrades() {
   });
 }
 
-export type Book = "live" | "paper";
+/** The Analytics books (missed-trades spec §6.8): missed trades join only when asked for. */
+export type Book = "live" | "paper" | "missed";
 
 export interface TradeFilter {
   books: readonly Book[];

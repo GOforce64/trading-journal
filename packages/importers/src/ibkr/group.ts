@@ -344,6 +344,7 @@ function addTrade(
     setupId: null,
     tagIds: [],
     legs,
+    missed: null,
     ironFly: structure
       ? {
           ...structure,

@@ -4,6 +4,8 @@ import {
   type IronFlyOutcome,
   ironFlyMetrics,
   ironFlyOutcome,
+  type MissedRisk,
+  missedRisk,
   newTradeSchema,
   type ReviewStatus,
   reviewStatus,
@@ -27,6 +29,8 @@ const listQuerySchema = z.object({
   book: z.enum(["live", "paper", "missed"]).optional(),
   underlying: z.string().optional(),
   includeExcluded: z.enum(["true", "false"]).optional(),
+  /** Taken trades only, for the Scalps page (missed-trades spec §5). */
+  taken: z.enum(["true"]).optional(),
   /** Every trade rather than the newest 500, for pages that aggregate. */
   all: z.enum(["true"]).optional(),
   /** The To review queue (scalp-review spec §6.2): pending trades only, oldest first, with no row limit. */
@@ -39,11 +43,19 @@ export interface TradeView extends TradeRecord {
   review: ReviewStatus | null;
   /** A scalp's R (scalp-R spec §6), worked out on read; null for a fly. */
   risk: ScalpRisk | null;
+  /** A missed trade's stock R (missed-trades spec §4.1), worked out on read; null for any other trade. */
+  missedRisk: MissedRisk | null;
 }
 
 /** Metrics, the review status and R are derived on read, so a stored trade and its numbers can never drift apart. */
 export function withMetrics(trade: TradeRecord): TradeView {
-  return { ...trade, metrics: flyMetrics(trade), review: reviewStatus(trade), risk: scalpRisk(trade) };
+  return {
+    ...trade,
+    metrics: flyMetrics(trade),
+    review: reviewStatus(trade),
+    risk: scalpRisk(trade),
+    missedRisk: missedRisk(trade),
+  };
 }
 
 function flyMetrics(trade: TradeRecord): TradeView["metrics"] {
@@ -98,7 +110,12 @@ export function tradeRoutes(db: Db, now?: () => number) {
   return new Hono()
     .get("/", zValidator("query", listQuerySchema), (c) => {
       const query = c.req.valid("query");
-      const filter = { strategy: query.strategy, book: query.book, underlying: query.underlying };
+      const filter = {
+        strategy: query.strategy,
+        book: query.book,
+        underlying: query.underlying,
+        taken: query.taken === "true",
+      };
       if (query.review === "pending") {
         // Every pending trade, oldest first: the queue must never stop at the newest 500. Only scalps can wait.
         if (filter.strategy === "iron_fly") return c.json([]);
@@ -120,9 +137,15 @@ export function tradeRoutes(db: Db, now?: () => number) {
           .map(withMetrics),
       );
     })
-    .post("/", zValidator("json", newTradeSchema), (c) =>
-      c.json(withMetrics(repo.create(c.req.valid("json"))), 201),
-    )
+    .post("/", zValidator("json", newTradeSchema), (c) => {
+      try {
+        return c.json(withMetrics(repo.create(c.req.valid("json"))), 201);
+      } catch (error) {
+        if (error instanceof ReviewRuleError)
+          return c.json({ error: "invalid", message: error.message }, 400);
+        throw error;
+      }
+    })
     .get("/:id", (c) => {
       const trade = repo.get(c.req.param("id"));
       return trade

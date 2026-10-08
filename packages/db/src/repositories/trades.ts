@@ -1,6 +1,8 @@
 import {
   contractsHeld,
+  type MissedLevels,
   type NewTrade,
+  nyDate,
   nyWallClock,
   OPTION_BARS_SINCE,
   round2,
@@ -10,12 +12,13 @@ import {
   type TradePatch,
   trimProblem,
 } from "@tj/core";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import type { Db } from "../client.js";
 import {
   attachments,
   ironFlyDetails,
   legs,
+  missedDetails,
   scalpDetails,
   scalpPrices,
   scalpTargets,
@@ -40,6 +43,8 @@ export interface TradeRecord extends TradeRow {
   scalp: ScalpLevels | null;
   /** The stock prices the filler fetched for a scalp (scalp-R spec §5); null until it has. */
   scalpPrices: ScalpPricesRow | null;
+  /** A missed trade's levels (missed-trades spec §3); null on every other trade. */
+  missed: MissedLevels | null;
   tagIds: string[];
   /** Its live screenshots, oldest first (screenshots spec §3). */
   attachments: AttachmentRow[];
@@ -50,6 +55,8 @@ export interface TradeFilter {
   book?: string;
   underlying?: string;
   includeExcluded?: boolean;
+  /** Taken trades only: the missed ones left out (missed-trades spec §5). */
+  taken?: boolean;
   /** At most this many trades, newest first; 500 when left out, every trade when null. */
   limit?: number | null;
 }
@@ -215,6 +222,40 @@ type DbLike = Db | Tx;
 /** A patch the review rules refuse (scalp-review spec §6.2). The route answers 400 with the message. */
 export class ReviewRuleError extends Error {}
 
+const ET_DAY = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  month: "short",
+  day: "numeric",
+});
+
+/**
+ * A missed trade's levels after a patch, checked against what's stored (missed-trades spec §5): the exit's time and
+ * price come together, after the entry, on its New York date. Null when the trade isn't missed and the patch leaves
+ * its levels alone.
+ */
+export function mergeMissed(
+  existing: Pick<TradeRecord, "book" | "openedAt" | "closedAt" | "missed">,
+  patch: Pick<TradePatch, "openedAt" | "closedAt">,
+  missedPatch: TradePatch["missed"],
+): MissedLevels | null {
+  if (existing.book !== "missed" || !existing.missed) {
+    if (missedPatch) throw new ReviewRuleError("Only a missed trade has missed details");
+    return null;
+  }
+  const levels = { ...existing.missed, ...missedPatch };
+  const openedAt = patch.openedAt ?? existing.openedAt;
+  const closedAt = patch.closedAt === undefined ? existing.closedAt : patch.closedAt;
+  if ((levels.exitPrice == null) !== (closedAt == null)) {
+    throw new ReviewRuleError("an exit needs both a time and a price");
+  }
+  if (closedAt != null && closedAt <= openedAt)
+    throw new ReviewRuleError("The exit must come after the entry");
+  if (closedAt != null && nyDate(closedAt) !== nyDate(openedAt)) {
+    throw new ReviewRuleError(`The exit must be on the entry's day, ${ET_DAY.format(new Date(openedAt))}`);
+  }
+  return levels;
+}
+
 /** What a scalp holds: the long leg's right when it's one long option, and its contracts. */
 export interface ScalpPosition {
   right: string | null;
@@ -342,6 +383,11 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         },
       ]),
     );
+    const missedOf = new Map(
+      read((ids) => conn.select().from(missedDetails).where(inArray(missedDetails.tradeId, ids)).all()).map(
+        ({ tradeId, ...levels }) => [tradeId, levels],
+      ),
+    );
     const prices = new Map(
       read((ids) => conn.select().from(scalpPrices).where(inArray(scalpPrices.tradeId, ids)).all()).map(
         (found) => [found.tradeId, found],
@@ -373,6 +419,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       ironFly: flies.get(row.id) ?? null,
       scalp: levels.get(row.id) ?? null,
       scalpPrices: prices.get(row.id) ?? null,
+      missed: missedOf.get(row.id) ?? null,
       tagIds: (tagsOf.get(row.id) ?? []).map((link) => link.tagId),
     }));
   }
@@ -398,6 +445,17 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       .where(and(inArray(tags.id, [...tagIds]), eq(tags.kind, "emotion")))
       .all();
     if (emotions.length > 1) throw new ReviewRuleError("A trade has at most one emotion");
+  }
+
+  /** At most one skip reason per trade (missed-trades spec §3). */
+  function checkOneSkip(tagIds: readonly string[]): void {
+    if (tagIds.length < 2) return;
+    const skips = db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(inArray(tags.id, [...tagIds]), eq(tags.kind, "skip")))
+      .all();
+    if (skips.length > 1) throw new ReviewRuleError("A trade has at most one skip reason");
   }
 
   /** Children are replaced wholesale, and only when the input mentions them. */
@@ -433,6 +491,16 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         .insert(ironFlyDetails)
         .values({ tradeId, ...input.ironFly })
         .onConflictDoUpdate({ target: ironFlyDetails.tradeId, set: { ...input.ironFly } })
+        .run();
+    }
+
+    if (input.missed === null) {
+      conn.delete(missedDetails).where(eq(missedDetails.tradeId, tradeId)).run();
+    } else if (input.missed) {
+      conn
+        .insert(missedDetails)
+        .values({ tradeId, ...input.missed })
+        .onConflictDoUpdate({ target: missedDetails.tradeId, set: { ...input.missed } })
         .run();
     }
 
@@ -485,6 +553,8 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
 
   return {
     create(input: NewTrade): TradeRecord {
+      // The order and date rules the schema can't check (missed-trades spec §5).
+      if (input.missed) mergeMissed({ ...input, missed: input.missed }, {}, undefined);
       const timestamp = now();
       const id = crypto.randomUUID();
       return db.transaction((tx) => {
@@ -522,6 +592,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       const conditions = [isNull(trades.deletedAt)];
       if (filter.strategy) conditions.push(eq(trades.strategy, filter.strategy));
       if (filter.book) conditions.push(eq(trades.book, filter.book));
+      if (filter.taken) conditions.push(ne(trades.book, "missed"));
       if (filter.underlying) conditions.push(eq(trades.underlying, filter.underlying.toUpperCase()));
       if (!filter.includeExcluded) conditions.push(eq(trades.excluded, false));
       const rows = db
@@ -545,7 +616,15 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       if (!existing) return null;
 
       const timestamp = now();
-      const { legs: _legs, ironFly: _ironFly, tagIds: _tagIds, scalp, reviewed, ...rest } = patch;
+      const {
+        legs: _legs,
+        ironFly: _ironFly,
+        tagIds: _tagIds,
+        scalp,
+        reviewed,
+        missed: missedPatch,
+        ...rest
+      } = patch;
       // Drop keys the caller never sent, so a patch only touches what it names.
       const columns = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined));
       // The review rules (scalp-review spec §6.2) are checked before anything is written.
@@ -556,7 +635,11 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       const levels = scalp
         ? mergeLevels(id, record.scalp, scalp, positionOf(patch.legs ?? record.legs))
         : null;
-      if (patch.tagIds) checkOneEmotion(patch.tagIds);
+      if (patch.tagIds) {
+        checkOneEmotion(patch.tagIds);
+        checkOneSkip(patch.tagIds);
+      }
+      const missed = mergeMissed(record, patch, missedPatch);
 
       const factsEdited = changesFacts(record, patch);
       return db.transaction((tx) => {
@@ -570,7 +653,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           })
           .where(eq(trades.id, id))
           .run();
-        writeChildren(tx, id, patch, timestamp);
+        writeChildren(tx, id, { ...patch, missed: missedPatch ? missed : undefined }, timestamp);
         if (levels) {
           const { targets, ...row } = levels;
           tx.insert(scalpDetails)
@@ -682,10 +765,17 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         eq(trades.strategy, "scalp"),
         isNull(trades.deletedAt),
         or(
-          isNull(scalpPrices.entryPrice),
+          // A missed trade's entry is typed or clicked, so only its hold range is fetched (missed-trades spec §3).
+          and(isNull(scalpPrices.entryPrice), ne(trades.book, "missed")),
           and(isNotNull(trades.closedAt), isNull(scalpPrices.holdHigh)),
           // The option's range, for contracts Alpaca has bars of (premium-chart spec §9.1).
-          and(isNotNull(trades.closedAt), gte(trades.openedAt, OPTION_EPOCH), isNull(scalpPrices.optionHigh)),
+          // A missed trade has no contract (missed-trades spec §5).
+          and(
+            isNotNull(trades.closedAt),
+            gte(trades.openedAt, OPTION_EPOCH),
+            isNull(scalpPrices.optionHigh),
+            ne(trades.book, "missed"),
+          ),
         ),
       ];
       if (tradeIds) conditions.push(inArray(trades.id, [...tradeIds]));

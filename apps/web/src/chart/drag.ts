@@ -9,10 +9,23 @@ export type LineId = string;
 /** How near, in pixels, a press must land to grab a line (scalp-review spec §8.3). */
 export const GRAB_PX = 6;
 
+/** A missed trade's points (missed-trades spec §6.4): a time and a price each. */
+export type PointId = "entry" | "exit";
+export const POINT_IDS: readonly string[] = ["entry", "exit"] satisfies PointId[];
+export const isPointId = (id: string | null): id is PointId => id != null && POINT_IDS.includes(id);
+
+/** A point on the chart: drawn as a hollow circle at its price, placed and dragged in time and price. */
+export interface PointMark {
+  id: PointId;
+  t: number;
+  price: number;
+  label: string;
+}
+
 /** What the intraday chart reports while the user places or drags the review's lines. */
 export interface ChartEditing {
-  /** The line the next click on the chart places, if any. */
-  placing: LineId | null;
+  /** The line or point the next click on the chart places, if any. */
+  placing: LineId | PointId | null;
   /** A click placed a line here: save it. */
   onPlace(id: LineId, price: number): void;
   /** A dragged line is here now. Nothing is saved yet. */
@@ -21,10 +34,29 @@ export interface ChartEditing {
   onDrop(id: LineId, price: number): void;
   /** Esc: stop placing, or a dragged line went back. */
   onCancel(): void;
+  /** A click placed a point at this bar's start and a price inside the bar: save it. */
+  onPlacePoint?(id: PointId, t: number, price: number): void;
+  /** A dragged point ended here: save it. */
+  onDropPoint?(id: PointId, t: number, price: number): void;
 }
 
 /** How the placing hint names a line: "the stop", or "T2". */
-export const lineName = (id: LineId): string => (id === "stop" ? "the stop" : id.toUpperCase());
+export const lineName = (id: LineId): string =>
+  ["stop", "entry", "exit", "target"].includes(id) ? `the ${id}` : id.toUpperCase();
+
+/** The point within reach of (x, y), the closer one when both are. */
+export function nearestPoint(
+  x: number,
+  y: number,
+  points: readonly { id: PointId; x: number; y: number }[],
+): PointId | null {
+  let best: { id: PointId; distance: number } | null = null;
+  for (const point of points) {
+    const distance = Math.hypot(point.x - x, point.y - y);
+    if (distance <= GRAB_PX && (!best || distance < best.distance)) best = { id: point.id, distance };
+  }
+  return best?.id ?? null;
+}
 
 /** The line within reach of `y`, the closer one when both are. `toY` answers null for a price off the scale. */
 export function nearestLine(

@@ -11,7 +11,10 @@ export const METRICS: readonly { id: Metric; label: string }[] = [
 ];
 
 /** A row's bar under a metric; null draws no bar (no scalps, or no R). */
-export function metricValue(row: GroupStats, metric: Metric): number | null {
+/** The fields a row's bar and tooltip read; a missed-only row has no dollars. */
+type RowStats = Pick<GroupStats, "trades" | "winRate" | "avgR" | "rCount"> & { net: number | null };
+
+export function metricValue(row: RowStats, metric: Metric): number | null {
   if (row.trades === 0) return null;
   if (metric === "r") return row.avgR;
   return metric === "win" ? row.winRate : row.net;
@@ -47,10 +50,11 @@ export function holdText(minutes: number | null): string {
 const count = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
 
 /** Everything a row says at once, for a bar's tooltip: "12 scalps · +$820 · +0.62R over 10 · win 66.7%". */
-export function rowSummary(row: GroupStats): string {
+export function rowSummary(row: RowStats): string {
   if (row.trades === 0) return "no scalps";
   const r = row.avgR == null ? "no R" : `${rText(row.avgR)} over ${row.rCount}`;
-  return `${count(row.trades, "scalp", "scalps")} · ${dollars(row.net)} · ${r} · win ${winRateText(row.winRate)}`;
+  const money = row.net == null ? "no dollars" : dollars(row.net);
+  return `${count(row.trades, "scalp", "scalps")} · ${money} · ${r} · win ${winRateText(row.winRate)}`;
 }
 
 /** The backfill's state (spec §8): how many scalps it's fetching prices for, and why it couldn't. */

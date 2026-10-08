@@ -1,4 +1,4 @@
-import type { Breakdown, BreakdownRow } from "@tj/core";
+import type { Breakdown, BreakdownRow, MissedOnlyRow } from "@tj/core";
 import { dollars, profitFactorText, rText, segmentClass, winRateText } from "./format.js";
 import { MetricBars } from "./ScalpCharts.js";
 import { Section } from "./Section.js";
@@ -33,13 +33,17 @@ export function BreakdownPanel({
   rows,
   metric,
   edges,
+  note,
 }: {
   by: Breakdown;
   onBy: (by: Breakdown) => void;
-  rows: readonly BreakdownRow[];
+  /** A row only missed trades have carries blank dollars (missed-trades spec §6.8). */
+  rows: readonly (BreakdownRow | MissedOnlyRow)[];
   metric: Metric;
   /** The edit link for a bucketed dimension's edges. */
   edges?: EdgeControl;
+  /** A line under the picker, such as why missed trades aren't in a contract's breakdown. */
+  note?: string;
 }) {
   const label = DIMENSIONS.find((dimension) => dimension.id === by)?.label ?? by;
   return (
@@ -57,6 +61,7 @@ export function BreakdownPanel({
           </button>
         ))}
       </fieldset>
+      {note && <p className="mb-2 text-[10px] text-muted">{note}</p>}
       <div className="grid items-start gap-3 lg:grid-cols-[3fr_2fr]">
         <table aria-label={`By ${label}`} className="w-full border-collapse text-[11px]">
           <thead>
@@ -75,7 +80,9 @@ export function BreakdownPanel({
                 <td className="py-0.5">{row.label}</td>
                 <td className="num text-right text-muted">{row.trades}</td>
                 <td className="num text-right">{winRateText(row.winRate)}</td>
-                <td className={`num text-right ${tone(row.net)}`}>{dollars(row.net)}</td>
+                <td className={`num text-right ${tone(row.net)}`}>
+                  {row.net == null ? "—" : dollars(row.net)}
+                </td>
                 <td
                   className={`num text-right ${tone(row.avgR)}`}
                   title={`over ${row.rCount} of ${row.trades}`}

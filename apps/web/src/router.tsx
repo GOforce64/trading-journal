@@ -10,6 +10,8 @@ import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.j
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
+import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
+import { NewMissed } from "./missed/NewMissed.js";
 import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { Dashboard } from "./routes/Dashboard.js";
@@ -47,6 +49,9 @@ const rootRoute = createRootRoute({
 
 const openTrade = (id: string) => router.navigate({ to: "/trades/$id", params: { id } });
 const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id }, search: {} });
+/** The missed trade's page replaces the new-trade page, so Back skips the empty chart. */
+const openCreatedMissed = (id: string) =>
+  router.navigate({ to: "/trades/$id", params: { id }, replace: true });
 const settleTrade = (id: string) =>
   router.navigate({ to: "/trades/$id/edit", params: { id }, search: { settle: true } });
 
@@ -105,6 +110,22 @@ const newScalpRoute = createRoute({
   component: () => <NewScalp onCreated={openTrade} />,
 });
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const newMissedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missed/new",
+  validateSearch: (raw: Record<string, unknown>): { symbol: string; date: string } => ({
+    symbol: typeof raw.symbol === "string" ? raw.symbol.toUpperCase().slice(0, 12) : "",
+    date: typeof raw.date === "string" && ISO_DATE.test(raw.date) ? raw.date : "",
+  }),
+  component: function NewMissedRoute() {
+    const { symbol, date } = newMissedRoute.useSearch();
+    if (!symbol || !date) return <p className="text-muted">Pick a ticker and a date on the Missed page.</p>;
+    return <NewMissed key={`${symbol}-${date}`} symbol={symbol} date={date} onCreated={openCreatedMissed} />;
+  },
+});
+
 const newIronFlyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/iron-flies/new",
@@ -118,7 +139,15 @@ const tradeDetailRoute = createRoute({
     const { id } = tradeDetailRoute.useParams();
     // Keyed by id: Next opens the next scalp with fresh fields, not the last one's typing.
     return (
-      <TradeDetail key={id} tradeId={id} onEdit={editTrade} onSettle={settleTrade} onOpenTrade={openTrade} />
+      <TradeDetail
+        key={id}
+        tradeId={id}
+        onEdit={editTrade}
+        onSettle={settleTrade}
+        onOpenTrade={openTrade}
+        onDeleted={() => router.navigate({ to: "/missed" })}
+        onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
+      />
     );
   },
 });
@@ -163,15 +192,25 @@ const playbookRoute = createRoute({
   ),
 });
 
-/** Nav destinations whose features arrive in later plans; better than a dead link. */
-const PLACEHOLDERS = [
-  {
-    path: "/missed",
-    title: "Missed",
-    phase: "Phase 2",
-    blurb: "Setups you spotted but skipped, marked on the chart and scored in R.",
+const missedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/missed",
+  validateSearch: parseMissedSearch,
+  component: function MissedRoute() {
+    const { period } = missedRoute.useSearch();
+    return (
+      <MissedPage
+        period={period}
+        onPeriod={(next) => router.navigate({ to: "/missed", search: parseMissedSearch({ period: next }) })}
+        onOpenTrade={openTrade}
+        onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
+      />
+    );
   },
-];
+});
+
+/** Nav destinations whose features arrive in later plans; better than a dead link. */
+const PLACEHOLDERS: { path: string; title: string; phase: string; blurb: string }[] = [];
 
 const placeholderRoutes = PLACEHOLDERS.map((page) =>
   createRoute({
@@ -194,6 +233,8 @@ export const router = createRouter({
     newIronFlyRoute,
     scalpsRoute,
     newScalpRoute,
+    newMissedRoute,
+    missedRoute,
     tradeDetailRoute,
     editTradeRoute,
     importRoute,
