@@ -97,6 +97,8 @@ export function TradeCharts({
     () => intradayModel(bars, chartTrade, prefs.minutes, prefs.emaLengths),
     [bars, chartTrade, prefs.minutes, prefs.emaLengths],
   );
+  // A missed trade's chart draws its own points; the open and close marks are a taken trade's (missed-trades spec §6.4).
+  const stockModel = useMemo(() => (points ? { ...intraday, markers: [] } : intraday), [intraday, points]);
   const optionModel = useMemo(
     () => intradayModel(contractBars, chartTrade, prefs.minutes, prefs.emaLengths, { slots: true }),
     [contractBars, chartTrade, prefs.minutes, prefs.emaLengths],
@@ -139,7 +141,7 @@ export function TradeCharts({
 
   const onOption = option?.view === "option";
   const optionState = optionBarsState(optionBars.data, trade.openedAt);
-  const shown = onOption ? optionModel : intraday;
+  const shown = onOption ? optionModel : stockModel;
   // An EMA needs more history when its chart has nothing of it to draw; the stock view looks at the daily chart too.
   const hiddenEmas = shown.emas.flatMap((line, index) =>
     line.points.length === 0 ||

@@ -42,7 +42,7 @@ const NOTES: Record<string, string[]> = {
 /**
  * One missed trade on a symbol's session (missed-trades spec §8): an entry in the first 90 minutes, crowding the open,
  * stock levels like the scalps', and the exit at the first of the target, the stop or a 5–40 minute time stop. The
- * direction follows the next 30 minutes' drift 70% of the time, so most would have won.
+ * direction follows the next 30 minutes' drift 80% of the time, so most would have won.
  */
 export function planMissed(rng: Rng, symbol: string, stock: readonly PriceBar[]): MissedPlan | null {
   // Minute 0 is 09:30; the bars are the regular session's, one a minute.
@@ -51,12 +51,12 @@ export function planMissed(rng: Rng, symbol: string, stock: readonly PriceBar[])
   const ahead = stock[Math.min(entry + 30, stock.length - 1)];
   if (!start || !ahead) return null;
   const drift = ahead.c - start.c;
-  const long = drift >= 0 === chance(rng, 0.7);
+  const long = drift >= 0 === chance(rng, 0.8);
   const up = long ? 1 : -1;
   const entryPrice = cents(start.c);
   const dailyMove = symbolInfo(symbol).vol / Math.sqrt(252);
-  const stopPrice = cents(entryPrice * (1 - up * dailyMove * uniform(rng, 0.08, 0.13)));
-  const targetPrice = cents(entryPrice * (1 + up * dailyMove * uniform(rng, 0.12, 0.22)));
+  const stopPrice = cents(entryPrice * (1 - up * dailyMove * uniform(rng, 0.11, 0.17)));
+  const targetPrice = cents(entryPrice * (1 + up * dailyMove * uniform(rng, 0.12, 0.2)));
   if (stopPrice === entryPrice || targetPrice === entryPrice) return null;
 
   const maxHold = int(rng, 5, 40);

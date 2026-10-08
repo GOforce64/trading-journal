@@ -4,7 +4,7 @@ import { addDays, nyWallClock, type PriceBar } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { todayNy } from "../market.js";
 import { TradeCharts } from "./TradeCharts.js";
-import { resetLibrary, seriesOf } from "./testing.js";
+import { library, resetLibrary, seriesOf } from "./testing.js";
 
 vi.mock("lightweight-charts", async (importOriginal) => {
   const { fakeLibrary } = await import("./testing.js");
@@ -377,6 +377,15 @@ describe("TradeCharts for a missed trade", () => {
     fireEvent.click(toggle);
     expect(screen.getByRole("button", { name: "Day's trades" }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByRole("button", { name: "+ Missed" })).toBeTruthy();
+  });
+
+  it("draws only a missed trade's own points, none of a taken trade's open and close marks", async () => {
+    stub([answer(OK)]);
+    const point = { id: "entry" as const, t: nyWallClock(DAY, 575), price: 229.1, label: "Entry 229.10" };
+    renderMissed({ points: [point] });
+    expect(await screen.findByTestId("intraday-chart")).toBeTruthy();
+    const drawn = (library.markers.at(-1) ?? []) as { text: string }[];
+    expect(drawn.map((marker) => marker.text)).toEqual(["Entry 229.10"]);
   });
 
   it("says what the page asks when there are no bars", async () => {
