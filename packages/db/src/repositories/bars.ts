@@ -4,8 +4,6 @@ import type { Db } from "../client.js";
 import { barDays, bars } from "../schema.js";
 
 export type BarTimeframe = "1m" | "1d";
-/** Rows per insert: a row per statement makes a week of minute bars take seconds. 500 rows is 4,000 parameters. */
-const INSERT_ROWS = 500;
 
 /** The chart's bar cache (trade-chart spec §5). Only finished days are stored, so nothing here goes stale. */
 export function createBarsRepo(db: Db) {
@@ -44,31 +42,20 @@ export function createBarsRepo(db: Db) {
       days: readonly { date: string; bars: readonly PriceBar[] }[],
       fetchedAt: number,
     ): void {
-      db.transaction((tx) => {
+      // One prepared statement run a row at a time: building SQL for each insert made three years of bars take seconds.
+      const insertBar = db.$client.prepare(
+        "insert into bars (symbol, timeframe, t, o, h, l, c, v) values (?, ?, ?, ?, ?, ?, ?, ?) on conflict do nothing",
+      );
+      const insertDay = db.$client.prepare(
+        "insert into bar_days (symbol, timeframe, date, count, fetched_at) values (?, ?, ?, ?, ?) on conflict do nothing",
+      );
+      db.$client.transaction(() => {
         for (const day of days) {
-          for (let start = 0; start < day.bars.length; start += INSERT_ROWS) {
-            tx.insert(bars)
-              .values(
-                day.bars.slice(start, start + INSERT_ROWS).map((bar) => ({
-                  symbol,
-                  timeframe,
-                  t: bar.t,
-                  o: bar.o,
-                  h: bar.h,
-                  l: bar.l,
-                  c: bar.c,
-                  v: bar.v,
-                })),
-              )
-              .onConflictDoNothing()
-              .run();
-          }
-          tx.insert(barDays)
-            .values({ symbol, timeframe, date: day.date, count: day.bars.length, fetchedAt })
-            .onConflictDoNothing()
-            .run();
+          for (const bar of day.bars)
+            insertBar.run(symbol, timeframe, bar.t, bar.o, bar.h, bar.l, bar.c, bar.v);
+          insertDay.run(symbol, timeframe, day.date, day.bars.length, fetchedAt);
         }
-      });
+      })();
     },
   };
 }
