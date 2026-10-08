@@ -35,6 +35,7 @@ const app = createApp({
   db: openDatabase(paths.dbFile),
   webDir,
   backup: () => backupDatabase(paths.dbFile, paths.backupDir, 10, "import"),
+  mergeBackup: () => backupDatabase(paths.dbFile, paths.backupDir, 10, "merge"),
   market,
   settings: {
     dataDir: paths.dataDir,

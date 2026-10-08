@@ -10,6 +10,7 @@ import { createIbkrSync } from "./ibkr/sync.js";
 import type { MarketData } from "./marketData.js";
 import { createMoveFiller } from "./moves.js";
 import { barRoutes } from "./routes/bars.js";
+import { bundleRoutes } from "./routes/bundle.js";
 import { ibkrRoutes } from "./routes/ibkr.js";
 import { importRoutes } from "./routes/import.js";
 import { marketRoutes } from "./routes/market.js";
@@ -28,6 +29,8 @@ export interface AppDeps {
   webDir?: string;
   /** Snapshots the database before an import writes; returns the backup's path. */
   backup?: () => string;
+  /** Snapshots the database before a merge writes (export-merge spec §5); returns the backup's path. */
+  mergeBackup?: () => string;
   /** Live market data. Omitted in tests that don't need it; the app then answers as if no key were set up. */
   market?: MarketData;
   /** Where Settings saves the key, and how it tests one first. Omitted in tests that don't need it. */
@@ -63,6 +66,7 @@ export function createApp(deps: AppDeps) {
     .route("/api/setups", setups)
     .route("/api/tags", tags)
     .route("/api/import", importRoutes(deps.db, deps.backup, deps.now))
+    .route("/api/bundle", bundleRoutes(deps.db, { backup: deps.mergeBackup, now: deps.now }))
     .route("/api/moves", moveRoutes(createMoveFiller({ db: deps.db, market: deps.market, now: deps.now })))
     .route(
       "/api/ibkr",
