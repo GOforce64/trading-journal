@@ -11,7 +11,7 @@ const newSetupSchema = z.object({
 
 const newTagSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  kind: z.enum(["mistake", "emotion"]),
+  kind: z.enum(["mistake", "emotion", "skip"]),
 });
 
 /** Archived items are listed only on request: the pickers and the Playbook ask for them (scalp-review spec §6.3). */

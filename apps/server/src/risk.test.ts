@@ -139,6 +139,25 @@ function setup(
 }
 
 describe("POST /api/risk/fill", () => {
+  it("fills a missed trade's hold range, and asks for no option bars", async () => {
+    const app = setup();
+    const id = await app.create({
+      strategy: "scalp",
+      book: "missed",
+      underlying: "NVDA",
+      openedAt: OPENED,
+      closedAt: CLOSED,
+      missed: { direction: "long", entryPrice: 231, stopPrice: 230.5, targetPrice: null, exitPrice: 232.3 },
+    });
+    expect((await app.fill([id])).body).toMatchObject({ filled: 1, missing: [], optionMissing: [] });
+    expect(app.optionBars).not.toHaveBeenCalled();
+    const trade = (await app.trade(id)) as RiskView & { missedRisk: { r: number; mfe: number } | null };
+    expect(trade.scalpPrices).toMatchObject({ holdHigh: 233.21, holdLow: 230.71 });
+    expect(trade.missedRisk?.r).toBeCloseTo(2.6, 9);
+    expect(trade.missedRisk?.mfe).toBeCloseTo(4.42, 9);
+    expect((await app.fill([id])).body).toMatchObject({ filled: 0 });
+  });
+
   it("fills the stock at entry, by the second, and the hold's range; the trade then carries its R", async () => {
     const app = setup();
     const id = await app.create();
