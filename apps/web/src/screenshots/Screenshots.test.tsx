@@ -31,9 +31,14 @@ function renderPanel(shots: Shot[] = [], confirm: (text: string) => boolean = ()
 }
 
 /** A paste or drop event carrying `files`, as the browser sends it. */
-function carrying(type: "paste" | "drop", files: File[], text = "") {
+function carrying(
+  type: "paste" | "drop",
+  files: File[],
+  text = "",
+  types = files.length ? ["Files"] : ["text/plain"],
+) {
   const event = new Event(type, { bubbles: true, cancelable: true });
-  const data = { files, getData: () => text, types: files.length ? ["Files"] : ["text/plain"] };
+  const data = { files, getData: () => text, types };
   Object.defineProperty(event, type === "paste" ? "clipboardData" : "dataTransfer", { value: data });
   return event;
 }
@@ -72,6 +77,61 @@ describe("Screenshots", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("leaves an Office paste into a text field to the field, though it carries a picture of the cells", () => {
+    const fetchMock = stub();
+    renderPanel();
+    const notes = document.body.appendChild(document.createElement("textarea"));
+    notes.focus();
+    const event = carrying("paste", [png()], "AAPL\t1.25", ["text/plain", "text/html", "Files"]);
+    act(() => {
+      notes.dispatchEvent(event);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+    notes.remove();
+  });
+
+  it("keeps a dropped file of another kind from leaving the page, and says which kinds a screenshot can be", () => {
+    const fetchMock = stub();
+    renderPanel();
+    const gif = new File([new Uint8Array([71, 73, 70])], "move.gif", { type: "image/gif" });
+    const event = carrying("drop", [gif]);
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Screenshots can be PNG, JPEG or WebP.")).toBeTruthy();
+  });
+
+  it("saves a caption being typed when Esc or the backdrop closes the lightbox", async () => {
+    const fetchMock = stub(() => json({}));
+    renderPanel([shot("s1", "a")]);
+    const typeCaption = (text: string) => {
+      fireEvent.click(screen.getByRole("button", { name: "Open screenshot 1" }));
+      const caption = screen.getByRole("textbox", { name: "Caption" });
+      caption.focus();
+      fireEvent.change(caption, { target: { value: text } });
+      return caption;
+    };
+    fireEvent.keyDown(typeCaption("opening drive"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    typeCaption("failed breakout");
+    fireEvent.mouseDown(screen.getByRole("dialog"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/attachments/s1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ caption: "opening drive" }) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/attachments/s1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ caption: "failed breakout" }) }),
+    );
   });
 
   it("uploads an image dropped on the page, and says why one was refused", async () => {

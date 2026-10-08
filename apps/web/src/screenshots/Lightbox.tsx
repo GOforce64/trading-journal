@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type Shot, shotUrl } from "./Screenshots.js";
 
 /**
@@ -23,6 +23,7 @@ export function Lightbox({
   const shot = shots[index];
   const [zoomed, setZoomed] = useState(false);
   const [draft, setDraft] = useState(shot?.caption ?? "");
+  const captionInput = useRef<HTMLInputElement>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new screenshot starts fitted, with its own caption
   useEffect(() => {
@@ -30,17 +31,25 @@ export function Lightbox({
     setDraft(shot?.caption ?? "");
   }, [shot?.id]);
 
+  // Closing blurs the caption first, so one being typed is saved rather than lost with the lightbox.
+  const close = () => {
+    if (document.activeElement === captionInput.current) captionInput.current?.blur();
+    onClose();
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
       // Arrows move the caption's cursor while it's being typed in.
       if (event.target instanceof HTMLInputElement && event.key !== "Escape") return;
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
       else if (event.key === "ArrowRight" && index < shots.length - 1) onIndex(index + 1);
       else if (event.key === "ArrowLeft" && index > 0) onIndex(index - 1);
     };
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
-  }, [index, shots.length, onClose, onIndex]);
+  }, [index, shots.length, onIndex]);
 
   if (!shot) return null;
   const save = () => {
@@ -56,7 +65,7 @@ export function Lightbox({
       aria-label={`Screenshot ${index + 1} of ${shots.length}`}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-[#000000d9] p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) close();
       }}
     >
       <div className={`max-h-[80vh] max-w-[92vw] ${zoomed ? "overflow-auto" : "overflow-hidden"}`}>
@@ -75,6 +84,7 @@ export function Lightbox({
           ←
         </button>
         <input
+          ref={captionInput}
           aria-label="Caption"
           value={draft}
           placeholder="Add a caption"

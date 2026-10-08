@@ -24,9 +24,17 @@ async function refusal(res: Response, fallback: string): Promise<Error> {
   return new Error(body?.message ?? `${fallback}: ${res.status}`);
 }
 
+const UNSUPPORTED = "Screenshots can be PNG, JPEG or WebP.";
+
 /** The images among a paste's or drop's files; any other kind is left to the page. */
 const imagesIn = (files: FileList | readonly File[] | undefined | null): File[] =>
   [...(files ?? [])].filter((file) => IMAGE_TYPES.has(file.type));
+
+/** Where typed text goes: a paste there with text on the clipboard is the field's. */
+const isTextField = (target: EventTarget | null) =>
+  target instanceof HTMLInputElement ||
+  target instanceof HTMLTextAreaElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
 
 /**
  * A trade's screenshots (screenshots spec §5): thumbnails that open a lightbox, and three ways in. Paste and drop work
@@ -74,6 +82,8 @@ export function Screenshots({
 
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
+      // Cells copied from a spreadsheet bring a picture of themselves too: into a field, they paste as text.
+      if (isTextField(event.target) && event.clipboardData?.types.includes("text/plain")) return;
       const images = imagesIn(event.clipboardData?.files);
       if (images.length === 0) return;
       event.preventDefault();
@@ -83,10 +93,13 @@ export function Screenshots({
       if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
     };
     const drop = (event: DragEvent) => {
-      const images = imagesIn(event.dataTransfer?.files);
-      if (images.length === 0) return;
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      // A dropped file of any kind stays on the trade page instead of the browser opening it.
       event.preventDefault();
+      const files = [...event.dataTransfer.files];
+      const images = imagesIn(files);
       sendRef.current(images);
+      if (images.length < files.length) setError(UNSUPPORTED);
     };
     window.addEventListener("paste", paste);
     window.addEventListener("dragover", over);
