@@ -47,52 +47,57 @@ export function ChartToolbar({
     ...(showDay ? [{ toggle: "day" as const, label: "Day's trades" }] : []),
   ];
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {TIMEFRAMES.map((minutes) => (
-        <button
-          key={minutes}
-          type="button"
-          aria-pressed={prefs.minutes === minutes}
-          onClick={() => onChange({ ...prefs, minutes })}
-          className={`${BUTTON} num ${on(prefs.minutes === minutes)}`}
-        >
-          {timeframeLabel(minutes)}
+    // The timeframes and toggles wrap among themselves; Fit trade and the page's buttons stay top right.
+    <div className="flex items-start gap-1">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+        {TIMEFRAMES.map((minutes) => (
+          <button
+            key={minutes}
+            type="button"
+            aria-pressed={prefs.minutes === minutes}
+            onClick={() => onChange({ ...prefs, minutes })}
+            className={`${BUTTON} num ${on(prefs.minutes === minutes)}`}
+          >
+            {timeframeLabel(minutes)}
+          </button>
+        ))}
+        {view && (
+          <>
+            <span className="mx-1 h-4 w-px bg-line" />
+            {(["stock", "option"] as const).map((each) => (
+              <button
+                key={each}
+                type="button"
+                aria-pressed={view.current === each}
+                onClick={() => view.onChange(each)}
+                className={`${BUTTON} ${on(view.current === each)}`}
+              >
+                {each === "stock" ? "Stock" : "Option"}
+              </button>
+            ))}
+          </>
+        )}
+        <span className="mx-1 h-4 w-px bg-line" />
+        {toggles.map(({ toggle, label, title, disabled }) => (
+          <button
+            key={toggle}
+            type="button"
+            title={title}
+            disabled={disabled}
+            aria-pressed={prefs.show[toggle]}
+            onClick={() => onChange({ ...prefs, show: { ...prefs.show, [toggle]: !prefs.show[toggle] } })}
+            className={`${BUTTON} ${on(prefs.show[toggle])} disabled:opacity-40`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {extra}
+        <button type="button" onClick={onFit} className={`${BUTTON} border-line text-fg hover:border-accent`}>
+          Fit trade
         </button>
-      ))}
-      {view && (
-        <>
-          <span className="mx-1 h-4 w-px bg-line" />
-          {(["stock", "option"] as const).map((each) => (
-            <button
-              key={each}
-              type="button"
-              aria-pressed={view.current === each}
-              onClick={() => view.onChange(each)}
-              className={`${BUTTON} ${on(view.current === each)}`}
-            >
-              {each === "stock" ? "Stock" : "Option"}
-            </button>
-          ))}
-        </>
-      )}
-      <span className="mx-1 h-4 w-px bg-line" />
-      {toggles.map(({ toggle, label, title, disabled }) => (
-        <button
-          key={toggle}
-          type="button"
-          title={title}
-          disabled={disabled}
-          aria-pressed={prefs.show[toggle]}
-          onClick={() => onChange({ ...prefs, show: { ...prefs.show, [toggle]: !prefs.show[toggle] } })}
-          className={`${BUTTON} ${on(prefs.show[toggle])} disabled:opacity-40`}
-        >
-          {label}
-        </button>
-      ))}
-      <span className="ml-auto flex items-center gap-1">{extra}</span>
-      <button type="button" onClick={onFit} className={`${BUTTON} border-line text-fg hover:border-accent`}>
-        Fit trade
-      </button>
+      </div>
     </div>
   );
 }

@@ -195,6 +195,25 @@ describe("ChartToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fit trade" }));
     expect(onFit).toHaveBeenCalled();
   });
+
+  it("keeps Fit trade and the page's buttons together at the end, apart from the toggles that wrap", () => {
+    render(
+      <ChartToolbar
+        prefs={DEFAULT_PREFS}
+        onChange={vi.fn()}
+        hiddenEmas={[]}
+        onFit={vi.fn()}
+        showDay
+        extra={<button type="button">+ Missed</button>}
+      />,
+    );
+    const fit = screen.getByRole("button", { name: "Fit trade" });
+    const toggles = screen.getByRole("button", { name: "Day's trades" }).parentElement;
+    // A wrap moves the toggles' last line down; Fit trade stays top right, with the page's buttons.
+    expect(fit.parentElement).not.toBe(toggles);
+    expect(fit.parentElement).toBe(screen.getByRole("button", { name: "+ Missed" }).parentElement);
+    expect(screen.getByRole("button", { name: "3m" }).parentElement).toBe(toggles);
+  });
 });
 
 describe("IntradayChart editing the review's lines", () => {
