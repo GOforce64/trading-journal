@@ -522,7 +522,7 @@ No failure leaves half a sync behind: every database write happens in one transa
    - **A no-trade weekday** is fine: that morning's `TJ Today` was an empty `<TradeConfirms>` that still names the account, and it parses to zero fills.
    - **A weekend** is still unchecked.
 2. **Token expiry.** The paper token's lifetime isn't recorded. The error message covers expiry, and Settings could show the token's date if IBKR exposes it.
-3. **IV-after cutoff (from move data, spec §13 item 5).** Still the user's call. It's unrelated to this spec.
+3. **IV-after cutoff (from move data, spec §13 item 5).** Decided 2026-10-08: the user kept 24 h. It's unrelated to this spec.
 4. **Closing `BookTrade` rows with no notes.** The real Activity statement has 76 of them: option positions closed at $0 on 2026-07-25 and 2026-08-06, weeks before expiry, most likely paper-account adjustments. They're counted as `other` and ignored. All are before the start date, so nothing is affected today. One after the start date would leave its position open, so a later trade in that contract would join the same episode.
 
 **Live check (2026-09-28, 23:25 New York time)**, on a copy of the real journal, with the real paper token and both real queries:

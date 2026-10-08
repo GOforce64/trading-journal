@@ -1,7 +1,7 @@
 # Screenshots — Design Spec
 
 - **Date:** 2026-10-08
-- **Status:** Approved on autopilot, 2026-10-08. The user granted it overnight ("do as much as possible without asking… decide what's best"), so the decisions in §2 are mine, made for the user to revisit.
+- **Status:** Approved on autopilot, 2026-10-08. The user granted it overnight ("do as much as possible without asking… decide what's best"), so the decisions in §2 were mine. **The user confirmed them all on 2026-10-08**, including leaving removed files on disk.
 - **Scope:** parent spec §8.5 (Phase 2, item 4): screenshots on every trade's page, and their place in the export bundle.
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §5 (`attachments/<sha256>.<ext>`), §6 (the `attachments` table), §8.5 and §12.
 

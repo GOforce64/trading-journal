@@ -1,7 +1,7 @@
 # Export and Merge — Design Spec
 
 - **Date:** 2026-10-08
-- **Status:** Approved on autopilot, 2026-10-08. The user granted it before going to sleep ("do as much as possible without asking… decide what's best"), so the decisions in §2 are mine, made for the user to revisit.
+- **Status:** Approved on autopilot, 2026-10-08. The user granted it before going to sleep ("do as much as possible without asking… decide what's best"), so the decisions in §2 were mine. **The user confirmed them all on 2026-10-08**, including the whole-trade newest-wins rule.
 - **Scope:** the parent spec's §12, moving a journal between the user's two machines (Fedora and Windows). It covers:
   - **Export:** a snapshot of everything the user made or synced, as one file;
   - **Merge:** folding such a file into another machine's journal, by the parent spec's rules;

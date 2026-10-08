@@ -1,7 +1,7 @@
 # Demo data and README — Design Spec
 
 - **Date:** 2026-10-08
-- **Status:** Approved on autopilot, 2026-10-08. The user's grant covers the wrap-up ("anything to wrap up the project or get close to most goals completed… do as much as possible without asking"), so the decisions in §2 are mine, recorded for the user to revisit.
+- **Status:** Approved on autopilot, 2026-10-08. The user's grant covers the wrap-up ("anything to wrap up the project or get close to most goals completed… do as much as possible without asking"), so the decisions in §2 were mine. **The user confirmed them all on 2026-10-08.**
 - **Scope:** parent spec §13, Phase 3 items 2 (a deterministic fake-data and synthetic-bar generator) and 5 (the README with screenshots, an architecture diagram, run-it-yourself steps for Linux and Windows, and CONTRIBUTING).
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §11 (the public demo's seed data) and §13.
 
