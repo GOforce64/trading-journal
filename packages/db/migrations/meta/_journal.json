@@ -50,6 +50,13 @@
       "when": 1790778719752,
       "tag": "0006_scalp_r",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791423151085,
+      "tag": "0007_option_range",
+      "breakpoints": true
     }
   ]
 }

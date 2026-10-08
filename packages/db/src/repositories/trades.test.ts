@@ -10,7 +10,7 @@ import { type Db, openDatabase } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { scalpTargets } from "../schema.js";
 import { createTaxonomyRepo } from "./taxonomy.js";
-import { createTradesRepo, ReviewRuleError } from "./trades.js";
+import { createTradesRepo, ReviewRuleError, staleOptionRange } from "./trades.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../migrations", import.meta.url));
 
@@ -751,7 +751,15 @@ describe("the scalp review", () => {
         .map((gap) => gap.tradeId);
     expect(gaps()).toEqual([closed, open]);
     expect(repo().missingScalpPrices([open])).toEqual([
-      { tradeId: open, underlying: "NVDA", openedAt: nvda.openedAt + 60_000, closedAt: null },
+      {
+        tradeId: open,
+        underlying: "NVDA",
+        openedAt: nvda.openedAt + 60_000,
+        closedAt: null,
+        entryPrice: null,
+        holdHigh: null,
+        optionHigh: null,
+      },
     ]);
     expect(repo().missingScalpPrices([])).toEqual([]);
 
@@ -761,6 +769,13 @@ describe("the scalp review", () => {
     // A closed scalp waits for its range; an open one has what it can have.
     expect(gaps()).toEqual([closed]);
     repo().setScalpPrices(closed, { entryPrice: null, holdHigh: 233.21, holdLow: 230.71 }, 3_000);
+    // And for the option's range.
+    expect(gaps()).toEqual([closed]);
+    repo().setScalpPrices(
+      closed,
+      { entryPrice: null, holdHigh: null, holdLow: null, optionHigh: 1.37, optionLow: 0.64 },
+      4_000,
+    );
     expect(gaps()).toEqual([]);
     expect(repo().get(closed)).toMatchObject({
       editedAt: 1_000,
@@ -770,7 +785,9 @@ describe("the scalp review", () => {
         entryPrice: 230.83,
         holdHigh: 233.21,
         holdLow: 230.71,
-        fetchedAt: 3_000,
+        optionHigh: 1.37,
+        optionLow: 0.64,
+        fetchedAt: 4_000,
       },
     });
   });
@@ -809,11 +826,53 @@ describe("the scalp review", () => {
     expect(override()).toBe(230.5);
   });
 
+  it("asks for no option range before Alpaca's option history, nor of an open scalp", () => {
+    const old = repo().create({
+      ...nvda,
+      openedAt: nyWallClock("2023-12-15", 600),
+      closedAt: nyWallClock("2023-12-15", 610),
+    }).id;
+    repo().setScalpPrices(old, { entryPrice: 470, holdHigh: 471, holdLow: 469 }, 2_000);
+    const open = repo().create({ ...nvda, closedAt: null, netPnl: null }).id;
+    repo().setScalpPrices(open, { entryPrice: 230.83, holdHigh: null, holdLow: null }, 2_000);
+    expect(
+      repo()
+        .missingScalpPrices()
+        .map((gap) => gap.tradeId),
+    ).toEqual([]);
+  });
+
+  it("drops a scalp's fetched prices when its contract changes, and keeps them when its legs come back the same", () => {
+    const id = repo().create(nvda).id;
+    repo().setScalpPrices(
+      id,
+      { entryPrice: 230.83, holdHigh: 233.21, holdLow: 230.71, optionHigh: 1.37, optionLow: 0.64 },
+      2_000,
+    );
+    const [leg] = nvda.legs;
+    if (!leg) throw new Error("no leg");
+    repo().update(id, { legs: [{ ...leg }] });
+    expect(repo().get(id)?.scalpPrices?.optionHigh).toBe(1.37);
+    repo().update(id, { legs: [{ ...leg, strike: 235 }] });
+    expect(repo().get(id)?.scalpPrices).toBeNull();
+  });
+
   it("compares a premarket scalp's times by the minute, not clamped to the session as a fly's are", () => {
     const seven = nyWallClock("2026-09-28", 7 * 60);
     const id = repo().create({ ...nvda, openedAt: seven, closedAt: seven + 600_000 }).id;
     repo().setScalpPrices(id, { entryPrice: 229.1, holdHigh: 229.5, holdLow: 228.9 }, 2_000);
     repo().update(id, { openedAt: seven + 3_600_000, closedAt: seven + 4_200_000 });
     expect(repo().get(id)?.scalpPrices).toBeNull();
+  });
+});
+
+describe("staleOptionRange", () => {
+  const leg = { right: "C", strike: 232.5, expiry: "2026-09-28" };
+  it("is stale only when a strike, expiry or right changes", () => {
+    expect(staleOptionRange([leg], undefined)).toBe(false);
+    expect(staleOptionRange([leg], [{ ...leg }])).toBe(false);
+    expect(staleOptionRange([leg], [{ ...leg, strike: 235 }])).toBe(true);
+    expect(staleOptionRange([leg], [{ ...leg, expiry: "2026-10-02" }])).toBe(true);
+    expect(staleOptionRange([leg], [{ ...leg, right: "P" }])).toBe(true);
   });
 });

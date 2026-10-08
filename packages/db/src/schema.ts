@@ -160,6 +160,9 @@ export const scalpPrices = sqliteTable("scalp_prices", {
   holdHigh: real("hold_high"),
   holdLow: real("hold_low"),
   fetchedAt: integer("fetched_at").notNull(),
+  /** The contract's range over the same minutes (premium-chart spec §9.1). */
+  optionHigh: real("option_high"),
+  optionLow: real("option_low"),
 });
 
 export const tags = sqliteTable(

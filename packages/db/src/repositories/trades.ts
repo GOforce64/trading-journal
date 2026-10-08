@@ -1,6 +1,8 @@
 import {
   contractsHeld,
   type NewTrade,
+  nyWallClock,
+  OPTION_BARS_SINCE,
   round2,
   sessionMoment,
   sortTargets,
@@ -8,7 +10,7 @@ import {
   type TradePatch,
   trimProblem,
 } from "@tj/core";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { Db } from "../client.js";
 import {
   ironFlyDetails,
@@ -61,12 +63,19 @@ export interface PriceGap {
   missingExit: boolean;
 }
 
+/** Alpaca's first option bars, as an instant (premium-chart spec §3). */
+const OPTION_EPOCH = nyWallClock(OPTION_BARS_SINCE, 0);
+
 /** A scalp the price filler should look at (scalp-R spec §7). */
 export interface ScalpPriceGap {
   tradeId: string;
   underlying: string;
   openedAt: number;
   closedAt: number | null;
+  /** What's stored so far, so the filler fetches only what's missing. */
+  entryPrice: number | null;
+  holdHigh: number | null;
+  optionHigh: number | null;
 }
 
 /** The same minute reads the same bar, so only a change of minute makes a stored price stale (spec §5.4). */
@@ -125,6 +134,20 @@ export function staleScalpPrices(
     (patch.openedAt !== undefined && minuteOf(patch.openedAt) !== minuteOf(existing.openedAt)) ||
     (patch.closedAt !== undefined && minuteOf(patch.closedAt) !== minuteOf(existing.closedAt))
   );
+}
+
+/** A scalp's prices go stale with another contract: a new strike, expiry or right (premium-chart spec §9.1). */
+export function staleOptionRange(
+  existing: readonly { right: string; strike: number; expiry: string }[],
+  next: readonly { right: string; strike: number; expiry: string }[] | undefined,
+): boolean {
+  if (next === undefined) return false;
+  const contracts = (legs: readonly { right: string; strike: number; expiry: string }[]) =>
+    legs
+      .map((leg) => `${leg.right} ${leg.strike} ${leg.expiry}`)
+      .sort()
+      .join(",");
+  return contracts(existing) !== contracts(next);
 }
 
 /** A typed stock at entry goes stale with a new ticker, or an entry moved to another minute (scalp-R spec §7). */
@@ -550,7 +573,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         if (Object.keys(cleared).length > 0) {
           tx.update(ironFlyDetails).set(cleared).where(eq(ironFlyDetails.tradeId, id)).run();
         }
-        if (staleScalpPrices(existing, patch)) {
+        if (staleScalpPrices(existing, patch) || staleOptionRange(record.legs, patch.legs)) {
           tx.delete(scalpPrices).where(eq(scalpPrices.tradeId, id)).run();
         }
         // Unless the same patch types a new one.
@@ -643,7 +666,12 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       const conditions = [
         eq(trades.strategy, "scalp"),
         isNull(trades.deletedAt),
-        or(isNull(scalpPrices.entryPrice), and(isNotNull(trades.closedAt), isNull(scalpPrices.holdHigh))),
+        or(
+          isNull(scalpPrices.entryPrice),
+          and(isNotNull(trades.closedAt), isNull(scalpPrices.holdHigh)),
+          // The option's range, for contracts Alpaca has bars of (premium-chart spec §9.1).
+          and(isNotNull(trades.closedAt), gte(trades.openedAt, OPTION_EPOCH), isNull(scalpPrices.optionHigh)),
+        ),
       ];
       if (tradeIds) conditions.push(inArray(trades.id, [...tradeIds]));
       return db
@@ -652,6 +680,9 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           underlying: trades.underlying,
           openedAt: trades.openedAt,
           closedAt: trades.closedAt,
+          entryPrice: scalpPrices.entryPrice,
+          holdHigh: scalpPrices.holdHigh,
+          optionHigh: scalpPrices.optionHigh,
         })
         .from(trades)
         .leftJoin(scalpPrices, eq(scalpPrices.tradeId, trades.id))
@@ -663,7 +694,13 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
     /** Stores what the filler found, keeping what an earlier run stored. Not a user edit: no timestamp moves. */
     setScalpPrices(
       tradeId: string,
-      found: { entryPrice: number | null; holdHigh: number | null; holdLow: number | null },
+      found: {
+        entryPrice: number | null;
+        holdHigh: number | null;
+        holdLow: number | null;
+        optionHigh?: number | null;
+        optionLow?: number | null;
+      },
       fetchedAt: number,
     ): void {
       const stored = db.select().from(scalpPrices).where(eq(scalpPrices.tradeId, tradeId)).get();
@@ -672,6 +709,8 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         entryPrice: found.entryPrice ?? stored?.entryPrice ?? null,
         holdHigh: found.holdHigh ?? stored?.holdHigh ?? null,
         holdLow: found.holdLow ?? stored?.holdLow ?? null,
+        optionHigh: found.optionHigh ?? stored?.optionHigh ?? null,
+        optionLow: found.optionLow ?? stored?.optionLow ?? null,
         fetchedAt,
       };
       db.insert(scalpPrices).values(row).onConflictDoUpdate({ target: scalpPrices.tradeId, set: row }).run();
