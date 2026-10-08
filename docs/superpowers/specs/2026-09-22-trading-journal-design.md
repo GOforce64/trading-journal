@@ -312,6 +312,8 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 
 ### 8.5 Screenshots (all trades)
 
+Built: see [the screenshots spec](2026-10-08-screenshots-design.md).
+
 - Add by pasting (Ctrl+V anywhere on the trade page), drag-and-drop, or file picker. PNG, JPEG and WebP are accepted, up to 20 MB each.
 - Stored content-addressed, so the same image attached twice is stored once.
 - Lightbox with zoom and captions.
@@ -387,7 +389,7 @@ Scalps are detailed in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-a
 
 ## 12. Export, import and merge between machines
 
-Built: see [the export and merge spec](2026-10-08-export-merge-design.md). It bundles gzipped JSON rather than a zip, since attachments aren't built yet, and doesn't regroup a synced trade's fills on merge: the next sync does.
+Built: see [the export and merge spec](2026-10-08-export-merge-design.md) and, for screenshots, [the screenshots spec](2026-10-08-screenshots-design.md) §2 and §4. A `.tjbundle` is a streamed ustar archive rather than a zip: `bundle.json.gz` (the manifest and tables), then `attachments/<sha256>.<ext>`. Screenshots merge one by one like fills, not with their trade's aggregate. A merge doesn't regroup a synced trade's fills: the next sync does.
 
 - **Export** writes a full snapshot as `journal-{machine}-{timestamp}.tjbundle` (zip):
   - `manifest.json` (format version, app version, schema version, `machineId`, export time, counts);

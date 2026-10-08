@@ -2,6 +2,7 @@ export * from "./backup.js";
 export * from "./bundle.js";
 export * from "./client.js";
 export * from "./migrate.js";
+export * from "./repositories/attachments.js";
 export * from "./repositories/bars.js";
 export * from "./repositories/ibkr.js";
 export * from "./repositories/taxonomy.js";

@@ -36,6 +36,7 @@ const app = createApp({
   webDir,
   backup: () => backupDatabase(paths.dbFile, paths.backupDir, 10, "import"),
   mergeBackup: () => backupDatabase(paths.dbFile, paths.backupDir, 10, "merge"),
+  attachmentsDir: paths.attachmentsDir,
   market,
   settings: {
     dataDir: paths.dataDir,

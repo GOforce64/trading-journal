@@ -2,6 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { addFill, bundleOf, copyOf, dump, journal, scalp } from "./bundle.fixture.js";
 import { mergeBundle, readTable } from "./bundle.js";
+import { createAttachmentsRepo } from "./repositories/attachments.js";
 import { DuplicateNameError } from "./repositories/taxonomy.js";
 
 type Journal = ReturnType<typeof journal>;
@@ -14,9 +15,11 @@ type Op =
   | { kind: "tag"; pick: number; tag: number }
   | { kind: "setup"; pick: number; name: string }
   | { kind: "fill"; pick: number; fill: number; commission: number }
-  | { kind: "rename"; tag: number; name: string };
+  | { kind: "rename"; tag: number; name: string }
+  | { kind: "attach"; pick: number; image: string };
 
 const op: fc.Arbitrary<Op> = fc.oneof(
+  fc.record({ kind: fc.constant("attach" as const), pick: fc.nat(9), image: fc.constantFrom("a", "b", "c") }),
   fc.record({
     kind: fc.constant("rename" as const),
     tag: fc.nat(9),
@@ -108,6 +111,16 @@ function apply(j: Journal, ops: readonly Op[], step: number): void {
         }
         break;
       }
+      case "attach":
+        if (trade) {
+          createAttachmentsRepo(j.db, () => j.clock.now).create(trade, {
+            sha256: each.image.repeat(64),
+            ext: "png",
+            mime: "image/png",
+            bytes: 10,
+          });
+        }
+        break;
       case "fill":
         addFill(j.db, {
           id: `f${each.fill}`,

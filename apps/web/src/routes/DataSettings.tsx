@@ -8,6 +8,7 @@ export interface MergeSummary {
   kept: number;
   deleted: number;
   fillsAdded: number;
+  screenshotsAdded: number;
   setupsAdded: number;
   tagsAdded: number;
   unchanged: boolean;
@@ -33,6 +34,7 @@ export function mergeSummaryText(file: string, summary: MergeSummary): string {
   const others = (
     [
       [summary.fillsAdded, "fill", "fills"],
+      [summary.screenshotsAdded, "screenshot", "screenshots"],
       [summary.setupsAdded, "setup", "setups"],
       [summary.tagsAdded, "tag", "tags"],
     ] as const

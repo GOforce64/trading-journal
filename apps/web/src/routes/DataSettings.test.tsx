@@ -9,6 +9,7 @@ const NONE: MergeSummary = {
   kept: 0,
   deleted: 0,
   fillsAdded: 0,
+  screenshotsAdded: 0,
   setupsAdded: 0,
   tagsAdded: 0,
   unchanged: false,
@@ -51,6 +52,9 @@ describe("mergeSummaryText", () => {
     );
     expect(mergeSummaryText("f.tjbundle", { ...NONE, setupsAdded: 2, tagsAdded: 1 })).toBe(
       "Merged f.tjbundle: 2 setups added, 1 tag added.",
+    );
+    expect(mergeSummaryText("f.tjbundle", { ...NONE, screenshotsAdded: 3 })).toBe(
+      "Merged f.tjbundle: 3 screenshots added.",
     );
     expect(mergeSummaryText("f.tjbundle", { ...NONE, unchanged: true })).toBe(
       "Nothing to merge: this journal already has everything in f.tjbundle.",

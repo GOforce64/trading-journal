@@ -15,6 +15,7 @@ export const BUNDLE_TABLES = [
   "scalp_details",
   "scalp_targets",
   "trade_tags",
+  "attachments",
   "fills",
 ] as const;
 export type BundleTable = (typeof BUNDLE_TABLES)[number];
@@ -36,6 +37,15 @@ export interface Bundle {
   tables: Record<BundleTable, Row[]>;
 }
 
+/**
+ * A bundle as a merge takes it: one from an older app may lack tables added since, such as `attachments`. A trade
+ * keeps its local rows of a table the bundle doesn't have, whichever side wins it.
+ */
+export interface IncomingBundle {
+  manifest: BundleManifest;
+  tables: Partial<Record<BundleTable, Row[]>>;
+}
+
 /** Each table's key columns: a row's identity on every machine. */
 export const BUNDLE_KEYS: Record<BundleTable, readonly string[]> = {
   accounts: ["id"],
@@ -47,6 +57,7 @@ export const BUNDLE_KEYS: Record<BundleTable, readonly string[]> = {
   scalp_details: ["trade_id"],
   scalp_targets: ["trade_id", "position"],
   trade_tags: ["trade_id", "tag_id"],
+  attachments: ["id"],
   fills: ["id"],
 };
 
@@ -103,6 +114,8 @@ export interface MergeSummary {
   /** The bundle's tombstone won over a live local trade. */
   deleted: number;
   fillsAdded: number;
+  /** Live screenshots new to this journal. */
+  screenshotsAdded: number;
   setupsAdded: number;
   tagsAdded: number;
   /** Nothing was written. */
@@ -224,7 +237,11 @@ function collapse(rows: Map<string, Row>, nameOf: (row: Row) => string) {
   return { kept, moved };
 }
 
-/** A trade's children: the rest of its aggregate, which moves with it as one (export-merge spec §2). */
+/**
+ * A trade's children: the rest of its aggregate, which moves with it as one (export-merge spec §2). Fills and
+ * screenshots aren't among them: each is resolved by its own id, so one added on either machine is never lost to the
+ * other's later edit of the trade (screenshots spec §4).
+ */
 const CHILDREN = ["legs", "iron_fly_details", "scalp_details", "scalp_targets", "trade_tags"] as const;
 type Child = (typeof CHILDREN)[number];
 
@@ -238,7 +255,13 @@ function aggregates(tables: Record<BundleTable, Row[]>): Map<string, Aggregate> 
   for (const trade of tables.trades) {
     result.set(String(trade.id), {
       trade,
-      children: { legs: [], iron_fly_details: [], scalp_details: [], scalp_targets: [], trade_tags: [] },
+      children: {
+        legs: [],
+        iron_fly_details: [],
+        scalp_details: [],
+        scalp_targets: [],
+        trade_tags: [],
+      },
     });
   }
   for (const child of CHILDREN) {
@@ -252,10 +275,14 @@ function aggregates(tables: Record<BundleTable, Row[]>): Map<string, Aggregate> 
   return result;
 }
 
-/** The bundle's aggregate read through the local one: rows lacking columns, from an older app, keep the local ones. */
-function overlay(incoming: Aggregate, local: Aggregate): Aggregate {
+/**
+ * The bundle's aggregate read through the local one: rows lacking columns, from an older app, keep the local ones, and
+ * a table the bundle lacks altogether keeps the local rows.
+ */
+function overlay(incoming: Aggregate, local: Aggregate, lacking: ReadonlySet<BundleTable>): Aggregate {
   const children = Object.fromEntries(
     CHILDREN.map((child) => {
+      if (lacking.has(child)) return [child, local.children[child]];
       const mine = new Map(local.children[child].map((row) => [keyOf(child, row), row]));
       return [child, incoming.children[child].map((row) => ({ ...mine.get(keyOf(child, row)), ...row }))];
     }),
@@ -311,7 +338,7 @@ function remove(db: Db, table: BundleTable, row: Row): void {
  * from both sides at once, so A into B and B into A agree, and only what differs is written, in one transaction.
  * The bundle must already be valid: the server checks its shape and schema first.
  */
-export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
+export function mergeBundle(db: Db, bundle: IncomingBundle): MergeSummary {
   return db.$client.transaction(() => {
     const columns = Object.fromEntries(BUNDLE_TABLES.map((table) => [table, columnsOf(db, table)])) as Record<
       BundleTable,
@@ -327,6 +354,7 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
       ]),
     ) as Record<BundleTable, Row[]>;
     const mine = structuredClone(original);
+    const lacking = new Set(BUNDLE_TABLES.filter((table) => bundle.tables[table] === undefined));
 
     const accounts = resolve("accounts", mine.accounts, theirs.accounts);
     // The app's own uniqueness rules: a setup's name, a tag's kind and name, ignoring case.
@@ -354,6 +382,7 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
       kept: 0,
       deleted: 0,
       fillsAdded: 0,
+      screenshotsAdded: 0,
       setupsAdded: 0,
       tagsAdded: 0,
       unchanged: true,
@@ -368,7 +397,7 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
         if (incoming.trade.deleted_at == null) summary.added++;
         continue;
       }
-      const candidate = overlay(incoming, local);
+      const candidate = overlay(incoming, local, lacking);
       const order = compare(tradeVersion(candidate), tradeVersion(local));
       if (order === 0) continue;
       if (order < 0) {
@@ -382,10 +411,15 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
       else summary.updated++;
     }
     const fills = resolve("fills", mine.fills, theirs.fills);
+    const attachments = resolve("attachments", mine.attachments, theirs.attachments);
     const localFills = new Set(original.fills.map((row) => keyOf("fills", row)));
     summary.fillsAdded = [...fills.keys()].filter((key) => !localFills.has(key)).length;
-    // A name both sides had isn't new, whichever id it keeps.
     const live = (row: Row) => row.deleted_at == null;
+    const localShots = new Set(original.attachments.filter(live).map((row) => keyOf("attachments", row)));
+    summary.screenshotsAdded = [...attachments.entries()].filter(
+      ([key, row]) => live(row) && !localShots.has(key),
+    ).length;
+    // A name both sides had isn't new, whichever id it keeps.
     const localSetups = new Set(original.setups.filter(live).map(setupName));
     const localTags = new Set(original.tags.filter(live).map(tagName));
     summary.setupsAdded = [...setups.kept.values()].filter(
@@ -405,6 +439,7 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
       scalp_details: new Map(),
       scalp_targets: new Map(),
       trade_tags: new Map(),
+      attachments,
       fills,
     };
     for (const aggregate of final.values()) {
