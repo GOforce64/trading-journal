@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api, refusal } from "../api.js";
 import { ChartSettings } from "../chart/ChartSettings.js";
 import { Panel } from "../components/ui.js";
+import { DataSettings } from "./DataSettings.js";
 import { IbkrSettings, type IbkrView } from "./IbkrSettings.js";
 
 /** Everything that shows market data, refetched once a key changes. */
@@ -147,11 +148,7 @@ export function Settings({
         />
       )}
       <ChartSettings />
-      <Panel title="Data">
-        <p className="text-muted">
-          Data directory <span className="num text-fg">{data?.dataDir}</span>
-        </p>
-      </Panel>
+      <DataSettings dataDir={data?.dataDir} />
     </div>
   );
 }
