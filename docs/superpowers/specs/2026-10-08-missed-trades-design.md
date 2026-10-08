@@ -411,3 +411,29 @@ A whole-branch Opus review (7354758..3c7bb39) found nothing Critical and two Imp
 - The missed trade's chart toolbar wraps "Fit trade" onto a second line.
 - `/missed/new` has no Day's trades; with Missed on, "R covers all 2 scalps" counts only the taken scalps (§12).
 - The test suites leave `tj-*` temp journals in /tmp (pre-existing).
+
+---
+
+## 14. Deferred minors fixed (2026-10-09)
+
+All 16 of §13's deferred minors, each test-first, on the user's word ("fix the deferred minors on autopilot"):
+- **The panel:**
+  - a half-typed exit is forgotten once the exit is set or cleared;
+  - typing the stop, target or exit being placed ends placing it, going on from the stop to an unmarked exit as a click does;
+  - the server's reason for refusing a typed value shows under that field.
+- **The chart:**
+  - a dropped point stays where it was dropped (the save shows the missed levels and times at once);
+  - a click or drag onto another of the chart's days is refused with "Place it on Sep 30", on a missed trade and on `/missed/new`;
+  - the toolbar's timeframes and toggles wrap among themselves, with Fit trade and the page's buttons pinned top right.
+- **`/missed/new`:** a typed time off the clock ("25:00") is refused; the day's trades show faintly.
+- **The range note** names what stopped the fetch: no key, Alpaca not answering, or a failed request.
+- **The server:** a trade stays missed or taken (a PATCH can't move it across or give a missed trade P&L or another strategy), and a new trade's tags follow the one-emotion and one-skip-reason rules.
+- **Lists:** the Missed book button shows only where a list can hold missed trades (not on Scalps, its review queue or Iron Flies).
+- **The Playbook:** the Setups table counts trades taken (`tradeCount`) apart from missed ones (`missedCount`, a new Missed column).
+- **Analytics with Missed:**
+  - a row only missed trades have takes its place in its dimension's order;
+  - Missed alone draws its bars in R, with Net off;
+  - the coverage line counts the missed trades' R ("R covers all 2 scalps and 2 of 3 missed trades").
+- **Tests:** a run keeps its temp journals in a folder of its own and removes it (`scripts/vitest-tmp.ts`).
+
+Still as built (§13): no shaded hold band, and no dotted line for other missed trades on the chart.
