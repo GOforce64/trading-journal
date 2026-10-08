@@ -44,12 +44,15 @@ const named = <T extends object>(patch: T) =>
 export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
   const stamps = () => {
     const timestamp = now();
-    return { createdAt: timestamp, updatedAt: timestamp, deletedAt: null };
+    return { createdAt: timestamp, updatedAt: timestamp, deletedAt: null, mergedInto: null };
   };
 
-  /** Names are unique ignoring case, archived ones included: a setup among setups, a tag within its kind. */
+  /**
+   * Names are unique ignoring case, archived ones included: a setup among setups, a tag within its kind. One a merge
+   * folded into another (deleted) doesn't count.
+   */
   function setupNameTaken(name: string, exceptId?: string): boolean {
-    const conditions = [sql`lower(${setups.name}) = lower(${name})`];
+    const conditions = [isNull(setups.deletedAt), sql`lower(${setups.name}) = lower(${name})`];
     if (exceptId) conditions.push(ne(setups.id, exceptId));
     return (
       db
@@ -61,7 +64,11 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
   }
 
   function tagNameTaken(kind: string, name: string, exceptId?: string): boolean {
-    const conditions = [eq(tags.kind, kind), sql`lower(${tags.name}) = lower(${name})`];
+    const conditions = [
+      isNull(tags.deletedAt),
+      eq(tags.kind, kind),
+      sql`lower(${tags.name}) = lower(${name})`,
+    ];
     if (exceptId) conditions.push(ne(tags.id, exceptId));
     return (
       db
@@ -131,7 +138,9 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
       return db
         .select()
         .from(setups)
-        .where(options.includeArchived ? undefined : eq(setups.archived, false))
+        .where(
+          and(isNull(setups.deletedAt), options.includeArchived ? undefined : eq(setups.archived, false)),
+        )
         .orderBy(asc(setups.name))
         .all()
         .map((row) => ({ ...row, tradeCount: counts.get(row.id) ?? 0 }));
@@ -139,11 +148,19 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
 
     createSetup,
 
-    /** Null for an unknown setup. */
+    /** Null for an unknown setup, or one a merge folded into another. */
     updateSetup(
       id: string,
       patch: { name?: string; description?: string | null; strategy?: string | null; archived?: boolean },
     ): SetupRow | null {
+      if (
+        !db
+          .select()
+          .from(setups)
+          .where(and(eq(setups.id, id), isNull(setups.deletedAt)))
+          .get()
+      )
+        return null;
       if (patch.name !== undefined && setupNameTaken(patch.name, id)) throw setupTaken();
       db.update(setups)
         .set({ ...named(patch), updatedAt: now() })
@@ -157,7 +174,7 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
       return db
         .select()
         .from(tags)
-        .where(options.includeArchived ? undefined : eq(tags.archived, false))
+        .where(and(isNull(tags.deletedAt), options.includeArchived ? undefined : eq(tags.archived, false)))
         .orderBy(asc(tags.name))
         .all()
         .map((row) => ({ ...row, tradeCount: counts.get(row.id) ?? 0 }));
@@ -165,9 +182,13 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
 
     createTag,
 
-    /** Null for an unknown tag. A tag's kind never changes. */
+    /** Null for an unknown tag, or one a merge folded into another. A tag's kind never changes. */
     updateTag(id: string, patch: { name?: string; archived?: boolean }): TagRow | null {
-      const existing = db.select().from(tags).where(eq(tags.id, id)).get();
+      const existing = db
+        .select()
+        .from(tags)
+        .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+        .get();
       if (!existing) return null;
       if (patch.name !== undefined && tagNameTaken(existing.kind, patch.name, id))
         throw tagTaken(existing.kind);

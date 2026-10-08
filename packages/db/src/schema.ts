@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /** Columns every syncable row carries, so machines can merge later (spec §12). */
@@ -24,6 +25,8 @@ export const setups = sqliteTable("setups", {
   /** null means the setup applies to both strategies. */
   strategy: text("strategy"),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  /** A merge found it the same as this one, by name; it lives on deleted, pointing there (export-merge spec §4). */
+  mergedInto: text("merged_into"),
   ...syncColumns,
 });
 
@@ -173,9 +176,12 @@ export const tags = sqliteTable(
     /** 'mistake' | 'emotion' */
     kind: text("kind").notNull(),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+    /** A merge found it the same as this one, by name; it lives on deleted, pointing there (export-merge spec §4). */
+    mergedInto: text("merged_into"),
     ...syncColumns,
   },
-  (table) => [uniqueIndex("tags_kind_name_idx").on(table.kind, table.name)],
+  // Live tags only: one merged into another keeps its name.
+  (table) => [uniqueIndex("tags_kind_name_idx").on(table.kind, table.name).where(sql`deleted_at is null`)],
 );
 
 export const tradeTags = sqliteTable(
