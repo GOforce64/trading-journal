@@ -35,6 +35,9 @@ importers:
       '@tj/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@tj/demo':
+        specifier: workspace:*
+        version: link:../../packages/demo
       '@tj/importers':
         specifier: workspace:*
         version: link:../../packages/importers
@@ -141,6 +144,15 @@ importers:
       fast-check:
         specifier: ^4.10.2
         version: 4.10.2
+
+  packages/demo:
+    dependencies:
+      '@tj/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tj/db':
+        specifier: workspace:*
+        version: link:../db
 
   packages/importers:
     dependencies:

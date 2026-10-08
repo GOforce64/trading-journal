@@ -18,6 +18,7 @@
     "@hono/zod-validator": "^0.7.0",
     "@tj/core": "workspace:*",
     "@tj/db": "workspace:*",
+    "@tj/demo": "workspace:*",
     "@tj/importers": "workspace:*",
     "@tj/market-data": "workspace:*",
     "hono": "^4.13.8",
