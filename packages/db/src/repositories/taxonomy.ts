@@ -21,7 +21,10 @@ const DEFAULT_SETUPS = [
   { name: "VWAP reclaim", strategy: "scalp", description: "Reclaim of session VWAP after a flush" },
 ];
 
-const DEFAULT_TAGS: { name: string; kind: "mistake" | "emotion" }[] = [
+/** What a tag records: a mistake, an emotion, or why a missed trade was skipped (missed-trades spec §3). */
+export type TagKind = "mistake" | "emotion" | "skip";
+
+const DEFAULT_TAGS: { name: string; kind: TagKind }[] = [
   { name: "Moved stop", kind: "mistake" },
   { name: "FOMO entry", kind: "mistake" },
   { name: "Oversized", kind: "mistake" },
@@ -31,11 +34,25 @@ const DEFAULT_TAGS: { name: string; kind: "mistake" | "emotion" }[] = [
   { name: "Revenge", kind: "emotion" },
 ];
 
+/** Seeded once, into new and existing journals alike (missed-trades spec §3). */
+const DEFAULT_SKIPS: { name: string; kind: TagKind }[] = [
+  "Hesitated",
+  "Saw it late",
+  "Away from screen",
+  "Already in a trade",
+  "Hit daily loss limit",
+  "Didn't meet my rules",
+].map((name) => ({ name, kind: "skip" }));
+
+const TAG_TAKEN: Record<TagKind, string> = {
+  mistake: "A mistake tag with that name exists",
+  emotion: "An emotion tag with that name exists",
+  skip: "A skip reason with that name exists",
+};
+
 const setupTaken = () => new DuplicateNameError("A setup with that name exists");
 const tagTaken = (kind: string) =>
-  new DuplicateNameError(
-    kind === "emotion" ? "An emotion tag with that name exists" : "A mistake tag with that name exists",
-  );
+  new DuplicateNameError(TAG_TAKEN[kind as TagKind] ?? "A tag with that name exists");
 
 /** Only the fields a patch names. */
 const named = <T extends object>(patch: T) =>
@@ -119,7 +136,7 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
     return row;
   }
 
-  function createTag(input: { name: string; kind: "mistake" | "emotion" }): TagRow {
+  function createTag(input: { name: string; kind: TagKind }): TagRow {
     if (tagNameTaken(input.kind, input.name)) throw tagTaken(input.kind);
     const row = {
       id: crypto.randomUUID(),
@@ -204,8 +221,13 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
       if (db.select().from(setups).all().length === 0) {
         for (const setup of DEFAULT_SETUPS) createSetup(setup);
       }
-      if (db.select().from(tags).all().length === 0) {
+      // Deleted tags count, so a kind the user cleared out stays cleared.
+      const existing = db.select({ kind: tags.kind }).from(tags).all();
+      if (existing.length === 0) {
         for (const tag of DEFAULT_TAGS) createTag(tag);
+      }
+      if (!existing.some((tag) => tag.kind === "skip")) {
+        for (const tag of DEFAULT_SKIPS) createTag(tag);
       }
     },
   };

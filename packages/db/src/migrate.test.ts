@@ -46,6 +46,14 @@ describe("runMigrations", () => {
       "option_low",
     ]);
     expect(columns("trades")).toContain("reviewed_at");
+    expect(columns("missed_details")).toEqual([
+      "trade_id",
+      "direction",
+      "entry_price",
+      "stop_price",
+      "target_price",
+      "exit_price",
+    ]);
     expect(columns("attachments")).toEqual([
       "id",
       "trade_id",

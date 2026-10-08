@@ -136,6 +136,22 @@ export const scalpDetails = sqliteTable("scalp_details", {
   riskOverride: real("risk_override"),
 });
 
+/**
+ * A missed trade's levels (missed-trades spec §3): one row per missed trade. Its entry and exit times are the trade's
+ * `opened_at` and `closed_at`; the exit's time and price are set and cleared together.
+ */
+export const missedDetails = sqliteTable("missed_details", {
+  tradeId: text("trade_id")
+    .primaryKey()
+    .references(() => trades.id),
+  /** 'long' | 'short' */
+  direction: text("direction", { enum: ["long", "short"] }).notNull(),
+  entryPrice: real("entry_price").notNull(),
+  stopPrice: real("stop_price"),
+  targetPrice: real("target_price"),
+  exitPrice: real("exit_price"),
+});
+
 /** A scalp's profit targets (scalp-R spec §5), numbered from 1 in the order the trade reaches them. */
 export const scalpTargets = sqliteTable(
   "scalp_targets",

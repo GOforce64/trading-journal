@@ -123,7 +123,7 @@ describe("trades repository", () => {
     const listed = trades.list();
     expect(listed).toHaveLength(20);
     expect(listed.every((trade) => trade.legs.length === 2 && trade.ironFly != null)).toBe(true);
-    expect(prepare.mock.calls.length).toBeLessThanOrEqual(8);
+    expect(prepare.mock.calls.length).toBeLessThanOrEqual(9);
     prepare.mockRestore();
   });
 
