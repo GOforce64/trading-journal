@@ -39,6 +39,18 @@ describe("runMigrations", () => {
       "option_low",
     ]);
     expect(columns("trades")).toContain("reviewed_at");
+    expect(columns("attachments")).toEqual([
+      "id",
+      "trade_id",
+      "sha256",
+      "ext",
+      "mime",
+      "bytes",
+      "caption",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+    ]);
   });
 
   it("turns a stored target into T1 trimming the whole position, then drops the column", () => {

@@ -13,6 +13,7 @@ import {
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { Db } from "../client.js";
 import {
+  attachments,
   ironFlyDetails,
   legs,
   scalpDetails,
@@ -22,6 +23,7 @@ import {
   trades,
   tradeTags,
 } from "../schema.js";
+import type { AttachmentRow } from "./attachments.js";
 
 export type TradeRow = typeof trades.$inferSelect;
 export type LegRow = typeof legs.$inferSelect;
@@ -39,6 +41,8 @@ export interface TradeRecord extends TradeRow {
   /** The stock prices the filler fetched for a scalp (scalp-R spec §5); null until it has. */
   scalpPrices: ScalpPricesRow | null;
   tagIds: string[];
+  /** Its live screenshots, oldest first (screenshots spec §3). */
+  attachments: AttachmentRow[];
 }
 
 export interface TradeFilter {
@@ -352,8 +356,19 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           .all(),
       ),
     );
+    const shotsOf = byTrade(
+      read((ids) =>
+        conn
+          .select()
+          .from(attachments)
+          .where(and(inArray(attachments.tradeId, ids), isNull(attachments.deletedAt)))
+          .orderBy(asc(attachments.createdAt), asc(attachments.id))
+          .all(),
+      ),
+    );
     return rows.map((row) => ({
       ...row,
+      attachments: shotsOf.get(row.id) ?? [],
       legs: legsOf.get(row.id) ?? [],
       ironFly: flies.get(row.id) ?? null,
       scalp: levels.get(row.id) ?? null,

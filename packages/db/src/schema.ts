@@ -197,6 +197,28 @@ export const tradeTags = sqliteTable(
   (table) => [uniqueIndex("trade_tags_pk").on(table.tradeId, table.tagId)],
 );
 
+/**
+ * A screenshot on a trade (screenshots spec §3). The file is `attachments/<sha256>.<ext>` in the data directory, shared
+ * by every row with the same content.
+ */
+export const attachments = sqliteTable(
+  "attachments",
+  {
+    id: text("id").primaryKey(),
+    tradeId: text("trade_id")
+      .notNull()
+      .references(() => trades.id),
+    sha256: text("sha256").notNull(),
+    /** 'png' | 'jpg' | 'webp' */
+    ext: text("ext").notNull(),
+    mime: text("mime").notNull(),
+    bytes: integer("bytes").notNull(),
+    caption: text("caption"),
+    ...syncColumns,
+  },
+  (table) => [index("attachments_trade_idx").on(table.tradeId)],
+);
+
 /** One IBKR execution, expiry, exercise or assignment: a fact only the sync writes (spec §5.1). */
 export const fills = sqliteTable(
   "fills",
