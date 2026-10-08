@@ -99,12 +99,14 @@ export function planScalps(
   // The last entry leaves room for the longest hold before the close.
   const lastEntry = stock.length - 45;
   let earliest = 1;
+  // One set of bars a contract a day: a second scalp of the same contract is priced from the first's.
+  const contractBars = new Map<string, PriceBar[]>();
   for (let count = 0; count < wanted && earliest < lastEntry; count++) {
     const morning = chance(rng, 0.7) && earliest < 90;
     const entry = morning
       ? int(rng, earliest, Math.min(90, lastEntry))
       : int(rng, Math.max(earliest, 90), lastEntry);
-    const plan = planOne(rng, date, symbol, stock, entry, reviewed, info.strikeStep, info.iv);
+    const plan = planOne(rng, date, symbol, stock, entry, reviewed, info.strikeStep, info.iv, contractBars);
     plans.push(plan);
     earliest = Math.ceil((plan.closedAt - (stock[0]?.t ?? 0)) / 60_000) + 5;
   }
@@ -120,6 +122,7 @@ function planOne(
   reviewed: boolean,
   strikeStep: number,
   iv: number,
+  contractBars: Map<string, PriceBar[]>,
 ): ScalpPlan {
   const bar = (index: number) => {
     const found = stock[Math.min(index, stock.length - 1)];
@@ -130,7 +133,9 @@ function planOne(
   const drift = bar(entry + 30).c - start.c;
   const right: OptionRight = drift >= 0 === chance(rng, 0.58) ? "C" : "P";
   const contract = { right, strike: strikeFor(right, start.o, strikeStep), expiry: expiryFor(symbol, date) };
-  const options = optionBars(stock, contract, iv, rng);
+  const key = `${contract.right}${contract.strike}`;
+  const options = contractBars.get(key) ?? optionBars(stock, contract, iv, rng);
+  contractBars.set(key, options);
   const premium = (index: number) => options[Math.min(index, options.length - 1)] ?? options[0];
   const contracts = int(rng, 1, 5);
 

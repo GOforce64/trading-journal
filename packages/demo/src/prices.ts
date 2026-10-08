@@ -20,6 +20,16 @@ const MINUTE_MS = 60_000;
 /** As core's pricing counts a year. */
 const YEAR_MS = 365 * 86_400_000;
 
+/** Each date's New York midnight, worked out once: every symbol's daily bar on a date shares it. */
+const midnights = new Map<string, number>();
+function midnight(date: string): number {
+  const known = midnights.get(date);
+  if (known !== undefined) return known;
+  const at = nyWallClock(date, 0);
+  midnights.set(date, at);
+  return at;
+}
+
 export const cents = (value: number): number => Math.round(value * 100) / 100;
 
 /** The sessions from `from` through `to`, both included. */
@@ -114,7 +124,7 @@ export function dailyBar(date: string, minutes: readonly PriceBar[]): PriceBar {
   const last = minutes.at(-1);
   if (!first || !last) throw new Error(`no minutes on ${date}`);
   return {
-    t: nyWallClock(date, 0),
+    t: midnight(date),
     o: first.o,
     h: Math.max(...minutes.map((bar) => bar.h)),
     l: Math.min(...minutes.map((bar) => bar.l)),
@@ -134,7 +144,7 @@ export function syntheticDailyBar(
 ): PriceBar {
   const range = (vol / Math.sqrt(TRADING_DAYS_A_YEAR)) * Math.max(open, close);
   return {
-    t: nyWallClock(date, 0),
+    t: midnight(date),
     o: open,
     h: cents(Math.max(open, close) + range * uniform(rng, 0.05, 0.5)),
     l: cents(Math.max(0.01, Math.min(open, close) - range * uniform(rng, 0.05, 0.5))),

@@ -58,6 +58,19 @@ describe("planScalps", () => {
     }
   });
 
+  it("prices two scalps of the same contract on one day from the same bars", () => {
+    let shared = 0;
+    for (const [index, date] of tradingDays("2026-01-02", "2026-12-31").entries()) {
+      const plans = planScalps(stream(11, date), date, "SPY", stockOn(date, index), true);
+      const [first, second] = plans;
+      if (first && second && first.right === second.right && first.strike === second.strike) {
+        shared++;
+        expect(second.optionBars).toBe(first.optionBars);
+      }
+    }
+    expect(shared).toBeGreaterThan(0);
+  });
+
   it("wins about half the time, with real losers", () => {
     let wins = 0;
     let count = 0;
