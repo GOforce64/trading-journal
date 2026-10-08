@@ -105,6 +105,17 @@ describe("ibkrFlex.statement", () => {
     expect(elapsed()).toBeLessThan(150_000);
   });
 
+  it("stops at a deadline it's given, which a sync shares between its statements", async () => {
+    const replies = [
+      accepted(),
+      ...Array.from({ length: 20 }, () => refused("Warn", "1019", "In progress.")),
+    ];
+    const { client, elapsed } = fake(...replies);
+    expect((await failure(client.statement(QUERY, 30_000))).kind).toBe("slow");
+    expect(elapsed()).toBeGreaterThanOrEqual(30_000);
+    expect(elapsed()).toBeLessThan(60_000);
+  });
+
   it("counts the time IBKR takes to answer toward the two minutes", async () => {
     const replies = [
       accepted(),

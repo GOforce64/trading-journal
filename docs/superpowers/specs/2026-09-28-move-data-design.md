@@ -487,9 +487,24 @@ No failure blocks a save, and each is explained where it shows.
 
 1. **Stored times outside market hours.** Some imported trades carry open or close times outside the session (CRM "18:11 ET", PATH "07:45"), probably a timezone quirk in the oQuants import. Clamping gives a usable price, but the cause is worth checking in the importer separately.
 2. **Rate limit on the backlog.** Resolved. The live fill on 2026-09-28 made 83 sequential calls in 10.4 s, with no 429.
-3. **Half days.** The expiry moment is 16:00 even when the market closes at 13:00. The difference in T is negligible for IV, and the 16:00 clamp already reads the last bar of a half day.
+3. **Half days.** Resolved 2026-10-08. `sessionMoment` clamps to the date's own close (13:00 on a half day), and `expiryMoment` puts a half day's expiry at 13:00. The 16:00 clamp had read after-hours bars, since a half day's after-hours session trades from 13:00.
 4. **Live check, 2026-09-28** (a copy of the real journal, the real paper key):
    - The fill wrote all 83 prices (41 closed flies × 2, plus BB's entry), with none missing. BB's close on 2026-09-25 is $8.21, and the settle panel shows +$433.00.
    - M matches §3 exactly: $21.66 → $20.505, 7.3%, −5.3%, 0.73×, IV 123% → 77%. Every trade's prices match the spike.
    - The ratio buckets are `< 0.5×` 19 trades, 16 won, +$2,720; `0.5–1×` 10, 6, +$702; `1–1.5×` 7, 0, −$1,478; `1.5×+` 5, 0, −$4,218. They differ from §3 by one trade, NIO (+$410). Its stock moved exactly $0.21 on a $0.42 straddle, so its ratio is exactly 0.5 and belongs in `0.5–1×`. JavaScript computes 0.49999999999999994, which the spike counted below 0.5. The 1e-9 float-noise guard (§7.4) puts it on the right side of the edge.
 5. **IV after is blank for most flies.** 23 of the 41 closed flies were closed within 24 h of expiry, so their IV after is left blank (§7.3). The IV crush chart therefore shows 18 trades (median crush 31 pts), where the spike counted 34. PATH's IV before doesn't solve either: its stored open time is the 07:45 import quirk. A shorter cutoff would bring most trades back, but KLAR, closed 5.9 h before expiry, solved to 665%. That's the user's call.
+
+   **Analysis for the decision (2026-10-08).** The data came from a copy of the real journal, with the move data filled from Alpaca (83 prices, none missing). Every closed fly's IV after was then solved with no cutoff:
+
+   | Cutoff | Flies with IV after | Above 300% | Median IV crush |
+   |---|---|---|---|
+   | 24 h (now) | 18 | 0 | 32 pts |
+   | 12 h | 20 | 0 | 32 pts |
+   | 8 h | 21 | 0 | 32 pts |
+   | 6 h | 26 | 3 | 29 pts |
+   | 4 h | 34 | 4 | 16 pts |
+
+   - **Closes 5.6–6.3 h before expiry:** the 13 flies closed on the morning of expiry day solve to noise. KLAR reads 665%, SMR 433%, PATH 379% and SOUN 316%. Several read *above* their IV before (RGTI 192% → 214%, AA 140% → 203%), which earnings can't do.
+   - **Between 8 h and 24 h** there are only AI (220% → 41%), AS (124% → 67%) and BIDU (79% → 159%, also implausible).
+   - **Recommendation:** keep 24 h. Going to 12 h adds two flies, one of them implausible, and leaves the median where it is. Anything under 8 h pulls in the noise and halves the median crush, which would misstate it. The blank IV after is honest: for a fly closed the morning of expiry, it doesn't mean much.
+   - **Aside:** F and CLF have stored closes 69–90 h *after* their legs' expiry, likely the oQuants time quirk in item 1 or a wrong expiry. They are worth a look in the importer.

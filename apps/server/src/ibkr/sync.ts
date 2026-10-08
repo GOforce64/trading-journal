@@ -15,6 +15,11 @@ import type { IbkrConfig } from "../config.js";
 
 /** An automatic sync (on app open) runs at most this often; the button always runs. */
 export const AUTO_INTERVAL_MS = 15 * 60_000;
+/**
+ * How long a sync waits for IBKR in all, both statements together: each used to get two minutes of its own, four in
+ * all. Today's statement is usually ready in seconds; an Activity statement out of time leaves today's applied.
+ */
+export const SYNC_PATIENCE_MS = 150_000;
 
 // Unions are spelled out: the web infers these types over RPC and must be able to print them (TS2742).
 export interface SyncSummary {
@@ -161,16 +166,17 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
     }
 
     const flex = client(settings.token);
+    const until = now() + SYNC_PATIENCE_MS;
     let today: FlexStatementData;
     try {
-      today = parseFlex(await flex.statement(settings.todayQueryId));
+      today = parseFlex(await flex.statement(settings.todayQueryId, until));
     } catch (error) {
       return fail(error, last?.accountId ?? null);
     }
     let activity: FlexStatementData | null = null;
     let activityFailed = false;
     try {
-      activity = parseFlex(await flex.statement(settings.activityQueryId));
+      activity = parseFlex(await flex.statement(settings.activityQueryId, until));
     } catch (error) {
       if (error instanceof FlexError && (error.kind === "token" || error.kind === "query")) {
         return fail(error, last?.accountId ?? null);

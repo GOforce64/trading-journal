@@ -26,8 +26,11 @@ export interface FlexOptions {
 }
 
 export interface FlexClient {
-  /** The statement's XML: SendRequest, then GetStatement until it's ready (spec §6.1). */
-  statement(queryId: string): Promise<string>;
+  /**
+   * The statement's XML: SendRequest, then GetStatement until it's ready (spec §6.1). `until` is a deadline (epoch ms)
+   * a caller shares between statements; without one, the statement gets `patienceMs` of its own.
+   */
+  statement(queryId: string, until?: number): Promise<string>;
   /** SendRequest alone: proves the token and the query without waiting for a statement. */
   checkQuery(queryId: string): Promise<void>;
 }
@@ -83,11 +86,11 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
   }
 
   /**
-   * Waits 2, 4, 8, 16, then 20 s between tries, giving up once `patienceMs` have passed since it was made: the
-   * time IBKR takes to answer counts too.
+   * Waits 2, 4, 8, 16, then 20 s between tries, giving up at `until`, or once `patienceMs` have passed since it was
+   * made: the time IBKR takes to answer counts too.
    */
-  function backoff() {
-    const deadline = now() + patienceMs;
+  function backoff(until?: number) {
+    const deadline = until ?? now() + patienceMs;
     let next = 2_000;
     return async () => {
       if (now() >= deadline) throw slow();
@@ -116,9 +119,9 @@ export function ibkrFlex(token: string, options: FlexOptions = {}): FlexClient {
   }
 
   return {
-    async statement(queryId) {
+    async statement(queryId, until) {
       // One allowance for asking and collecting together.
-      const wait = backoff();
+      const wait = backoff(until);
       const reference = await sendRequest(queryId, wait);
       for (;;) {
         // IBKR needs a moment before the first GetStatement.

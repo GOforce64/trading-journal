@@ -191,7 +191,7 @@ Both machines need the same `since` to produce identical trades, and the Setting
 - **Request:** `GET https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest?t={token}&q={queryId}&v=3`, with a `User-Agent` header. It returns a `ReferenceCode` and a `Url`.
 - **Polling:** `GET https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement?t={token}&q={ReferenceCode}&v=3`, until the body is a `<FlexQueryResponse>`. The reply's `Url` is ignored. On 2026-09-29 it named `gdcdyn.interactivebrokers.com`, which has no DNS record, and every sync failed with "Couldn't reach IBKR." The host that took the request serves the same reference.
   - `ErrorCode` 1019 (still generating) and 1018 (too many requests) mean wait and retry.
-  - Waits are 2, 4, 8, 16 and then 20 s, stopping after about 120 s in total: one allowance per statement for asking and collecting together, on the clock, so the time IBKR takes to answer counts too.
+  - Waits are 2, 4, 8, 16 and then 20 s, on the clock, so the time IBKR takes to answer counts too. A sync gives its two statements one deadline, 150 s from its start (2026-10-08; each had its own 120 s before, up to four minutes in all). An Activity statement still generating at the deadline leaves Today's applied.
 - **Errors** are `FlexError(kind, message)`:
   - `token` for an expired or invalid token (codes 1012, 1015, and IBKR's other token codes, matched on the message as a fallback);
   - `query` for an unknown query;
