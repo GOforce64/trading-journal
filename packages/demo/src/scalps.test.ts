@@ -2,7 +2,7 @@ import { nyWallClock, REGULAR_OPEN, regularClose } from "@tj/core";
 import { describe, expect, it } from "vitest";
 import { minuteBars, tradingDays } from "./prices.js";
 import { mulberry32, stream } from "./random.js";
-import { expiryFor, planScalps, type ScalpPlan } from "./scalps.js";
+import { expiryFor, planScalps, SCALP_NOTES, type ScalpPlan } from "./scalps.js";
 
 const DAY = "2026-11-24";
 const stockOn = (date: string, seed: number) => minuteBars(mulberry32(seed), date, 180, 181.5, 0.45, 300_000);
@@ -69,6 +69,19 @@ describe("planScalps", () => {
       }
     }
     expect(shared).toBeGreaterThan(0);
+  });
+
+  it("writes a note that fits how the scalp went", () => {
+    let noted = 0;
+    for (const [index, date] of tradingDays("2026-01-02", "2026-06-30").entries()) {
+      for (const plan of planScalps(stream(5, date), date, "QQQ", stockOn(date, index), true)) {
+        if (!plan.notes || !plan.setup) continue;
+        noted++;
+        const notes = SCALP_NOTES[plan.setup];
+        expect(plan.netPnl > 0 ? notes?.won : notes?.lost).toContain(plan.notes);
+      }
+    }
+    expect(noted).toBeGreaterThan(20);
   });
 
   it("wins about half the time, with real losers", () => {

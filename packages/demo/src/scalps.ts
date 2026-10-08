@@ -43,23 +43,32 @@ export function expiryFor(symbol: string, date: string): string {
   return expiry;
 }
 
-const NOTES: Record<string, string[]> = {
-  "ORB breakout": [
-    "Clean break of the 5-minute range on volume; took it on the first pullback.",
-    "Opening range was tight, so the break had room to run.",
-    "Chased the break a little late; the first push was already done.",
-    "Waited for the retest of the range high before going in.",
-    "Gap and go: held the open, then broke the range.",
-    "Range break failed straight back inside; the stop did its job.",
-  ],
-  "VWAP reclaim": [
-    "Flushed below VWAP, reclaimed it on the 1-minute close, and held.",
-    "Second test of VWAP held; sized up a little.",
-    "Reclaim looked weak on volume, but it worked.",
-    "Took it before the candle closed back over VWAP: too early.",
-    "Trend day; VWAP was support all morning.",
-    "Lost VWAP again right after the entry; out at the stop.",
-  ],
+/** Notes by setup, and by how the trade went, so a winner never reads as a stop-out. */
+export const SCALP_NOTES: Record<string, { won: string[]; lost: string[] }> = {
+  "ORB breakout": {
+    won: [
+      "Clean break of the 5-minute range on volume; took it on the first pullback.",
+      "Opening range was tight, so the break had room to run.",
+      "Waited for the retest of the range high before going in.",
+    ],
+    lost: [
+      "Chased the break a little late; the first push was already done.",
+      "Range break failed straight back inside; the stop did its job.",
+      "Gap and go that didn't go: faded right after the break.",
+    ],
+  },
+  "VWAP reclaim": {
+    won: [
+      "Flushed below VWAP, reclaimed it on the 1-minute close, and held.",
+      "Second test of VWAP held; sized up a little.",
+      "Trend day; VWAP was support all morning.",
+    ],
+    lost: [
+      "Took it before the candle closed back over VWAP: too early.",
+      "Lost VWAP again right after the entry; out at the stop.",
+      "Reclaim looked weak on volume, and it was.",
+    ],
+  },
 };
 
 const WIN_GRADES: readonly (readonly [Grade, number])[] = [
@@ -229,7 +238,7 @@ function planOne(
     ),
   ];
   if (!won && chance(rng, 1 / 3)) tags.push(pick(rng, MISTAKES));
-  const notes = chance(rng, 0.5) ? pick(rng, NOTES[setup] ?? []) : null;
+  const notes = chance(rng, 0.5) ? pick(rng, SCALP_NOTES[setup]?.[won ? "won" : "lost"] ?? []) : null;
   const dropGrade = !reviewed && chance(rng, 0.5);
 
   return {

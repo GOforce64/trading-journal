@@ -1,6 +1,6 @@
 import { addDays, nyWallClock, type PriceBar } from "@tj/core";
 import { describe, expect, it } from "vitest";
-import { earningsSchedule, type FlyPlan, planFly } from "./flies.js";
+import { earningsSchedule, FLY_NOTES, type FlyPlan, planFly } from "./flies.js";
 import { minuteBars, tradingDays } from "./prices.js";
 import { mulberry32, stream } from "./random.js";
 
@@ -99,6 +99,17 @@ describe("planFly", () => {
       expect(plan.openedAt).toBeGreaterThanOrEqual(nyWallClock("2026-11-27", 12 * 60 + 40));
       expect(plan.openedAt).toBeLessThan(nyWallClock("2026-11-27", 13 * 60));
     }
+  });
+
+  it("writes a note that fits how the fly went", () => {
+    let noted = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const { plan } = flyFor(seed);
+      if (!plan.notes) continue;
+      noted++;
+      expect(plan.netPnl > 0 ? FLY_NOTES.won : FLY_NOTES.lost).toContain(plan.notes);
+    }
+    expect(noted).toBeGreaterThan(10);
   });
 
   it("wins more often than not, but not always", () => {

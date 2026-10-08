@@ -109,14 +109,19 @@ export interface FlyPlan {
   notes: string | null;
 }
 
-const NOTES = [
-  "IV was rich into the print; sold the body at the money.",
-  "Move came in inside the wings; IV crush did the rest.",
-  "Gapped through the short strike; the wing capped the damage.",
-  "Closed in the first hour after the open, as planned.",
-  "Small credit for the risk; should have passed on this one.",
-  "Clean crush: the stock barely moved.",
-];
+/** Notes by how the fly went, so a winner never reads as a loss. */
+export const FLY_NOTES = {
+  won: [
+    "IV was rich into the print; sold the body at the money.",
+    "Move came in inside the wings; IV crush did the rest.",
+    "Clean crush: the stock barely moved.",
+  ],
+  lost: [
+    "Gapped through the short strike; the wing capped the damage.",
+    "Small credit for the risk; should have passed on this one.",
+    "The move beat the implied; the crush wasn't enough.",
+  ],
+};
 
 /** The minute bar at or after `at`, or the last one. */
 function barAt(bars: readonly PriceBar[], at: number): PriceBar {
@@ -212,6 +217,6 @@ export function planFly(
           ],
     ),
     tags: [won ? "Calm" : pick(rng, ["Calm", "Rushed"])],
-    notes: chance(rng, 0.5) ? pick(rng, NOTES) : null,
+    notes: chance(rng, 0.5) ? pick(rng, won ? FLY_NOTES.won : FLY_NOTES.lost) : null,
   };
 }
