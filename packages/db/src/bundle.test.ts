@@ -244,10 +244,10 @@ describe("mergeBundle", () => {
     expect(readTable(a.db, "setups").filter((row) => row.deleted_at == null)).toEqual([
       expect.objectContaining({ id: keptSetup, name: "breakout", archived: 1 }),
     ]);
-    expect(readTable(a.db, "setups").find((row) => row.id === lost(keptSetup))).toMatchObject({
-      merged_into: keptSetup,
-      deleted_at: 7_000,
-    });
+    // Stamped with its own last write: B archived it at 7,000; A's copy was last written at 1,000.
+    const tombstone = readTable(a.db, "setups").find((row) => row.id === lost(keptSetup));
+    expect(tombstone).toMatchObject({ merged_into: keptSetup });
+    expect(tombstone?.deleted_at).toBe(tombstone?.updated_at);
     expect(
       readTable(a.db, "tags")
         .filter((row) => row.deleted_at == null)
@@ -379,5 +379,58 @@ describe("mergeBundle and tags merged into one", () => {
     const kept = a.taxonomy.listTags().find((tag) => tag.kind === "mistake" && tag.name === "Rushed");
     a.taxonomy.updateTag(kept?.id ?? "", { name: "Hasty" });
     expect(() => a.taxonomy.createTag({ name: "Rushed", kind: "mistake" })).not.toThrow();
+  });
+});
+
+describe("mergeBundle and tags merged into one, after the tombstone review", () => {
+  /** Two machines sharing two emotion tags, the smaller id first. */
+  function sharedTags() {
+    const base = journal(1_000);
+    const one = base.taxonomy.createTag({ name: "Calm", kind: "emotion" });
+    const two = base.taxonomy.createTag({ name: "Rushed", kind: "emotion" });
+    const [small, large] = [one.id, two.id].sort();
+    if (!small || !large) throw new Error("no tags");
+    return { base, small, large };
+  }
+  const live = (j: ReturnType<typeof journal>) =>
+    readTable(j.db, "tags")
+      .filter((row) => row.deleted_at == null)
+      .map((row) => [row.id, row.name]);
+
+  it("lets a tombstone win a tie with a stale live copy, so nothing comes back", () => {
+    const { base, small, large } = sharedTags();
+    const a = copyOf(base, 10_014);
+    const b = copyOf(base, 10_007);
+    b.taxonomy.updateTag(small, { name: "Zeta" });
+    b.clock.now = 10_014;
+    b.taxonomy.updateTag(large, { name: "Alpha" });
+    a.taxonomy.updateTag(large, { name: "Zeta" });
+    const fromA = bundleOf(a.db);
+    const fromB = bundleOf(b.db);
+    mergeBundle(a.db, fromB);
+    mergeBundle(b.db, fromA);
+    expect(dump(a.db)).toEqual(dump(b.db));
+    expect(mergeBundle(a.db, fromB).unchanged).toBe(true);
+    expect(mergeBundle(b.db, fromA).unchanged).toBe(true);
+    expect(dump(a.db)).toEqual(dump(b.db));
+  });
+
+  it("keeps a rename made after an older bundle, when that bundle merged the tag away elsewhere", () => {
+    const { base, small, large } = sharedTags();
+    const a = copyOf(base, 2_100);
+    const b = copyOf(base, 2_300);
+    a.taxonomy.updateTag(large, { name: "Zeta" });
+    const older = bundleOf(a.db);
+    a.clock.now = 2_200;
+    a.taxonomy.updateTag(large, { name: "Calm2" });
+    b.taxonomy.updateTag(small, { name: "Zeta" });
+    mergeBundle(b.db, older);
+    mergeBundle(a.db, bundleOf(b.db));
+    expect(live(a)).toEqual(
+      expect.arrayContaining([
+        [large, "Calm2"],
+        [small, "Zeta"],
+      ]),
+    );
   });
 });

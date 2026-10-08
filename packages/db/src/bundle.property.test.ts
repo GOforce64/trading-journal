@@ -187,7 +187,31 @@ describe("mergeBundle's guarantees (export-merge spec §4)", () => {
 
           const settled = dump(a.db);
           expect(mergeBundle(a.db, fromB).unchanged).toBe(true);
+          expect(mergeBundle(b.db, fromA).unchanged).toBe(true);
           expect(dump(a.db)).toEqual(settled);
+          // Every reference ends on a live setup or tag, and every merged-away one points at a live one.
+          const liveIds = (table: "setups" | "tags") =>
+            new Set(
+              readTable(a.db, table)
+                .filter((row) => row.deleted_at == null)
+                .map((row) => row.id),
+            );
+          const setupIds = liveIds("setups");
+          const tagIds = liveIds("tags");
+          for (const row of readTable(a.db, "trades"))
+            if (row.setup_id != null) expect(setupIds).toContain(row.setup_id);
+          for (const row of readTable(a.db, "trade_tags")) expect(tagIds).toContain(row.tag_id);
+          for (const table of ["setups", "tags"] as const) {
+            const ids = liveIds(table);
+            const into = new Map(readTable(a.db, table).map((row) => [row.id, row.merged_into]));
+            for (const row of readTable(a.db, table)) {
+              // A chain (merged into one later merged on) still ends on a live row.
+              let target = row.merged_into;
+              for (let hops = 0; target != null && !ids.has(target) && hops < 10; hops++)
+                target = into.get(target) ?? null;
+              if (row.merged_into != null) expect(ids).toContain(target);
+            }
+          }
 
           expect(new Set(readTable(a.db, "trades").map((row) => row.id))).toEqual(tradeIds);
           expect(new Set(readTable(a.db, "fills").map((row) => row.id))).toEqual(fillIds);

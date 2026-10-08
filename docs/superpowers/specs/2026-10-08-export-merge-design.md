@@ -84,7 +84,9 @@ Everything runs in one transaction, in this order:
    - Resolve each id across both sides: the newer `updated_at` wins, then the canonical JSON.
    - Then group the results by name (§2). A group of several ids keeps the smallest, with the fields of the group's newest row.
    - Every reference on both sides, `trades.setup_id` and `trade_tags.tag_id`, moves to the kept id before trades are compared.
-   - **A row that loses its id stays on as a tombstone** (2026-10-08, migration 0008). It is deleted, with `merged_into` naming the kept id and the group's newest time.
+   - **A row that loses its id stays on as a tombstone** (2026-10-08, migration 0008). It is deleted, with `merged_into` naming the kept id, and stamped with its own last write.
+     - For setups, tags, accounts and fills, a deletion beats a live copy written at the same moment, so a tombstone always beats a stale copy of itself.
+     - A genuinely later edit to it on another machine still brings it back, and if its name still collides, it's merged away again.
      - A stale copy of it in an older bundle then loses to the tombstone instead of coming back as a separate tag, which had broken idempotence.
      - A reference to it follows `merged_into` to the kept row.
      - The setups and tags lists, and the name checks, skip tombstones, and the tags' (kind, name) unique index covers live rows only.
@@ -189,6 +191,11 @@ Under the data directory line:
   - **A changed tag is deleted and re-inserted,** not updated in place. Otherwise a tag renamed into a name another tag just freed, or two tags swapping names, failed on the (kind, name) index.
   - **A bundle's child rows keep the local columns they lack,** as the trade row already did. An older bundle then settles to "Nothing to merge".
   - **Columns a machine fills in** (a fly's fetched stock prices; a fill's trade and leg) take a value from either side over none. Writing them moves no timestamp, so a copy without them could win a tie.
+- **Deferred minors from the tombstone review (PR #17):**
+  - a trade write still accepts a merged-away setup or tag id. A second tab holding old lists could attach one, and it shows "—" until the next merge;
+  - references moved during a merge aren't deliberately given back if the merged-away row comes back;
+  - a hand-made bundle whose `merged_into` dangles fails the merge at commit;
+  - the property test has no setup rename or archive operation.
 - **Deferred minors from the final review:**
   - a bundle with broken references answers an opaque 500 after its backup;
   - a merge that changes nothing still takes a backup;

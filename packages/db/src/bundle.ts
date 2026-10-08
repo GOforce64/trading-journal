@@ -127,8 +127,15 @@ function compare(a: Version, b: Version): number {
 
 const keyOf = (table: BundleTable, row: Row) =>
   BUNDLE_KEYS[table].map((column) => String(row[column])).join("\u0000");
-/** Any row but a trade: its last write, then its content (export-merge spec §2). */
-const rowVersion = (row: Row): Version => [stamp(row.updated_at), canonical(row)];
+/**
+ * Any row but a trade: its last write, then a deletion over a live copy written at the same moment, then its content
+ * (export-merge spec §2). Without the middle step, a tombstone could lose a tie to a stale live copy of itself.
+ */
+const rowVersion = (row: Row): Version => [
+  stamp(row.updated_at),
+  row.deleted_at != null ? 1 : 0,
+  canonical(row),
+];
 
 /** The local journal's own columns, which a bundle's rows are read through. */
 function columnsOf(db: Db, table: BundleTable): string[] {
@@ -197,12 +204,8 @@ function collapse(rows: Map<string, Row>, nameOf: (row: Row) => string) {
     kept.set(id, { ...newest, id, merged_into: null });
     for (const row of group) {
       if (row.id === id) continue;
-      kept.set(String(row.id), {
-        ...row,
-        merged_into: id,
-        deleted_at: newest.updated_at ?? null,
-        updated_at: newest.updated_at ?? null,
-      });
+      // Stamped with its own last write, so a later edit to it elsewhere still wins and brings it back.
+      kept.set(String(row.id), { ...row, merged_into: id, deleted_at: row.updated_at ?? null });
     }
   }
   // Every id that was merged away, followed to the live row it ended up in.
