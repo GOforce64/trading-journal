@@ -208,10 +208,10 @@ missedRisk(trade, live?: { direction?, entry?, stop?, target?, exit? }): MissedR
   - A point is drawn as a hollow circle at its price, with its label ("Entry 178.42").
   - `editing.placing` can name a point: a click places it at the bar under the pointer, its time snapped to that bar's start and its price snapped into the bar's range (`snapToBar`).
   - Pressing within `GRAB_PX` of a point drags it in both time and price, snapping the same way. It saves on release, and Esc puts it back.
-  - The entry and exit are joined by a dotted line, and the hold is shaded.
+  - The entry and exit are joined by a dotted line. (Built without the shaded hold: see §13.)
 - **Context markers** (the day's trades):
   - **Taken scalps:** a dimmed arrow at each one's entry and exit (`opened_at`, `closed_at`, from its single leg, as `tradeMarks` does without fills).
-  - **Other missed trades:** dimmed hollow circles at their entry and exit, with a dotted line and a label ("Missed short −0.62R").
+  - **Other missed trades:** dimmed hollow circles at their entry and exit, with a label ("Missed short −0.62R"). (Built without their dotted line: see §13.)
   - **Hover** shows a tooltip:
     - for a taken scalp, "Taken · NVDA 180C · Live / 10:04 → 10:16 · 3 contracts / +$186.40 · +1.62R / Click to open";
     - for a missed trade, "Missed · Short / 10:52 → 11:06 / −0.62R / Click to open".
@@ -382,3 +382,32 @@ On a `.backup()` copy of the real journal (42 iron flies, no scalps), with the r
 **Left as minors:**
 - The new missed trade's page has no Day's trades, so the taken scalps only show after the first click.
 - With Missed on, the Scalps tab's "R covers all 2 scalps" counts only the taken scalps, beside a Scalps KPI of 4.
+
+---
+
+## 13. Final review (2026-10-08)
+
+A whole-branch Opus review (7354758..3c7bb39) found nothing Critical and two Important issues. Two of its minors were raised to the fix pass for their effect. All four were fixed test-first:
+- **The Missed tab with the Book filter on Missed alone** read Took 0% and empty taken columns: it took the taken side from the Book-filtered trades. It now filters all trades itself, keeping the filter's Live and Paper, or both when neither is on (§6.6, §6.8).
+- **A deleted missed trade lingered** in the Missed list, Analytics and other charts' day's trades for the 10-second stale time, and opening it again edited a deleted trade. The delete now drops the trade's cache and refreshes the lists; a failed delete says "Couldn't delete" and stays.
+- **The Missed page's period** reset to Last 30 days on every Back from a trade. It's now in the URL (`?period=90|365|all`).
+- **A point clicked on a sub-cent high or low** (Alpaca's IEX bars carry 237.2505) was stored rounded and then called "outside" its own minute. The range is now judged in cents, as it's shown.
+
+**Built differently from §6.4** (the Task 8 rulings): no shaded hold band (the dotted entry–exit line marks the hold), and other missed trades on the chart have no dotted line of their own.
+
+**Deferred minors:**
+- A stale exit-time draft can be saved: after × clears the exit, typing only an exit price saves it with the old time.
+- Typing a level while it's being placed doesn't end placing, so the next chart click re-places it.
+- A dropped point briefly jumps back until the refetch arrives.
+- With Missed on, a breakdown label only missed trades have is appended after the others, out of its dimension's order.
+- Missed alone on the Scalps tab with the default Net metric draws flat $0 time-of-day and hold bars.
+- The range note can say "Add an Alpaca key" when Alpaca is unreachable rather than unset.
+- The server lets PATCH flip a trade between missed and taken, and POST skips the one-skip-reason check; the UI does neither.
+- The new missed trade's typed time isn't range-checked ("25:00" lands on the next day).
+- 400 messages show at the panel's foot, not under the field.
+- The Scalps page still shows a Missed book button, which lists nothing there.
+- Dragging an exit-less missed trade's entry onto an earlier day of the chart's warm-up, or clicking one on `/missed/new`, moves the trade to that day.
+- The Playbook's Setups table "Trades" count includes missed trades.
+- The missed trade's chart toolbar wraps "Fit trade" onto a second line.
+- `/missed/new` has no Day's trades; with Missed on, "R covers all 2 scalps" counts only the taken scalps (§12).
+- The test suites leave `tj-*` temp journals in /tmp (pre-existing).
