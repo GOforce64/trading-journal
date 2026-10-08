@@ -200,8 +200,9 @@ describe("sessionMoment", () => {
     expect(sessionMoment(ny("2026-09-09 23:30"))).toBe(ny("2026-09-09 16:00"));
   });
 
-  it("uses 16:00 on a half day too, where the bars simply stop earlier", () => {
-    expect(sessionMoment(ny("2026-11-27 17:30", "-05:00"))).toBe(ny("2026-11-27 16:00", "-05:00"));
+  it("stops at 13:00 on a half day, before the after-hours trades", () => {
+    expect(sessionMoment(ny("2026-11-27 17:30", "-05:00"))).toBe(ny("2026-11-27 13:00", "-05:00"));
+    expect(sessionMoment(ny("2026-11-27 12:15", "-05:00"))).toBe(ny("2026-11-27 12:15", "-05:00"));
   });
 });
 
@@ -209,5 +210,9 @@ describe("expiryMoment", () => {
   it("puts expiry at 16:00 New York, in summer and in winter", () => {
     expect(expiryMoment("2026-09-11")).toBe(Date.UTC(2026, 8, 11, 20, 0));
     expect(expiryMoment("2026-12-18")).toBe(Date.UTC(2026, 11, 18, 21, 0));
+  });
+
+  it("puts a half day's expiry at its 13:00 close", () => {
+    expect(expiryMoment("2026-11-27")).toBe(Date.UTC(2026, 10, 27, 18, 0));
   });
 });

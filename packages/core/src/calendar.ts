@@ -199,16 +199,17 @@ export function nyWallClock(date: string, minuteOfDay: number): number {
 
 /** 09:31: the first minute bar, stamped 09:30, has closed. */
 const FIRST_BAR_CLOSE = 9 * 60 + 31;
-const MARKET_CLOSE = 16 * 60;
 
 /**
- * The moment whose stock price stands for `at`: its New York minute, clamped into 09:31–16:00 on its
- * own date. Some stored times fall outside market hours (spec §2), and the seconds are dropped.
+ * The moment whose stock price stands for `at`: its New York minute, clamped into 09:31 to its own date's close
+ * (16:00, or 13:00 on a half day, before the after-hours trades). Some stored times fall outside market hours
+ * (spec §2), and the seconds are dropped.
  */
 export function sessionMoment(at: number): number {
-  const minute = Math.min(Math.max(nyMinuteOfDay(at), FIRST_BAR_CLOSE), MARKET_CLOSE);
-  return nyWallClock(nyDate(at), minute);
+  const date = nyDate(at);
+  const minute = Math.min(Math.max(nyMinuteOfDay(at), FIRST_BAR_CLOSE), regularClose(date));
+  return nyWallClock(date, minute);
 }
 
-/** Options expire at 16:00 New York on their expiry date. */
-export const expiryMoment = (expiry: string): number => nyWallClock(expiry, MARKET_CLOSE);
+/** Options expire at the close New York time on their expiry date: 16:00, or 13:00 on a half day. */
+export const expiryMoment = (expiry: string): number => nyWallClock(expiry, regularClose(expiry));

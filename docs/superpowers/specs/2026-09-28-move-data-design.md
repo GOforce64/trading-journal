@@ -487,7 +487,7 @@ No failure blocks a save, and each is explained where it shows.
 
 1. **Stored times outside market hours.** Some imported trades carry open or close times outside the session (CRM "18:11 ET", PATH "07:45"), probably a timezone quirk in the oQuants import. Clamping gives a usable price, but the cause is worth checking in the importer separately.
 2. **Rate limit on the backlog.** Resolved. The live fill on 2026-09-28 made 83 sequential calls in 10.4 s, with no 429.
-3. **Half days.** The expiry moment is 16:00 even when the market closes at 13:00. The difference in T is negligible for IV, and the 16:00 clamp already reads the last bar of a half day.
+3. **Half days.** Resolved 2026-10-08. `sessionMoment` clamps to the date's own close (13:00 on a half day), and `expiryMoment` puts a half day's expiry at 13:00. The 16:00 clamp had read after-hours bars, since a half day's after-hours session trades from 13:00.
 4. **Live check, 2026-09-28** (a copy of the real journal, the real paper key):
    - The fill wrote all 83 prices (41 closed flies × 2, plus BB's entry), with none missing. BB's close on 2026-09-25 is $8.21, and the settle panel shows +$433.00.
    - M matches §3 exactly: $21.66 → $20.505, 7.3%, −5.3%, 0.73×, IV 123% → 77%. Every trade's prices match the spike.
