@@ -244,7 +244,7 @@ Decided with the user on 2026-09-29, and designed in the next spec:
 
 ## 13. Open items
 
-1. **Option-premium chart:** Alpaca's option bars on the free plan, for when stops move to premium.
+1. **Option-premium chart:** Alpaca's option bars on the free plan, for when stops move to premium. Built: see [the option premium chart spec](2026-10-08-option-premium-chart-design.md).
 2. **Index underlyings:** chart SPX, NDX and RUT through SPY, QQQ and IWM, labelled as a proxy, if the user trades index options.
 
 ### Live check (2026-09-29)

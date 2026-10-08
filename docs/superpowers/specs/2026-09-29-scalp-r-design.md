@@ -245,8 +245,8 @@ It sits under the scalp tiles.
 | Planned risk | $104.05 | "option 1.06 → 0.54 at the stop". Or "estimated without IV", or "typed". |
 | R | +0.43R | "+$44.74 ÷ $104.05". An open trade reads "open". |
 | R:R planned | 2.8 | "reward $288.61 over 2 targets", plus "· 1 runner at T2" when there is one |
-| MAE | −0.12 | "−0.06R · stock low 230.71" |
-| MFE | +2.38 | "+1.30R · stock high 233.21" |
+| MAE | −0.12 | "−0.06R · stock low 230.71". On premium, from the option's range: "−0.33R · option low 0.78" ([option premium chart spec](2026-10-08-option-premium-chart-design.md) §9). |
+| MFE | +2.38 | "+1.30R · stock high 233.21". On premium: "+4.07R · option high 1.97". |
 | Model | IV 70.4% | "stock 230.83 · 6 h 29 min left". Or "stock typed", or "no IV" on premium. |
 
 - **The tiles read the server's `risk`**, which is what's saved. The strip's live line (§9.2) reads the page's, so it follows a drag.

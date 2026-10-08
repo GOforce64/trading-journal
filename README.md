@@ -55,11 +55,13 @@ requests that don't come from `localhost`.
   many orders its legs took.
 - **Scalps** — synced from IBKR (Flex Web Service) from a start date you choose, or
   typed in, with every fill kept; reviewed on the trade page with the chart: drag the stop
-  and target on the chart (or type them as option premium), pick a setup, mistakes, an
+  and targets on the stock's chart or, switched to Option, on the contract's own 1-minute
+  candles with your fills at their prices; pick a setup, mistakes, an
   emotion and a grade, and work through a To review queue; setups and tags live on the
   Playbook page, with a stat card per setup. Each scalp gets its R: the stop repriced by
   Black-Scholes into dollars at risk, several targets with trims, R, R:R, MAE/MFE, its
-  return on the premium paid, and Avg R on the Dashboard. The chart of the session:
+  return on the premium paid, and Avg R on the Dashboard (MAE/MFE from the option's own
+  range when the levels are on premium). The chart of the session:
   3-minute candles (1m to 1h), with a daily chart beside it, your fills marked, EMAs,
   VWAP, and premarket and prior-day levels, from Alpaca's free data.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
@@ -69,7 +71,7 @@ requests that don't come from `localhost`.
 - **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
   dollar statistics.
 
-Missed trades and an option-premium chart arrive in later steps; see
+Missed trades arrive in a later step; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
 [the plans](docs/superpowers/plans/).
 
@@ -80,6 +82,9 @@ Missed trades and an option-premium chart arrive in later steps; see
   loss at the stop somewhat larger.
 - **Alpaca's free data runs 15 minutes behind**, so a scalp's stock prices and today's
   chart fill in 16 minutes after the fact. Index symbols such as SPX have no bars.
+- **Option bars** come from Alpaca's free plan: regular hours only, from Jan 18, 2024, and
+  sparse on thin strikes. Today's run 16 minutes behind after hours, and possibly up to 80
+  during the session, when Alpaca refuses the shorter delay.
 - **Charts use raw prices**, not split-adjusted ones, to match your fills. A split inside
   the daily chart's three years steps its candles, and bends the daily EMAs for months.
 

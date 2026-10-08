@@ -36,7 +36,7 @@ Scalp R gave each scalp its R. This part answers what the R is *for*: which scal
 - **CSV export**, and the rest of the parent spec's global filter bar (strategy, account and tag filters).
 - **Mistake as a breakdown dimension.** Mistake cost covers it.
 - **Comparing periods,** such as this month against last.
-- **R for flies,** and MAE/MFE in R on the premium basis, which comes with the option-premium chart.
+- **R for flies.** (MAE/MFE in R on the premium basis came with [the option premium chart](2026-10-08-option-premium-chart-design.md), on the trade page.)
 
 ---
 

@@ -192,7 +192,7 @@ Along the bottom: **Exclude from stats** on the left; **Done reviewing** on the 
   - stop: red (`#ef5350`), dashed, labelled **STOP**;
   - each target: green (`#26a69a`), dashed, labelled **T1 ×1**, **T2 ×1** (scalp R spec §9.3);
   - both show their price on the price axis.
-- **Premium basis:** no lines. Under the fields: "Premium levels aren't drawn yet: there's no option chart."
+- **Premium basis:** drawn, placed and dragged on the Option view of the intraday chart ([option premium chart spec](2026-10-08-option-premium-chart-design.md) §7). Without option bars, the levels are typed, and the strip says why.
 - Without a chart (no key, an index, Alpaca down), the fields still work.
 
 ### 8.2 Placing
@@ -373,7 +373,7 @@ Built in [2026-09-29-scalp-r-design.md](2026-09-29-scalp-r-design.md).
 
 ## 16. Open items
 
-1. **An option-premium chart** (chart spec §13, item 1), so premium levels can be drawn and dragged too. Its own spec, after this one and before R. Probed on 2026-09-29 with the user's key:
+1. **An option-premium chart** (chart spec §13, item 1), built in [the option premium chart spec](2026-10-08-option-premium-chart-design.md), so premium levels can be drawn and dragged too. Its own spec, after this one and before R. Probed on 2026-09-29 with the user's key:
    - **The free plan serves historical 1-minute option bars** (`/v1beta1/options/bars`). NVDA 232.5C Sep 28: 387 of 390 regular-session minutes, in 1.6 s. The 09:31 bar (0.97–1.53) holds the 1.06 buy, and the 09:46 bar (1.10–1.32) holds the last sell.
    - **Regular hours only:** 09:30–16:00 (SPY to 16:15), so no premarket candles.
    - **Thin strikes are sparse:** the far out-of-the-money 245C had bars in 79 of 390 minutes.

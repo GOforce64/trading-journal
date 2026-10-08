@@ -1,7 +1,7 @@
 # Option Premium Chart — Design Spec
 
 - **Date:** 2026-10-08
-- **Status:** Approved 2026-10-08. Plan: [2026-10-08-option-premium-chart.md](../plans/2026-10-08-option-premium-chart.md).
+- **Status:** Approved 2026-10-08; implemented on feat/premium-chart. Plan: [2026-10-08-option-premium-chart.md](../plans/2026-10-08-option-premium-chart.md), whose deviations are in §12.
 - **Scope:** the option-premium chart that scalp review and the trade chart deferred. It covers:
   - Alpaca's 1-minute **option bars**, cached like stock bars and served by a new route;
   - a **Stock | Option** switch on a scalp's intraday chart, with the contract's candles, fills at their prices, and the toolbar's overlays;
@@ -272,3 +272,26 @@ For each gap, after the stock prices (which are unchanged):
 - **Scalp-review spec §8:** premium levels are drawn and dragged on the Option view.
 - **Scalp-R spec §9.1:** MAE and MFE follow the basis; on Premium they come from the option's range.
 - **Scalp-analytics spec §1, out of scope:** "MAE/MFE in R on the premium basis" now lives here, on the trade page.
+
+---
+
+## 12. Deviations from the plan
+
+- **A refused option code is quoted.** Alpaca answers `invalid symbol: "SPXW1" does not match …`, which the stock pattern `INVALID_SYMBOL` (an unquoted capture, for the quotes batch retry) doesn't read. So the bar history matches `invalid symbol: ` instead.
+- **A Premium scalp from before Jan 18, 2024** reads "Alpaca's option bars start on Jan 18, 2024" under MAE and MFE, not "fetching" for ever. Before any fill has answered, the option note reads "fetching the option's range…", as the stock's does.
+- **The analytics backfill** reads "Fetching prices for N scalps…", no longer "stock prices", since it fetches option ranges too.
+- **A scalp whose stock has no Alpaca bars**, such as an index, still shows the stock chart's message in place of both views, with no switch. Alpaca has no bars for index options either.
+
+## 13. Live check (2026-10-08)
+
+On a copy of the real journal with the user's key, through a stand-in server, after hours (01:00–02:00 UTC):
+- **SPY 779C (Oct 6 expiry), Sep 29–Oct 6:** 1,193 bars in 0.51 s cold and 5 ms from the cache. Its 390-minute expiry day had 405 bars, since SPY's options trade to 16:15. The far 790C had 310 bars that week: 5 on Oct 1, 18 on Oct 2.
+- **The filler** stored three hand-added scalps' stock and option ranges in 0.59 s. The Premium scalp (2 × 0.87 → 1.89, stop 0.60) read MAE −0.09 (−0.33R, option low 0.78) and MFE +1.10 (+4.07R, option high 1.97), which matches the 09:36 low and the 10:00 high.
+- **Screenshots at 1280 and 1024 px, headless Firefox:**
+  - the Premium scalp opens on Option with STOP 0.60, T1 1.50 and T2 2.00, the fills at 0.87 and 1.89, the EMAs, VWAP and the PD levels, with PM levels greyed;
+  - dragging T2 40 px down saved 1.73, and R:R went from 3.3 to 2.8;
+  - a Stock scalp switched to Option shows ≈ STOP 0.36, ≈ T1 1.80 and ≈ T2 2.88, faint and solid, in the time range the stock view had;
+  - the thin 790C on Oct 2 shows its trades spread out in time, with the gaps empty;
+  - at 1024 px the toolbar wraps the Volume toggle onto a second line, and the daily chart sits below.
+- **An iron fly's page** has no switch, asks for no option bars, and logs no errors.
+- **Not checked live:** today's waiting message and the long delay, which need the session. The bar service's tests cover both, and the in-session delay is still unverified.
