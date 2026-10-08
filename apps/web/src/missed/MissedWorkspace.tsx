@@ -35,6 +35,8 @@ const JUST_CREATED_MS = 60_000;
 
 type Placing = "stop" | "target" | "exit" | null;
 
+const NO_EXIT = { time: "", price: "" };
+
 const price = (value: number | null | undefined) => (value == null ? "" : value.toFixed(2));
 
 /** A typed price above 0, or a message. */
@@ -126,29 +128,30 @@ export function MissedWorkspace({
   const [placing, setPlacing] = useState<Placing>(() =>
     stored.stopPrice == null && Date.now() - trade.createdAt < JUST_CREATED_MS ? "stop" : null,
   );
-  const [exitDraft, setExitDraft] = useState<{ time: string; price: string }>({ time: "", price: "" });
+  // A new exit's time and price, typed one at a time: shown until the exit saves, and kept if it's refused.
+  const [exitDraft, setExitDraft] = useState(NO_EXIT);
   const [refused, setRefused] = useState<{ field: string; message: string } | null>(null);
   // A dragged or clicked level shows where it went until the saved trade comes back with it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the stored levels arriving is the signal
   useEffect(() => setLive({}), [trade.missed]);
-  // A new exit is typed from scratch: a half typed before the exit was set or cleared is stale.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the stored exit changing is the signal
-  useEffect(() => setExitDraft({ time: "", price: "" }), [trade.closedAt, stored.exitPrice]);
   useAutoFillPrices(trade);
   const rangeProblem = useRangeProblem(trade.id);
 
   const levels: MissedLevels = { ...stored, ...live };
+  const hasExit = trade.closedAt != null && stored.exitPrice != null;
   const risk = missedRisk(trade, live);
   /** Saves, and on a refusal puts the server's reason under the field that sent it, if one did. */
-  const send = (body: TradePatchBody, field?: string) => {
+  const send = (body: TradePatchBody, field?: string, onSaved?: () => void) => {
     setRefused(null);
     save.mutate(body, {
+      onSuccess: () => onSaved?.(),
       onError: (error) => {
         setLive({});
         if (field) setRefused({ field, message: error.message });
       },
     });
   };
+  const forgetDraft = () => setExitDraft(NO_EXIT);
   const refusedFor = (field: string) => (refused?.field === field ? refused.message : null);
   /** A point put on another of the chart's days: a missed trade keeps its date, so it's refused, under its time. */
   const offDay = (id: "entry" | "exit", t: number) => {
@@ -237,7 +240,7 @@ export function MissedWorkspace({
     },
     onPlacePoint(id, t, at) {
       if (offDay(id, t)) return;
-      if (id === "exit") send({ closedAt: t, missed: { exitPrice: at } });
+      if (id === "exit") send({ closedAt: t, missed: { exitPrice: at } }, undefined, forgetDraft);
       setPlacing(null);
     },
     onDropPoint(id, t, at) {
@@ -261,9 +264,7 @@ export function MissedWorkspace({
     return null;
   };
   const commitExit = (part: "time" | "price", text: string) => {
-    const next = { ...exitDraft, [part]: text };
-    setExitDraft(next);
-    if (trade.closedAt != null && stored.exitPrice != null) {
+    if (hasExit) {
       if (part === "time") {
         const t = parseClock(text, date);
         if (typeof t === "string") return t;
@@ -276,12 +277,18 @@ export function MissedWorkspace({
       return null;
     }
     // A new exit needs its time and price together.
+    const next = { ...exitDraft, [part]: text };
+    setExitDraft(next);
     if (next.time.trim() === "" || next.price.trim() === "") return null;
     const t = parseClock(next.time, date);
     if (typeof t === "string") return t;
     const parsed = parsePrice(next.price);
     if (typeof parsed === "string") return parsed;
-    send({ closedAt: t, missed: { exitPrice: parsed } }, part === "time" ? "Exit time" : "Exit price");
+    send(
+      { closedAt: t, missed: { exitPrice: parsed } },
+      part === "time" ? "Exit time" : "Exit price",
+      forgetDraft,
+    );
     placed("exit");
     return null;
   };
@@ -441,13 +448,13 @@ export function MissedWorkspace({
             <Row label="Exit">
               <Field
                 label="Exit time"
-                value={trade.closedAt != null && stored.exitPrice != null ? clockText(trade.closedAt) : ""}
+                value={hasExit && trade.closedAt != null ? clockText(trade.closedAt) : exitDraft.time}
                 onCommit={(text) => commitExit("time", text)}
                 refused={refusedFor("Exit time")}
               />
               <Field
                 label="Exit price"
-                value={price(levels.exitPrice)}
+                value={hasExit ? price(levels.exitPrice) : exitDraft.price}
                 onCommit={(text) => commitExit("price", text)}
                 refused={refusedFor("Exit price")}
                 warning={
@@ -456,11 +463,13 @@ export function MissedWorkspace({
                     : null
                 }
               />
-              {trade.closedAt != null && stored.exitPrice != null ? (
+              {hasExit ? (
                 <button
                   type="button"
                   aria-label="Clear the exit"
-                  onClick={() => send({ closedAt: null, missed: { exitPrice: null } })}
+                  onClick={() =>
+                    send({ closedAt: null, missed: { exitPrice: null } }, undefined, forgetDraft)
+                  }
                   className={SMALL_BUTTON}
                 >
                   ×

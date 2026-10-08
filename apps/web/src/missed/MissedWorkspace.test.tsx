@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { nyWallClock } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -75,7 +75,22 @@ const TAGS = [
 const FILLED = { filled: 0, missing: [], optionMissing: [], unavailable: null };
 const fill: { answer: unknown } = { answer: FILLED };
 
-function setup(trade = missedTrade(), deleteStatus = 200, patchRefusal: string | null = null) {
+/** The page as TradeDetail renders it: from the cached trade, so a save's optimistic change and rollback show. */
+function FromCache({ id, onDeleted }: { id: string; onDeleted: () => void }) {
+  const { data } = useQuery<TradeDetailView>({
+    queryKey: ["trade", id],
+    queryFn: () => Promise.reject(new Error("the cache holds it")),
+    enabled: false,
+  });
+  return data ? <MissedWorkspace trade={data} onDeleted={onDeleted} /> : null;
+}
+
+function setup(
+  trade = missedTrade(),
+  deleteStatus = 200,
+  patchRefusal: string | null = null,
+  fromCache = false,
+) {
   const patches: unknown[] = [];
   const onDeleted = vi.fn();
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -91,6 +106,8 @@ function setup(trade = missedTrade(), deleteStatus = 200, patchRefusal: string |
       });
     if (init?.method === "PATCH") {
       patches.push(JSON.parse(String(init.body)));
+      // A refusal comes back after a round trip, as it does from the server, so the optimistic change shows first.
+      if (patchRefusal) await new Promise((resolve) => setTimeout(resolve, 20));
       if (patchRefusal)
         return new Response(JSON.stringify({ error: "invalid", message: patchRefusal }), {
           status: 400,
@@ -107,7 +124,11 @@ function setup(trade = missedTrade(), deleteStatus = 200, patchRefusal: string |
   client.setQueryData(["trade", trade.id], trade);
   const page = (shown: TradeDetailView) => (
     <QueryClientProvider client={client}>
-      <MissedWorkspace trade={shown} onDeleted={onDeleted} />
+      {fromCache ? (
+        <FromCache id={shown.id} onDeleted={onDeleted} />
+      ) : (
+        <MissedWorkspace trade={shown} onDeleted={onDeleted} />
+      )}
     </QueryClientProvider>
   );
   const { rerender } = render(page(trade));
@@ -295,5 +316,23 @@ describe("MissedWorkspace", () => {
     fill.answer = { ...FILLED, unavailable: { reason: "no_key", message: "No Alpaca key" } };
     setup(noRange());
     expect(await screen.findByText("Add an Alpaca key in Settings to fetch the stock's range.")).toBeTruthy();
+  });
+
+  it("keeps a refused new exit's typed time and price, to fix and send again", async () => {
+    const { patches } = setup(
+      missedTrade({}, { exitPrice: null }),
+      200,
+      "The exit must come after the entry",
+      true,
+    );
+    type("Exit time", "09:30");
+    type("Exit price", "180");
+    await waitFor(() => expect(patches).toHaveLength(1));
+    const price = screen.getByLabelText("Exit price") as HTMLInputElement;
+    await waitFor(() =>
+      expect(price.parentElement?.textContent).toContain("The exit must come after the entry"),
+    );
+    expect((screen.getByLabelText("Exit time") as HTMLInputElement).value).toBe("09:30");
+    expect(price.value).toBe("180");
   });
 });
