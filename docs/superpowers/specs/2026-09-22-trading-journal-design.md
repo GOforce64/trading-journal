@@ -312,6 +312,8 @@ Designed in its own spec: [2026-09-23-oquants-importer-design.md](2026-09-23-oqu
 
 ### 8.5 Screenshots (all trades)
 
+Built: see [the screenshots spec](2026-10-08-screenshots-design.md).
+
 - Add by pasting (Ctrl+V anywhere on the trade page), drag-and-drop, or file picker. PNG, JPEG and WebP are accepted, up to 20 MB each.
 - Stored content-addressed, so the same image attached twice is stored once.
 - Lightbox with zoom and captions.

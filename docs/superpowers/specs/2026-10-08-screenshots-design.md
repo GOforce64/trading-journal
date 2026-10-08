@@ -115,3 +115,16 @@ A trade's own chart can't show everything: the broker's ticket, a level the user
   - paste a real screenshot into a fly's page;
   - export, then merge into an empty stand-in, and see it there;
   - take screenshots of the panel and the lightbox.
+
+---
+
+## 7. Live check (2026-10-08)
+
+Two stand-ins: A over a copy of the real journal, and B over an empty journal, each with its own attachments directory.
+- **In headless Firefox** on A's BB iron fly:
+  - an image dropped on the page uploaded at once, as `55edfb97….png` (12 KB), and showed as a thumbnail;
+  - the lightbox opened on it;
+  - a caption typed and saved with Enter ("PD high rejected") showed under the thumbnail;
+  - no console errors.
+- **Paste isn't checked live.** Firefox strips clipboard data from a paste a script makes, though it keeps a drop's. Both go through the same window listener and upload, and the jsdom tests cover paste.
+- **Bundle:** A's bundle (27 KB with the image) merged into B in 83 ms. B's attachments directory then held the file, the fly carried the screenshot with its caption, and B served it as `image/png`.

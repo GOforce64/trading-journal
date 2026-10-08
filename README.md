@@ -70,9 +70,12 @@ requests that don't come from `localhost`.
   mistake costs), and an Iron flies tab measured against max profit.
 - **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
   dollar statistics.
+- **Screenshots** — on every trade: paste (Ctrl+V), drop or pick PNG, JPEG or WebP images,
+  with captions and a lightbox; stored once each, by content, in the data directory.
 - **Two machines** — Settings → Data exports the journal as one `.tjbundle` file, and
   merges one from your other machine: the later edit of a trade wins, deletes travel,
-  IBKR fills are combined, and merging the same file twice changes nothing.
+  IBKR fills are combined, screenshots come along, and merging the same file twice
+  changes nothing.
 
 Missed trades arrive in a later step; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
