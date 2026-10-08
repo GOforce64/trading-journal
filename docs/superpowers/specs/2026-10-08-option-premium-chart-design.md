@@ -1,7 +1,7 @@
 # Option Premium Chart — Design Spec
 
 - **Date:** 2026-10-08
-- **Status:** Approved 2026-10-08.
+- **Status:** Approved 2026-10-08. Plan: [2026-10-08-option-premium-chart.md](../plans/2026-10-08-option-premium-chart.md).
 - **Scope:** the option-premium chart that scalp review and the trade chart deferred. It covers:
   - Alpaca's 1-minute **option bars**, cached like stock bars and served by a new route;
   - a **Stock | Option** switch on a scalp's intraday chart, with the contract's candles, fills at their prices, and the toolbar's overlays;
@@ -103,13 +103,13 @@ The view state lives in `ScalpWorkspace`, which already joins the chart and the 
 ### 5.2 The bar service: `optionMinute(contract, from, to)`
 It mirrors `minute()` (trade-chart spec §6), with these differences:
 - **The cache** is keyed by the contract's code, timeframe `1m`.
-- **Days before `OPTION_BARS_SINCE`** are never asked for. If the whole range is before it, the answer is `unavailable: { reason: "no_bars", message: "Alpaca's option bars start on Jan 18, 2024." }`.
+- **Days before `OPTION_BARS_SINCE`** are never asked for. If the whole range is before it, the answer is `unavailable: { reason: "too_old", message: "Alpaca's option bars start on Jan 18, 2024." }`.
 - **Finished days:** the missing ones are fetched in one request, ending at the midnight after the last of them or at now − `OPTION_LONG_DELAY_MS`, whichever is earlier, and stored, empty days included. The long delay is safe here because options stop trading by 16:15.
 - **Today** (a session day, from 09:30 on) is fetched from midnight to `min(optionClose(today), now − delay)`, and never stored.
   - **The delay** is `ALPACA_DELAY_MS` (16 minutes) at first. If Alpaca refuses with `optionTooRecent`, the service asks again with `OPTION_LONG_DELAY_MS` (80 minutes), and uses the long delay for the rest of that New York day. A second refusal gives no bars.
   - The answer carries `delayMinutes` (16 or 80), so the page can say how far behind the data is.
   - It is `partial` while the end is before `optionClose(today)`.
-- **No bars at all:** `unavailable: { reason: "no_bars", message: "No option bars for NVDA250926C00232500." }`. The page names the contract its own way (§8).
+- **No bars at all:** `unavailable: { reason: "no_bars", message: "No option bars for NVDA250926C00232500." }`. The page names the contract its own way (§8). An empty answer for today that is still `partial` has no `unavailable`, because the page says when the bars arrive (§6.3).
 - **No key:** the stock's `no_key` answer. **Alpaca failing:** `BarsUnreachable`, as now.
 
 ### 5.3 The route
@@ -153,7 +153,7 @@ The same as the stock chart's: from the week before the trade (or `lastDay − M
 
 - **Premium basis:**
   - On the Option view, the stop and targets are drawn exactly as stock lines are (`STOP`, `T1 ×2`, …). They can be placed and dragged through the existing `ChartEditing`.
-  - **A premium line can't go below 0.00.** A drag or click under 0 lands on 0.
+  - **As on stock, a click or drag at or below 0.00 is ignored.** A stop of 0 can still be typed.
   - The Stock view draws no level lines, because the levels are option prices.
 - **Stock basis:**
   - On the Stock view, nothing changes.
@@ -199,7 +199,7 @@ For each gap, after the stock prices (which are unchanged):
 - **Too early:** if the exit minute isn't yet published under the short delay (`ALPACA_DELAY_MS`), the option range is `too_recent` without asking Alpaca. Under the long delay, the partial answer below says so.
 - **Otherwise:** `optionMinute(contract, nyDate(openedAt), nyDate(closedAt))`, then `holdRange(bars, openedAt, closedAt, !partial)`. The range is stored if there is one. If there's none, it's `no_bars` when the answer is complete, and `too_recent` when it's partial.
 - **Alpaca failing on an option request** ends the option fetching for this run, since later requests would fail the same way. The run still fills stock prices. The scalps it skipped get `unreachable` for their option range.
-- **`missing`** entries gain `what: "stock" | "option"`, and the option reasons are `no_bars`, `too_recent` or `unreachable`. `unavailable` (`no_key` or `unreachable`) still describes the stock run.
+- **`optionMissing`**, a list beside `missing`, gives each scalp whose option range wasn't stored, with `no_bars`, `too_recent` or `unreachable`. `missing` stays the stock's, so its readers don't change. `unavailable` (`no_key` or `unreachable`) still describes the run.
 - A contract with no bars keeps its gap, as an empty stock day does. Asking again reads `bar_days` and never reaches Alpaca.
 - The analytics backfill (`useBackfillPrices`) and the IBKR sync's fill pick up option ranges through `needsPrices` and the same filler. That's one Alpaca request per scalp, the first time.
 
