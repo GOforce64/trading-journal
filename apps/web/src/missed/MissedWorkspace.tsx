@@ -9,7 +9,7 @@ import {
 } from "@tj/core";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { rText } from "../analytics/format.js";
-import { api, type TradeDetailView } from "../api.js";
+import type { TradeDetailView } from "../api.js";
 import { barRange, useMinuteBars } from "../chart/bars.js";
 import { contextMarks } from "../chart/context.js";
 import type { ChartEditing, PointMark } from "../chart/drag.js";
@@ -21,7 +21,7 @@ import { type TradePatchBody, useSaveTrade } from "../review/data.js";
 import { SetupPicker, TagChips } from "../review/Pickers.js";
 import { useAutoFillPrices, useRangeUnavailable } from "../review/prices.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
-import { useDayTrades } from "./data.js";
+import { useDayTrades, useDeleteMissed } from "./data.js";
 import { excursionLine, missedLine, rangeWarning } from "./text.js";
 
 const LABEL = "w-14 shrink-0 text-[10px] text-muted uppercase tracking-wider";
@@ -127,6 +127,7 @@ export function MissedWorkspace({
   const stored = trade.missed as MissedLevels;
   const date = nyDate(trade.openedAt);
   const save = useSaveTrade(trade.id);
+  const deletion = useDeleteMissed();
   const [live, setLive] = useState<Partial<MissedLevels>>({});
   const [placing, setPlacing] = useState<Placing>(() =>
     stored.stopPrice == null && Date.now() - trade.createdAt < JUST_CREATED_MS ? "stop" : null,
@@ -266,10 +267,9 @@ export function MissedWorkspace({
       + {name}
     </button>
   );
-  const remove = async () => {
+  const remove = () => {
     if (!window.confirm("Delete this missed trade?")) return;
-    const res = await api.api.trades[":id"].$delete({ param: { id: trade.id } });
-    if (res.ok) onDeleted?.();
+    deletion.mutate(trade.id, { onSuccess: () => onDeleted?.() });
   };
 
   const excursions = excursionLine(risk);
@@ -494,6 +494,7 @@ export function MissedWorkspace({
               </label>
             </div>
             {save.error && <p className="text-down">Couldn't save: {save.error.message}</p>}
+            {deletion.error && <p className="text-down">Couldn't delete: {deletion.error.message}</p>}
           </div>
         </Panel>
       </div>

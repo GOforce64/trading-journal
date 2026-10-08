@@ -44,6 +44,21 @@ export function useCreateMissed() {
   });
 }
 
+/** Deletes a missed trade from its page (spec §6.3), and drops it from every list and its own cache. */
+export function useDeleteMissed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.api.trades[":id"].$delete({ param: { id } });
+      if (!res.ok) throw await refusal(res, "delete");
+    },
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: ["trade", id] });
+      return queryClient.invalidateQueries({ queryKey: ["trades"] });
+    },
+  });
+}
+
 const NONE: TradeView[] = [];
 
 /** The ticker's other trades from that New York day, for the day's-trades markers (spec §6.4). */

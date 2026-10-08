@@ -71,14 +71,20 @@ const TAGS = [
   { id: "calm", name: "Calm", kind: "emotion", archived: false },
 ];
 
-function setup(trade = missedTrade()) {
+function setup(trade = missedTrade(), deleteStatus = 200) {
   const patches: unknown[] = [];
+  const onDeleted = vi.fn();
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const json = (body: unknown) =>
       new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
     if (url.includes("/api/tags")) return json(TAGS);
     if (url.includes("/api/setups")) return json([]);
+    if (init?.method === "DELETE")
+      return new Response(JSON.stringify(deleteStatus === 200 ? { ok: true } : { error: "not found" }), {
+        status: deleteStatus,
+        headers: { "content-type": "application/json" },
+      });
     if (init?.method === "PATCH") {
       patches.push(JSON.parse(String(init.body)));
       return json(trade);
@@ -92,10 +98,10 @@ function setup(trade = missedTrade()) {
   client.setQueryData(["trade", trade.id], trade);
   render(
     <QueryClientProvider client={client}>
-      <MissedWorkspace trade={trade} />
+      <MissedWorkspace trade={trade} onDeleted={onDeleted} />
     </QueryClientProvider>,
   );
-  return { patches };
+  return { patches, client, onDeleted };
 }
 
 const editing = () => {
@@ -181,5 +187,25 @@ describe("MissedWorkspace", () => {
     const { patches } = setup(missedTrade({ tagIds: ["hes", "calm"] }));
     fireEvent.click(await screen.findByRole("button", { name: "Saw it late" }));
     await waitFor(() => expect(patches).toEqual([{ tagIds: ["calm", "late"] }]));
+  });
+
+  it("deletes after confirming, then drops the trade from every list before leaving", async () => {
+    vi.stubGlobal("confirm", () => true);
+    const trade = missedTrade();
+    const { client, onDeleted } = setup(trade);
+    const list = ["trades", { book: "missed", all: true }];
+    client.setQueryData(list, [trade]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalled());
+    expect(client.getQueryState(list)?.isInvalidated).toBe(true);
+    expect(client.getQueryData(["trade", trade.id])).toBeUndefined();
+  });
+
+  it("says so when the delete fails, and stays", async () => {
+    vi.stubGlobal("confirm", () => true);
+    const { onDeleted } = setup(missedTrade(), 404);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Couldn't delete: delete failed: 404")).toBeTruthy();
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 });
