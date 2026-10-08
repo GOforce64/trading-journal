@@ -95,7 +95,7 @@ Everything runs in one transaction, in this order:
    - `kept`: the bundle had a different version, and the local one won;
    - `deleted`: the bundle's tombstone won over a live local trade;
    - `fillsAdded`;
-   - `setupsAdded` and `tagsAdded`, counting rows new under their final id;
+   - `setupsAdded` and `tagsAdded`, counting names new to this journal: a name both sides had isn't new, whichever id it keeps;
    - `unchanged`: true when nothing was written.
 
    Identical versions count in none of these.

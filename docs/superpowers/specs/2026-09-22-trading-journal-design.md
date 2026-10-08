@@ -387,6 +387,8 @@ Scalps are detailed in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-a
 
 ## 12. Export, import and merge between machines
 
+Built: see [the export and merge spec](2026-10-08-export-merge-design.md). It bundles gzipped JSON rather than a zip, since attachments aren't built yet, and doesn't regroup a synced trade's fills on merge: the next sync does.
+
 - **Export** writes a full snapshot as `journal-{machine}-{timestamp}.tjbundle` (zip):
   - `manifest.json` (format version, app version, schema version, `machineId`, export time, counts);
   - `data/*.json`, one file per syncable table;

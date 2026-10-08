@@ -254,13 +254,11 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
     const mine = structuredClone(original);
 
     const accounts = resolve("accounts", mine.accounts, theirs.accounts);
-    const setups = collapse(resolve("setups", mine.setups, theirs.setups), (row) =>
-      String(row.name).toLowerCase(),
-    );
-    const tags = collapse(
-      resolve("tags", mine.tags, theirs.tags),
-      (row) => `${row.kind}\u0000${String(row.name).toLowerCase()}`,
-    );
+    // The app's own uniqueness rules: a setup's name, a tag's kind and name, ignoring case.
+    const setupName = (row: Row) => String(row.name).toLowerCase();
+    const tagName = (row: Row) => `${row.kind}\u0000${String(row.name).toLowerCase()}`;
+    const setups = collapse(resolve("setups", mine.setups, theirs.setups), setupName);
+    const tags = collapse(resolve("tags", mine.tags, theirs.tags), tagName);
     // Both sides' references move to the kept ids before any trade is compared.
     for (const side of [mine, theirs]) {
       for (const trade of side.trades) {
@@ -310,10 +308,11 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
     const fills = resolve("fills", mine.fills, theirs.fills);
     const localFills = new Set(original.fills.map((row) => keyOf("fills", row)));
     summary.fillsAdded = [...fills.keys()].filter((key) => !localFills.has(key)).length;
-    const localSetups = new Set(original.setups.map((row) => String(row.id)));
-    const localTags = new Set(original.tags.map((row) => String(row.id)));
-    summary.setupsAdded = [...setups.kept.keys()].filter((id) => !localSetups.has(id)).length;
-    summary.tagsAdded = [...tags.kept.keys()].filter((id) => !localTags.has(id)).length;
+    // A name both sides had isn't new, whichever id it keeps.
+    const localSetups = new Set(original.setups.map(setupName));
+    const localTags = new Set(original.tags.map(tagName));
+    summary.setupsAdded = [...setups.kept.values()].filter((row) => !localSetups.has(setupName(row))).length;
+    summary.tagsAdded = [...tags.kept.values()].filter((row) => !localTags.has(tagName(row))).length;
 
     const desired: Record<BundleTable, Map<string, Row>> = {
       accounts,

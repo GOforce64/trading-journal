@@ -82,12 +82,15 @@ describe("mergeBundle", () => {
     addFill(a.db, { id: "f1", tradeId: tagged.id, commission: 1.1, updatedAt: 1 });
 
     const summary = mergeBundle(b.db, bundleOf(a.db));
+    // Both machines seeded the same names: none of them is new here, whichever id each keeps.
     expect(summary).toMatchObject({
       added: 2,
       updated: 0,
       kept: 0,
       deleted: 0,
       fillsAdded: 1,
+      setupsAdded: 0,
+      tagsAdded: 0,
       unchanged: false,
     });
     const setups = readTable(b.db, "setups");
@@ -229,6 +232,8 @@ describe("mergeBundle", () => {
       expect.objectContaining({ id: keptSetup, name: "breakout", archived: 1 }),
     ]);
     expect(readTable(a.db, "tags").map((row) => row.id)).toEqual([keptTag]);
+    const c = journal();
+    expect(mergeBundle(c.db, bundleOf(a.db))).toMatchObject({ setupsAdded: 1, tagsAdded: 1 });
     expect(a.trades.get(onA.id)).toMatchObject({ setupId: keptSetup, tagIds: [keptTag] });
     expect(a.trades.get(onB.id)).toMatchObject({ setupId: keptSetup, tagIds: [keptTag] });
   });
