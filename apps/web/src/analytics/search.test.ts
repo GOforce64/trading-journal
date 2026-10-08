@@ -172,3 +172,11 @@ describe("dashboard periods", () => {
     expect(calendarMonth("all", "2026-09-27", "2026-09-27")).toBe("2026-09");
   });
 });
+
+describe("the Missed tab's search", () => {
+  it("keeps the tab and its breakdown, leaving the default skip reason out", () => {
+    expect(parseAnalyticsSearch({ tab: "missed", mby: "setup" })).toEqual({ tab: "missed", mby: "setup" });
+    expect(parseAnalyticsSearch({ tab: "missed", mby: "skip" })).toEqual({ tab: "missed" });
+    expect(parseAnalyticsSearch({ mby: "dte" })).toEqual({});
+  });
+});

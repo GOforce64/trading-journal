@@ -12,6 +12,7 @@ import { TabButton } from "../components/ui.js";
 import { todayNy } from "../market.js";
 import { type Setup, useSetups } from "../review/data.js";
 import { FliesTab } from "./FliesTab.js";
+import { MissedTab } from "./MissedTab.js";
 import { OverviewTab } from "./OverviewTab.js";
 import { ScalpsTab } from "./ScalpsTab.js";
 
@@ -56,12 +57,24 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
         <TabButton active={search.tab === "flies"} onClick={() => onSearch({ tab: "flies" })}>
           Iron flies
         </TabButton>
+        <TabButton active={search.tab === "missed"} onClick={() => onSearch({ tab: "missed" })}>
+          Missed
+        </TabButton>
       </nav>
       {search.tab === "scalps" && (
         <ScalpsTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
       )}
       {search.tab === "flies" && (
         <FliesTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
+      )}
+      {search.tab === "missed" && (
+        <MissedTab
+          trades={trades}
+          allTrades={data ?? []}
+          search={view}
+          onSearch={onSearch}
+          onOpenTrade={onOpenTrade}
+        />
       )}
       {search.tab === undefined && (
         <OverviewTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />

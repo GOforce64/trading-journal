@@ -227,3 +227,20 @@ describe("Dashboard", () => {
     expect(kpi("avg-r")).toBe("Avg R—");
   });
 });
+
+describe("Dashboard and missed trades", () => {
+  it("leaves missed trades out of every number and the open trades", async () => {
+    const skipped = {
+      ...tradeRow({ id: "m", underlying: "MM", opened: "2026-09-10 09:41", closed: null, netPnl: null }),
+      strategy: "scalp",
+      book: "missed",
+      legs: [],
+      missedRisk: { risk: 1, r: null, plannedRR: null, mae: null, mfe: null, problem: "no_exit" },
+    };
+    stubTrades([...TRADES, skipped]);
+    renderWithClient(<Dashboard search={{ at: "2026-09-15" }} onSearch={() => {}} />);
+    await waitFor(() => expect(kpi("net")).toContain("+$260.00"));
+    expect(kpi("trades")).toContain("3");
+    expect(screen.queryByText("MM")).toBeNull();
+  });
+});

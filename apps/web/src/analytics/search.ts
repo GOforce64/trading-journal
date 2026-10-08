@@ -1,4 +1,13 @@
-import { addDays, BREAKDOWNS, type Breakdown, parseEdges, WEEKDAYS, weekdayOfDate } from "@tj/core";
+import {
+  addDays,
+  BREAKDOWNS,
+  type Breakdown,
+  MISSED_BREAKDOWNS,
+  type MissedBreakdown,
+  parseEdges,
+  WEEKDAYS,
+  weekdayOfDate,
+} from "@tj/core";
 import type { Book, TradeFilter } from "./data.js";
 import { firstDay, lastDay, monthOf, shiftMonth } from "./dates.js";
 
@@ -21,6 +30,8 @@ export interface AnalyticsSearch {
   contractEdges?: string;
   /** The Scalps tab's option-cost edges. */
   costEdges?: string;
+  /** The Missed tab's breakdown (missed-trades spec §6.6); absent means by skip reason. */
+  mby?: Exclude<MissedBreakdown, "skip">;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -62,6 +73,8 @@ export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSea
   if (creditEdges && parseEdges(creditEdges, "usd")) search.creditEdges = creditEdges;
   const contractEdges = text(raw.contractEdges);
   if (contractEdges && parseEdges(contractEdges, "contracts")) search.contractEdges = contractEdges;
+  const mby = MISSED_BREAKDOWNS.find((each) => each === raw.mby);
+  if (mby && mby !== "skip") search.mby = mby;
   const costEdges = text(raw.costEdges);
   if (costEdges && parseEdges(costEdges, "usd")) search.costEdges = costEdges;
   return search;
