@@ -145,6 +145,7 @@ const tradeDetailRoute = createRoute({
         onSettle={settleTrade}
         onOpenTrade={openTrade}
         onDeleted={() => router.navigate({ href: "/missed" })}
+        onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
       />
     );
   },

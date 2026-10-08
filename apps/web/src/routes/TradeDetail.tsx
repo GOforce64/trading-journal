@@ -45,6 +45,7 @@ export function TradeDetail({
   onSettle,
   onOpenTrade,
   onDeleted,
+  onNewMissed,
 }: {
   tradeId: string;
   onEdit?: (id: string) => void;
@@ -53,6 +54,8 @@ export function TradeDetail({
   onOpenTrade?: (id: string) => void;
   /** A missed trade was deleted from its page (missed-trades spec §6.3). */
   onDeleted?: () => void;
+  /** + Missed on a scalp's chart (missed-trades spec §6.4). */
+  onNewMissed?: (symbol: string, date: string) => void;
 }) {
   const { data: trade, isLoading } = useQuery({
     queryKey: ["trade", tradeId],
@@ -122,7 +125,7 @@ export function TradeDetail({
       </header>
       <SyncedBanner trade={trade} />
       {trade.strategy === "scalp" ? (
-        <ScalpWorkspace trade={trade} onOpenTrade={onOpenTrade} />
+        <ScalpWorkspace trade={trade} onOpenTrade={onOpenTrade} onNewMissed={onNewMissed} />
       ) : (
         <TradeCharts trade={trade} />
       )}

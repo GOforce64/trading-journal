@@ -14,14 +14,17 @@ vi.mock("../chart/TradeCharts.js", () => ({
   TradeCharts: ({
     levels,
     option,
+    toolbarExtra,
   }: {
     levels?: { lines: { label: string; price: number }[]; editing: ChartEditing };
     option?: { view: string; onView: (view: "stock" | "option") => void };
+    toolbarExtra?: ReactNode;
   }) => {
     drawn.push(levels?.lines);
     const edit = levels?.editing;
     return (
       <div data-testid="trade-charts">
+        {toolbarExtra}
         <span data-testid="chart-view">{option?.view ?? "none"}</span>
         <button type="button" onClick={() => option?.onView("stock")}>
           chart: view stock
@@ -165,12 +168,15 @@ const patches = (fetchMock: ReturnType<typeof stubApi>) =>
     .filter((call) => String(call[1]?.method).toUpperCase() === "PATCH")
     .map((call) => JSON.parse(String(call[1]?.body)));
 
+/** Where + Missed on the chart's toolbar goes. */
+const newMissed = vi.fn();
+
 function Harness() {
   const { data } = useQuery({
     queryKey: ["trade", "t1"],
     queryFn: async () => (await (await fetch("/api/trades/t1")).json()) as TradeDetailView,
   });
-  return data ? <ScalpWorkspace trade={data} /> : null;
+  return data ? <ScalpWorkspace trade={data} onNewMissed={newMissed} /> : null;
 }
 
 function renderWorkspace() {
@@ -711,5 +717,14 @@ describe("ScalpWorkspace's option view", () => {
       /^≈ STOP 0\.54, ≈ T1 \d+\.\d+, ≈ T2 \d+\.\d+$/,
     );
     expect(screen.getByTestId("chart-placing").textContent).toBe("none");
+  });
+});
+
+describe("ScalpWorkspace's + Missed", () => {
+  it("starts a missed trade on the scalp's ticker and New York day", async () => {
+    stubApi();
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Missed" }));
+    expect(newMissed).toHaveBeenCalledWith("NVDA", "2026-09-28");
   });
 });
