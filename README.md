@@ -19,8 +19,10 @@ pnpm demo           # http://127.0.0.1:4179
 earnings iron flies, with synthetic prices so every chart draws without an API key, and
 opens it on its own port. It lives in your system's temp directory (or `TJ_DEMO_DIR`),
 is replaced on the next run, and never touches your own journal. `--end YYYY-MM-DD` and
-`--seed N` pick the period and the data: `pnpm demo --end 2026-09-30` gives the
-screenshots below. Nothing in the demo comes from a real account or real market data.
+`--seed N` pick the period and the data. The screenshots here are of
+`pnpm demo --end 2026-09-30`, with the Dashboard stepped back to August. By default the
+demo ends with yesterday's session. Nothing in it comes from a real account or real
+market data.
 
 ## Your data stays yours
 

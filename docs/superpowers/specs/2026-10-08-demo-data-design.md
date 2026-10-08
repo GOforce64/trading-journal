@@ -161,6 +161,24 @@ Anyone looking at the project, a recruiter or the user showing it, should see th
 - **Headless Firefox at 1440×900:** the Dashboard, Journal, a scalp, a fly, Analytics (Scalps and Iron flies tabs) and the Playbook. No console errors on any page, and no "add an Alpaca key" message. The stock, daily and option-premium charts all drew from the synthetic bars. These are the README's images.
 - **Tuning found by looking:**
   - The first run's scalps won 36% (NVDA 10%). A fixed $2.50 strike step put a $60 stock's first out-of-the-money strike 4% away, and fixed percentage levels were wide for SPY and tight for TSLA. Strikes now space by price, and levels by each symbol's volatility.
-  - The second run's Avg R came out negative on a profitable book, because the targets sat nearer than the stops. The final figures (§2) give 51% wins, Avg R +0.13, a profit factor of 1.96 and +$2.9K on the scalps, and +$5.8K on the flies.
+  - The second run's Avg R came out negative on a profitable book, because the targets sat nearer than the stops. The final figures (§2) give 51% wins, Avg R +0.13, a profit factor of 1.96 and +$2.9K on the scalps, and +$5.5K on the flies (11 of 20 winners).
 - **Speed:** `bars.store` built Drizzle SQL for every insert, and a month's generation took 2.6 s. It now runs one prepared statement a row: a month in 0.5 s, six months in 2 s. This speeds the real app's Alpaca fills too.
 - **Dashboard:** it opens on the current month, which lies after a fixed `--end`. The README's image uses `/?period=month&at=2026-08-14`; run without `--end`, the demo ends yesterday, so the current month has trades.
+
+---
+
+## 9. Final review (2026-10-08)
+
+A fresh Opus review of f9b8287..4164230 found one Critical issue and two Important ones; one Minor was graded up by its effect. All are fixed test-first:
+- **A fly entering on a half day crashed `pnpm demo`** (Critical). Its entry was stamped 15:40–15:54 whatever the close, so on Nov 27 or Dec 24 no bar existed and generation failed, on about one end date in eight from December 2026. Fly entries now sit in the last 20 minutes before that day's own close, and a test checks every trade's open and close against its session.
+- **Notes contradicted outcomes** ("out at the stop" on a winner, in `journal.png`). Notes are now picked by setup and by how the trade went.
+- **Fly moves were written as typed overrides,** so every fly page read "typed (computed …)". The demo now leaves the moves and IVs to the app, which works them out from the legs and the stock prices, as for a synced fly. This replaces §2's "filled in".
+- **A wipe that failed partway removed the marker first** (graded up from Minor). On Windows, a still-running demo holds `journal.db`, so the wipe fails, and every later `pnpm demo` refused the folder. The marker now goes last, and the message says to stop the running demo.
+- The README and §8 figures now match the screenshots, which were retaken after the fixes.
+
+**Deferred minors:**
+- **Penny contracts:** the price-based step gives SPY $2.50 strikes (it lists $1), so about one scalp in seven opens at $0.05 or less. One premium-basis plan has its stop equal to its entry, and its R can't be priced.
+- **The guard checks equality only:** a real data directory nested inside a marked demo directory would be wiped. This is contrived; refusing when `relative(dir, real)` doesn't start with `..` would close it.
+- **An empty `TJ_DEMO_DIR`** fails with "ENOENT mkdir ''" (it should fall back like `resolveDataDir`), and a relative one resolves against `apps/server`.
+- **An `--end` before mid-2024** gives option charts that read "too old" (Alpaca's option bars start in 2024).
+- **Option bars:** each bar's open isn't the previous bar's close (each minute is priced on its own), which is cosmetic.
