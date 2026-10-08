@@ -142,6 +142,24 @@ const pick = (row: Row, columns: readonly string[]): Row =>
     columns.filter((column) => column in row).map((column) => [column, row[column] ?? null]),
   );
 
+/**
+ * Columns a machine fills in and a person never edits: a fetched stock price, a fill's link to its trade. Writing them
+ * moves no timestamp, so a copy without them could win a tie; a value on either side beats none instead.
+ */
+const DERIVED: Partial<Record<BundleTable, readonly string[]>> = {
+  iron_fly_details: ["underlying_price_entry", "underlying_price_exit"],
+  fills: ["trade_id", "leg_id"],
+};
+
+/** The winning row, with the derived columns it lacks taken from the losing one. */
+function withDerived(table: BundleTable, winner: Row, loser: Row | undefined): Row {
+  let row = winner;
+  for (const column of DERIVED[table] ?? []) {
+    if (row[column] == null && loser?.[column] != null) row = { ...row, [column]: loser[column] ?? null };
+  }
+  return row;
+}
+
 /** Each key resolved across both sides: the newer version wins. A bundle row lacking columns keeps the local ones. */
 function resolve(table: BundleTable, local: readonly Row[], remote: readonly Row[]): Map<string, Row> {
   const result = new Map(local.map((row) => [keyOf(table, row), row]));
@@ -149,7 +167,10 @@ function resolve(table: BundleTable, local: readonly Row[], remote: readonly Row
     const key = keyOf(table, row);
     const mine = result.get(key);
     const theirs = mine ? { ...mine, ...row } : row;
-    if (!mine || compare(rowVersion(theirs), rowVersion(mine)) > 0) result.set(key, theirs);
+    if (!mine) result.set(key, theirs);
+    else if (compare(rowVersion(theirs), rowVersion(mine)) > 0)
+      result.set(key, withDerived(table, theirs, mine));
+    else result.set(key, withDerived(table, mine, theirs));
   }
   return result;
 }
@@ -198,6 +219,29 @@ function aggregates(tables: Record<BundleTable, Row[]>): Map<string, Aggregate> 
     }
   }
   return result;
+}
+
+/** The bundle's aggregate read through the local one: rows lacking columns, from an older app, keep the local ones. */
+function overlay(incoming: Aggregate, local: Aggregate): Aggregate {
+  const children = Object.fromEntries(
+    CHILDREN.map((child) => {
+      const mine = new Map(local.children[child].map((row) => [keyOf(child, row), row]));
+      return [child, incoming.children[child].map((row) => ({ ...mine.get(keyOf(child, row)), ...row }))];
+    }),
+  ) as Record<Child, Row[]>;
+  return { trade: { ...local.trade, ...incoming.trade }, children };
+}
+
+/** The winning aggregate, with the fetched prices it lacks taken from the losing one (`DERIVED`). */
+function fillDerived(winner: Aggregate, loser: Aggregate): Aggregate {
+  const theirs = new Map(loser.children.iron_fly_details.map((row) => [keyOf("iron_fly_details", row), row]));
+  let changed = false;
+  const rows = winner.children.iron_fly_details.map((row) => {
+    const next = withDerived("iron_fly_details", row, theirs.get(keyOf("iron_fly_details", row)));
+    if (next !== row) changed = true;
+    return next;
+  });
+  return changed ? { ...winner, children: { ...winner.children, iron_fly_details: rows } } : winner;
 }
 
 /** A trade's version (export-merge spec §2): the later of its edit and delete, then its last write, then its content. */
@@ -293,14 +337,15 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
         if (incoming.trade.deleted_at == null) summary.added++;
         continue;
       }
-      const candidate = { ...incoming, trade: { ...local.trade, ...incoming.trade } };
+      const candidate = overlay(incoming, local);
       const order = compare(tradeVersion(candidate), tradeVersion(local));
       if (order === 0) continue;
       if (order < 0) {
         summary.kept++;
+        final.set(id, fillDerived(local, candidate));
         continue;
       }
-      final.set(id, candidate);
+      final.set(id, fillDerived(candidate, local));
       replaced.push(id);
       if (candidate.trade.deleted_at != null && local.trade.deleted_at == null) summary.deleted++;
       else summary.updated++;
@@ -338,7 +383,9 @@ export function mergeBundle(db: Db, bundle: Bundle): MergeSummary {
     let writes = 0;
     for (const table of [...BUNDLE_TABLES].reverse()) {
       for (const row of original[table]) {
-        if (desired[table].has(keyOf(table, row))) continue;
+        const wanted = desired[table].get(keyOf(table, row));
+        // A changed tag goes too, and comes back below: updated in place, one could take a name another still holds.
+        if (wanted && (table !== "tags" || canonical(wanted) === canonical(row))) continue;
         remove(db, table, row);
         writes++;
       }

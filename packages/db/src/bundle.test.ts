@@ -252,3 +252,74 @@ describe("mergeBundle", () => {
     expect(b.trades.get(fresh.id)?.reviewedAt).toBeNull();
   });
 });
+
+describe("mergeBundle, after the final review", () => {
+  it("takes renamed tags, even into a name another tag just freed, or a swap", () => {
+    const a = journal();
+    const b = journal();
+    const calm = a.taxonomy.createTag({ name: "Calm", kind: "emotion" });
+    const rushed = a.taxonomy.createTag({ name: "Rushed", kind: "emotion" });
+    mergeBundle(b.db, bundleOf(a.db));
+    a.clock.now = 2_000;
+    a.taxonomy.updateTag(calm.id, { name: "Tmp" });
+    a.taxonomy.updateTag(rushed.id, { name: "Calm" });
+    a.taxonomy.updateTag(calm.id, { name: "Rushed" });
+    expect(() => mergeBundle(b.db, bundleOf(a.db))).not.toThrow();
+    expect(readTable(b.db, "tags").map((row) => [row.id, row.name])).toEqual(
+      expect.arrayContaining([
+        [calm.id, "Rushed"],
+        [rushed.id, "Calm"],
+      ]),
+    );
+    expect(mergeBundle(a.db, bundleOf(b.db)).unchanged).toBe(true);
+  });
+
+  it("settles a bundle whose child rows lack a column, counting nothing for trades that are the same", () => {
+    const a = journal();
+    const b = journal();
+    const trade = a.trades.create(scalp);
+    a.trades.update(trade.id, { scalp: { levelBasis: "stock", stopPrice: 229, riskOverride: 120 } });
+    mergeBundle(b.db, bundleOf(a.db));
+    const old = bundleOf(a.db);
+    for (const row of old.tables.scalp_details) delete row.risk_override;
+    expect(mergeBundle(b.db, old)).toMatchObject({ updated: 0, kept: 0, unchanged: true });
+    expect(b.trades.get(trade.id)?.scalp?.riskOverride).toBe(120);
+  });
+
+  it("keeps a fetched stock price and a fill's link, from whichever side has them", () => {
+    const a = journal();
+    const b = journal();
+    const fly = a.trades.create({
+      ...scalp,
+      strategy: "iron_fly",
+      legs: [],
+      ironFly: {
+        bodyPutStrike: 47,
+        bodyCallStrike: 47,
+        putWingStrike: 40,
+        callWingStrike: 54,
+        contracts: 2,
+        creditPerShare: 2.5,
+        netCost: null,
+        earningsDate: null,
+        earningsTiming: null,
+        impliedMovePct: null,
+        actualMovePct: null,
+        ivBefore: null,
+        ivAfter: null,
+        sourceNotes: null,
+      },
+    });
+    addFill(a.db, { id: "f1", tradeId: null, commission: 1, updatedAt: 10 });
+    mergeBundle(b.db, bundleOf(a.db));
+    // Only A fetched the price, and only B's sync linked the fill: neither moves a timestamp.
+    a.trades.setUnderlyingPrice(fly.id, "entry", 47.25);
+    b.db.$client.prepare("update fills set trade_id = ? where id = 'f1'").run(fly.id);
+    const fromA = bundleOf(a.db);
+    mergeBundle(a.db, bundleOf(b.db));
+    mergeBundle(b.db, fromA);
+    expect(dump(a.db)).toEqual(dump(b.db));
+    expect(readTable(a.db, "iron_fly_details")[0]?.underlying_price_entry).toBe(47.25);
+    expect(readTable(a.db, "fills")[0]?.trade_id).toBe(fly.id);
+  });
+});

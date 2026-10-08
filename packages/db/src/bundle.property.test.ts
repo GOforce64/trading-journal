@@ -13,9 +13,15 @@ type Op =
   | { kind: "delete"; pick: number }
   | { kind: "tag"; pick: number; tag: number }
   | { kind: "setup"; pick: number; name: string }
-  | { kind: "fill"; pick: number; fill: number; commission: number };
+  | { kind: "fill"; pick: number; fill: number; commission: number }
+  | { kind: "rename"; tag: number; name: string };
 
 const op: fc.Arbitrary<Op> = fc.oneof(
+  fc.record({
+    kind: fc.constant("rename" as const),
+    tag: fc.nat(9),
+    name: fc.constantFrom("Calm", "Rushed", "Zen", "Bored"),
+  }),
   fc.record({ kind: fc.constant("create" as const), underlying: fc.constantFrom("NVDA", "AMD", "TSLA") }),
   fc.record({
     kind: fc.constant("edit" as const),
@@ -87,6 +93,21 @@ function apply(j: Journal, ops: readonly Op[], step: number): void {
         if (trade && id) j.trades.update(trade, { setupId: id });
         break;
       }
+      case "rename": {
+        const tag = nth(
+          j.taxonomy
+            .listTags({ includeArchived: true })
+            .map((row) => row.id)
+            .sort(),
+          each.tag,
+        );
+        try {
+          if (tag) j.taxonomy.updateTag(tag, { name: each.name });
+        } catch (error) {
+          if (!(error instanceof DuplicateNameError)) throw error;
+        }
+        break;
+      }
       case "fill":
         addFill(j.db, {
           id: `f${each.fill}`,
@@ -145,7 +166,15 @@ describe("mergeBundle's guarantees (export-merge spec §4)", () => {
           const tradeIds = new Set([...fromA.tables.trades, ...fromB.tables.trades].map((row) => row.id));
           const fillIds = new Set([...fromA.tables.fills, ...fromB.tables.fills].map((row) => row.id));
           const setupNames = new Set([...names(a, "setups"), ...names(b, "setups")]);
-          const tagNames = new Set([...names(a, "tags"), ...names(b, "tags")]);
+          // A tag can be renamed, so what must survive is each tag's latest name: one of its newest versions'.
+          const latest = new Map<string, { at: number; names: Set<string> }>();
+          for (const row of [...fromA.tables.tags, ...fromB.tables.tags]) {
+            const at = Number(row.updated_at);
+            const name = `${row.kind}:${String(row.name).toLowerCase()}`;
+            const seen = latest.get(String(row.id));
+            if (!seen || at > seen.at) latest.set(String(row.id), { at, names: new Set([name]) });
+            else if (at === seen.at) seen.names.add(name);
+          }
 
           mergeBundle(a.db, fromB);
           mergeBundle(b.db, fromA);
@@ -158,7 +187,10 @@ describe("mergeBundle's guarantees (export-merge spec §4)", () => {
           expect(new Set(readTable(a.db, "trades").map((row) => row.id))).toEqual(tradeIds);
           expect(new Set(readTable(a.db, "fills").map((row) => row.id))).toEqual(fillIds);
           expect(names(a, "setups")).toEqual(setupNames);
-          expect(names(a, "tags")).toEqual(tagNames);
+          const merged = names(a, "tags");
+          for (const { names: candidates } of latest.values()) {
+            expect([...candidates].some((name) => merged.has(name))).toBe(true);
+          }
         },
       ),
       { numRuns: 40 },
