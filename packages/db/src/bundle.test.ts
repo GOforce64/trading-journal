@@ -452,6 +452,50 @@ describe("mergeBundle and screenshots", () => {
     expect(mergeBundle(a.db, bundleOf(b.db)).unchanged).toBe(true);
   });
 
+  it("keeps a screenshot added on one machine when the other machine's later edit wins the trade", () => {
+    const a = journal(1_000);
+    const b = journal(1_000);
+    const trade = a.trades.create(scalp);
+    mergeBundle(b.db, bundleOf(a.db));
+    a.clock.now = 2_000;
+    createAttachmentsRepo(a.db, () => a.clock.now).create(trade.id, IMAGE);
+    b.clock.now = 3_000;
+    b.trades.update(trade.id, { grade: "A" });
+    expect(mergeBundle(a.db, bundleOf(b.db))).toMatchObject({ updated: 1, screenshotsAdded: 0 });
+    expect(mergeBundle(b.db, bundleOf(a.db))).toMatchObject({ updated: 0, screenshotsAdded: 1 });
+    for (const side of [a, b]) {
+      expect(side.trades.get(trade.id)).toMatchObject({
+        grade: "A",
+        attachments: [expect.objectContaining({ sha256: "c".repeat(64) })],
+      });
+    }
+    expect(dump(a.db)).toEqual(dump(b.db));
+  });
+
+  it("removes a screenshot on both machines once either removes it, and keeps the newer caption", () => {
+    const a = journal(1_000);
+    const b = journal(1_000);
+    const trade = a.trades.create(scalp);
+    const shots = createAttachmentsRepo(a.db, () => a.clock.now);
+    const gone = shots.create(trade.id, IMAGE);
+    const kept = shots.create(trade.id, { ...IMAGE, sha256: "d".repeat(64) });
+    if (!gone || !kept) throw new Error("not attached");
+    mergeBundle(b.db, bundleOf(a.db));
+    a.clock.now = 2_000;
+    shots.remove(gone.id);
+    shots.setCaption(kept.id, "early");
+    b.clock.now = 3_000;
+    createAttachmentsRepo(b.db, () => b.clock.now).setCaption(kept.id, "later");
+    mergeBundle(b.db, bundleOf(a.db));
+    mergeBundle(a.db, bundleOf(b.db));
+    for (const side of [a, b]) {
+      expect(side.trades.get(trade.id)?.attachments).toEqual([
+        expect.objectContaining({ id: kept.id, caption: "later" }),
+      ]);
+    }
+    expect(dump(a.db)).toEqual(dump(b.db));
+  });
+
   it("keeps local screenshots when a bundle from before them wins the trade", () => {
     const a = journal(1_000);
     const b = journal(1_000);

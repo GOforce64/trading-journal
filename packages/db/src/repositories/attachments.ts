@@ -13,8 +13,8 @@ export interface AttachmentFile {
 }
 
 /**
- * Screenshots on trades (screenshots spec §3). Each write is an edit of its trade, stamping `edited_at`, so a merge
- * between machines carries it with the trade (export-merge spec §2).
+ * Screenshots on trades (screenshots spec §3). Each write stamps the screenshot alone: a merge between machines
+ * resolves screenshots one by one, like fills, so the trade's own edit time is left to its own fields (spec §4).
  */
 export function createAttachmentsRepo(db: Db, now: () => number = Date.now) {
   const live = (id: string) =>
@@ -23,11 +23,6 @@ export function createAttachmentsRepo(db: Db, now: () => number = Date.now) {
       .from(attachments)
       .where(and(eq(attachments.id, id), isNull(attachments.deletedAt)))
       .get() ?? null;
-
-  /** Stamps the trade as edited by the user. */
-  function touch(tradeId: string, timestamp: number): void {
-    db.update(trades).set({ editedAt: timestamp, updatedAt: timestamp }).where(eq(trades.id, tradeId)).run();
-  }
 
   return {
     get: live,
@@ -50,13 +45,7 @@ export function createAttachmentsRepo(db: Db, now: () => number = Date.now) {
         updatedAt: timestamp,
         deletedAt: null,
       };
-      db.transaction((tx) => {
-        tx.insert(attachments).values(row).run();
-        tx.update(trades)
-          .set({ editedAt: timestamp, updatedAt: timestamp })
-          .where(eq(trades.id, tradeId))
-          .run();
-      });
+      db.insert(attachments).values(row).run();
       return row;
     },
 
@@ -66,13 +55,7 @@ export function createAttachmentsRepo(db: Db, now: () => number = Date.now) {
       if (!existing) return null;
       const timestamp = now();
       const text = caption?.trim() || null;
-      db.transaction(() => {
-        db.update(attachments)
-          .set({ caption: text, updatedAt: timestamp })
-          .where(eq(attachments.id, id))
-          .run();
-        touch(existing.tradeId, timestamp);
-      });
+      db.update(attachments).set({ caption: text, updatedAt: timestamp }).where(eq(attachments.id, id)).run();
       return live(id);
     },
 
@@ -81,13 +64,10 @@ export function createAttachmentsRepo(db: Db, now: () => number = Date.now) {
       const existing = live(id);
       if (!existing) return false;
       const timestamp = now();
-      db.transaction(() => {
-        db.update(attachments)
-          .set({ deletedAt: timestamp, updatedAt: timestamp })
-          .where(eq(attachments.id, id))
-          .run();
-        touch(existing.tradeId, timestamp);
-      });
+      db.update(attachments)
+        .set({ deletedAt: timestamp, updatedAt: timestamp })
+        .where(eq(attachments.id, id))
+        .run();
       return true;
     },
   };

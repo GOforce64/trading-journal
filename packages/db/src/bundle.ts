@@ -117,6 +117,8 @@ export interface MergeSummary {
   /** The bundle's tombstone won over a live local trade. */
   deleted: number;
   fillsAdded: number;
+  /** Live screenshots new to this journal. */
+  screenshotsAdded: number;
   setupsAdded: number;
   tagsAdded: number;
   /** Nothing was written. */
@@ -238,15 +240,12 @@ function collapse(rows: Map<string, Row>, nameOf: (row: Row) => string) {
   return { kept, moved };
 }
 
-/** A trade's children: the rest of its aggregate, which moves with it as one (export-merge spec §2). */
-const CHILDREN = [
-  "legs",
-  "iron_fly_details",
-  "scalp_details",
-  "scalp_targets",
-  "trade_tags",
-  "attachments",
-] as const;
+/**
+ * A trade's children: the rest of its aggregate, which moves with it as one (export-merge spec §2). Fills and
+ * screenshots aren't among them: each is resolved by its own id, so one added on either machine is never lost to the
+ * other's later edit of the trade (screenshots spec §4).
+ */
+const CHILDREN = ["legs", "iron_fly_details", "scalp_details", "scalp_targets", "trade_tags"] as const;
 type Child = (typeof CHILDREN)[number];
 
 interface Aggregate {
@@ -265,7 +264,6 @@ function aggregates(tables: Record<BundleTable, Row[]>): Map<string, Aggregate> 
         scalp_details: [],
         scalp_targets: [],
         trade_tags: [],
-        attachments: [],
       },
     });
   }
@@ -387,6 +385,7 @@ export function mergeBundle(db: Db, bundle: IncomingBundle): MergeSummary {
       kept: 0,
       deleted: 0,
       fillsAdded: 0,
+      screenshotsAdded: 0,
       setupsAdded: 0,
       tagsAdded: 0,
       unchanged: true,
@@ -415,10 +414,15 @@ export function mergeBundle(db: Db, bundle: IncomingBundle): MergeSummary {
       else summary.updated++;
     }
     const fills = resolve("fills", mine.fills, theirs.fills);
+    const attachments = resolve("attachments", mine.attachments, theirs.attachments);
     const localFills = new Set(original.fills.map((row) => keyOf("fills", row)));
     summary.fillsAdded = [...fills.keys()].filter((key) => !localFills.has(key)).length;
-    // A name both sides had isn't new, whichever id it keeps.
     const live = (row: Row) => row.deleted_at == null;
+    const localShots = new Set(original.attachments.filter(live).map((row) => keyOf("attachments", row)));
+    summary.screenshotsAdded = [...attachments.entries()].filter(
+      ([key, row]) => live(row) && !localShots.has(key),
+    ).length;
+    // A name both sides had isn't new, whichever id it keeps.
     const localSetups = new Set(original.setups.filter(live).map(setupName));
     const localTags = new Set(original.tags.filter(live).map(tagName));
     summary.setupsAdded = [...setups.kept.values()].filter(
@@ -438,7 +442,7 @@ export function mergeBundle(db: Db, bundle: IncomingBundle): MergeSummary {
       scalp_details: new Map(),
       scalp_targets: new Map(),
       trade_tags: new Map(),
-      attachments: new Map(),
+      attachments,
       fills,
     };
     for (const aggregate of final.values()) {

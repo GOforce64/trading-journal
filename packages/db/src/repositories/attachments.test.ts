@@ -12,7 +12,7 @@ function setup() {
 }
 
 describe("attachments repository", () => {
-  it("attaches screenshots to a trade, oldest first, as an edit of the trade", () => {
+  it("attaches screenshots to a trade, oldest first, leaving the trade's own edit time alone", () => {
     const { repo, trades, clock, tradeId } = setup();
     clock.now = 2_000;
     const first = repo.create(tradeId, IMAGE);
@@ -21,20 +21,23 @@ describe("attachments repository", () => {
     const trade = trades.get(tradeId);
     expect(trade?.attachments.map((each) => each.sha256)).toEqual(["a".repeat(64), "b".repeat(64)]);
     expect(first).toMatchObject({ tradeId, caption: null, bytes: 1_234, createdAt: 2_000 });
-    expect(trade).toMatchObject({ editedAt: 3_000, updatedAt: 3_000 });
+    expect(trade).toMatchObject({ editedAt: 1_000, updatedAt: 1_000 });
   });
 
-  it("captions a screenshot, trimmed, and removes one, each an edit of its trade", () => {
+  it("captions a screenshot, trimmed, and removes one, each stamped on the screenshot alone", () => {
     const { repo, trades, clock, tradeId } = setup();
     const shot = repo.create(tradeId, IMAGE);
     if (!shot) throw new Error("not attached");
     clock.now = 4_000;
-    expect(repo.setCaption(shot.id, "  the 09:31 flush  ")?.caption).toBe("the 09:31 flush");
-    expect(trades.get(tradeId)?.editedAt).toBe(4_000);
+    expect(repo.setCaption(shot.id, "  the 09:31 flush  ")).toMatchObject({
+      caption: "the 09:31 flush",
+      updatedAt: 4_000,
+    });
+    expect(trades.get(tradeId)?.editedAt).toBe(1_000);
     expect(repo.setCaption(shot.id, "   ")?.caption).toBeNull();
     clock.now = 5_000;
     expect(repo.remove(shot.id)).toBe(true);
-    expect(trades.get(tradeId)).toMatchObject({ attachments: [], editedAt: 5_000 });
+    expect(trades.get(tradeId)).toMatchObject({ attachments: [], editedAt: 1_000 });
     expect(repo.remove(shot.id)).toBe(false);
     expect(repo.setCaption(shot.id, "x")).toBeNull();
   });
