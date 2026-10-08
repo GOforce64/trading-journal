@@ -6,7 +6,12 @@ import type { ChartEditing } from "../chart/drag.js";
 import { NewMissed } from "./NewMissed.js";
 
 const charts: {
-  props: { levels?: { editing: ChartEditing }; emptyText?: string; trade?: { openedAt: number } } | null;
+  props: {
+    levels?: { editing: ChartEditing };
+    emptyText?: string;
+    trade?: { openedAt: number };
+    points?: readonly unknown[];
+  } | null;
 } = { props: null };
 
 vi.mock("../chart/TradeCharts.js", () => ({
@@ -50,6 +55,11 @@ describe("NewMissed", () => {
     expect(charts.props?.trade?.openedAt).toBe(nyWallClock("2026-09-30", 9 * 60 + 30));
     expect(charts.props?.emptyText).toBe("No bars for NVDA on Sep 30. Check the ticker.");
     expect(screen.getByText("Click the chart to place the entry")).toBeTruthy();
+  });
+
+  it("draws no open and close marks for the session it spans", () => {
+    setup();
+    expect(charts.props?.points).toEqual([]);
   });
 
   it("creates the trade from the first click, then opens it", async () => {

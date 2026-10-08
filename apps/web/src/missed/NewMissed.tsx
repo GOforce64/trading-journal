@@ -1,6 +1,6 @@
 import { nyWallClock, regularClose } from "@tj/core";
 import { useMemo, useState } from "react";
-import type { ChartEditing } from "../chart/drag.js";
+import type { ChartEditing, PointMark } from "../chart/drag.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { Chip, Panel } from "../components/ui.js";
 import { useCreateMissed } from "./data.js";
@@ -8,6 +8,8 @@ import { useCreateMissed } from "./data.js";
 const INPUT =
   "num w-[4.6rem] rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent";
 const DAY = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+/** No points yet, which keeps the session's open and close marks off the chart (missed-trades spec §6.4). */
+const NO_POINTS: readonly PointMark[] = [];
 
 /**
  * A new missed trade (missed-trades spec §6.2): the day's chart, ready for a click on the entry. Nothing exists until
@@ -71,6 +73,7 @@ export function NewMissed({
           trade={chartTrade}
           daily={false}
           levels={{ lines: [], editing }}
+          points={NO_POINTS}
           emptyText={`No bars for ${symbol} on ${dayText}. Check the ticker.`}
         />
         <Panel title="Missed trade">
