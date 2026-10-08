@@ -414,7 +414,7 @@ A whole-branch Opus review (7354758..3c7bb39) found nothing Critical and two Imp
 
 ---
 
-## 14. Deferred minors fixed (2026-10-09)
+## 14. Deferred minors fixed (2026-10-08)
 
 All 16 of §13's deferred minors, each test-first, on the user's word ("fix the deferred minors on autopilot"):
 - **The panel:**
