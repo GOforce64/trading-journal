@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type MissedLevels, missedRisk, snapToBar } from "./missed.js";
+import { type MissedLevels, missedRisk, snapToBar, snapToMinute } from "./missed.js";
 
 const LONG: MissedLevels = {
   direction: "long",
@@ -116,5 +116,27 @@ describe("snapToBar", () => {
     expect(snapToBar(181, { high: 180.5, low: 179 })).toBe(180.5);
     expect(snapToBar(178, { high: 180.5, low: 179 })).toBe(179);
     expect(snapToBar(179.75, { high: 180.5, low: 179 })).toBe(179.75);
+  });
+});
+
+describe("snapToMinute", () => {
+  const minutes = [
+    { t: 0, high: 237.26, low: 237.08 },
+    { t: 60_000, high: 237.29, low: 237.14 },
+    { t: 120_000, high: 237.21, low: 237.08 },
+  ];
+
+  it("puts a price on the first minute that traded it", () => {
+    expect(snapToMinute(237.28, minutes)).toEqual({ t: 60_000, price: 237.28 });
+    expect(snapToMinute(237.1, minutes)).toEqual({ t: 0, price: 237.1 });
+  });
+
+  it("keeps a price no minute traded on the nearest one, inside its range", () => {
+    expect(snapToMinute(237.5, minutes)).toEqual({ t: 60_000, price: 237.29 });
+    expect(snapToMinute(236.9, minutes)).toEqual({ t: 0, price: 237.08 });
+  });
+
+  it("is null without minutes", () => {
+    expect(snapToMinute(237, [])).toBeNull();
   });
 });

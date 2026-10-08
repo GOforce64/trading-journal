@@ -468,16 +468,17 @@ describe("IntradayChart and a missed trade's points", () => {
     ]);
   });
 
-  it("places the entry at the bar under the pointer, its price kept inside the bar", () => {
+  it("places the entry at the bar under the pointer, on the minute inside it that traded the price", () => {
     const edit = editing("entry");
     renderPoints(edit, { points: [] });
     expect(screen.getByTestId("placing-hint").textContent).toBe(
       "Click the chart to place the entry · Esc to cancel",
     );
+    // A 3-minute candle whose high is its last minute's: the point goes on that minute, kept inside its range.
     fireEvent.mouseDown(chart(), { clientX: ENTRY * BAR_PX + 0.6, clientY: yOf(239.5), button: 0 });
     expect(edit.onPlacePoint).toHaveBeenCalledWith(
       "entry",
-      candle(ENTRY).t,
+      candle(ENTRY).t + 120_000,
       expect.closeTo(candle(ENTRY).h, 2),
     );
     expect(edit.onPlace).not.toHaveBeenCalled();

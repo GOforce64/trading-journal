@@ -76,3 +76,20 @@ export function missedRisk(trade: MissedRiskTrade, live: Partial<MissedLevels> =
 export function snapToBar(price: number, bar: { high: number; low: number }): number {
   return Math.min(bar.high, Math.max(bar.low, price));
 }
+
+/**
+ * A click on a candle of several minutes, put on the first minute inside it that traded the price, or the nearest one
+ * when none did, so the point's time and price are a real minute's: the panel checks a price against its minute's bar.
+ */
+export function snapToMinute(
+  price: number,
+  minutes: readonly { t: number; high: number; low: number }[],
+): { t: number; price: number } | null {
+  let best: { t: number; price: number } | null = null;
+  for (const minute of minutes) {
+    const snapped = snapToBar(price, minute);
+    if (!best || Math.abs(snapped - price) < Math.abs(best.price - price))
+      best = { t: minute.t, price: snapped };
+  }
+  return best;
+}

@@ -1,4 +1,4 @@
-import { nyClock, round2, snapToBar } from "@tj/core";
+import { nyClock, round2, snapToBar, snapToMinute } from "@tj/core";
 import {
   CandlestickSeries,
   createChart,
@@ -317,15 +317,22 @@ export function IntradayChart({
     const toPrice = (y: number) => candles.coordinateToPrice(y);
     const candleTimes = () => current.current.model.candles.map((candle) => candle.t);
     const xOf = (t: number) => chart.timeScale().logicalToCoordinate(candleIndex(candleTimes(), t) as never);
-    /** The candle under x, the nearest one past either end, and a price kept inside it. */
+    /** The candle under x, the nearest one past either end, and the minute inside it that traded the price. */
     function pointAt(id: PointId, x: number, y: number): PointAt | null {
-      const all = current.current.model.candles;
+      const { candles: all, bars } = current.current.model;
       const logical = chart.timeScale().coordinateToLogical(x);
       const price = priceAt(y, toPrice);
       if (all.length === 0 || logical == null || price == null) return null;
-      const candle = all[Math.min(all.length - 1, Math.max(0, Math.round(Number(logical))))];
+      const index = Math.min(all.length - 1, Math.max(0, Math.round(Number(logical))));
+      const candle = all[index];
       if (!candle) return null;
-      return { id, t: candle.t, price: round2(snapToBar(price, { high: candle.h, low: candle.l })) };
+      const end = all[index + 1]?.t ?? Number.POSITIVE_INFINITY;
+      const inside = bars.filter((bar) => bar.t >= candle.t && bar.t < end);
+      const at = snapToMinute(
+        price,
+        inside.map((bar) => ({ t: bar.t, high: bar.h, low: bar.l })),
+      ) ?? { t: candle.t, price: snapToBar(price, { high: candle.h, low: candle.l }) };
+      return { id, t: at.t, price: round2(at.price) };
     }
     function placedPoints() {
       return current.current.points.flatMap((point) => {
