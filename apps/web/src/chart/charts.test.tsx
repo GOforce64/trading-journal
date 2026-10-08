@@ -324,3 +324,89 @@ describe("IntradayChart editing the review's lines", () => {
     expect(seriesOf("Candlestick")[0]?.priceLines[1]?.price).toBe(235.5);
   });
 });
+
+describe("IntradayChart's option view", () => {
+  const OPTION_BARS: PriceBar[] = [
+    { t: nyWallClock(DAY, 571), o: 0.97, h: 1.53, l: 0.97, c: 1.1, v: 50 },
+    { t: nyWallClock(DAY, 580), o: 1.2, h: 1.37, l: 1.15, c: 1.3, v: 20 },
+    { t: nyWallClock(DAY, 586), o: 1.1, h: 1.32, l: 0.64, c: 1.29, v: 30 },
+  ];
+  const OPTION = intradayModel(OPTION_BARS, TRADE, 1, DEFAULT_PREFS.emaLengths, { slots: true });
+  const at = (minute: number) => nyWallClock(DAY, minute) / 1000;
+
+  it("draws empty minutes as whitespace, so the candles keep their place in time", () => {
+    render(
+      <IntradayChart model={OPTION} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
+    );
+    const drawn = seriesOf("Candlestick")[0]?.data as { time: number; open?: number }[];
+    expect(drawn).toHaveLength(OPTION.slots?.length ?? -1);
+    expect(drawn.find((item) => item.time === at(572))).toEqual({ time: at(572) });
+    expect(drawn.find((item) => item.time === at(580))?.open).toBe(1.2);
+  });
+
+  it("puts the fills at their prices", () => {
+    render(
+      <IntradayChart model={OPTION} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
+    );
+    expect(library.markers.at(-1)).toEqual([
+      expect.objectContaining({ position: "atPriceTop", price: 1.06, shape: "arrowUp", text: "B 2 @ 1.06" }),
+      expect.objectContaining({
+        position: "atPriceBottom",
+        price: 1.295,
+        shape: "arrowDown",
+        text: "S 2 @ 1.295",
+      }),
+    ]);
+  });
+
+  it("keeps the time range in view across a switch", () => {
+    const { rerender } = render(
+      <IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} viewKey="stock" />,
+    );
+    const opened = library.ranges.length;
+    const range = { from: at(575), to: at(600) };
+    library.visibleRange = range;
+    rerender(
+      <IntradayChart model={OPTION} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
+    );
+    expect(library.timeRanges).toEqual([range]);
+    expect(library.ranges).toHaveLength(opened);
+  });
+
+  it("opens on the trade instead when the other view has nothing in that range", () => {
+    const { rerender } = render(
+      <IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} viewKey="stock" />,
+    );
+    const opened = library.ranges.length;
+    library.visibleRange = { from: at(1100), to: at(1150) };
+    rerender(
+      <IntradayChart model={OPTION} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
+    );
+    expect(library.timeRanges).toEqual([]);
+    expect(library.ranges).toHaveLength(opened + 1);
+  });
+});
+
+describe("ChartToolbar's view switch", () => {
+  const toolbar = (view?: { current: "stock" | "option"; onChange: (view: "stock" | "option") => void }) => (
+    <ChartToolbar prefs={DEFAULT_PREFS} onChange={vi.fn()} hiddenEmas={[]} onFit={vi.fn()} view={view} />
+  );
+
+  it("switches between the stock and the option, greying PM levels on the option", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(toolbar({ current: "stock", onChange }));
+    expect(screen.getByRole("button", { name: "Stock" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Option" }));
+    expect(onChange).toHaveBeenCalledWith("option");
+    expect((screen.getByRole("button", { name: "PM levels" }) as HTMLButtonElement).disabled).toBe(false);
+    rerender(toolbar({ current: "option", onChange }));
+    const pm = screen.getByRole("button", { name: "PM levels" }) as HTMLButtonElement;
+    expect(pm.disabled).toBe(true);
+    expect(pm.title).toBe("Options don't trade premarket");
+  });
+
+  it("has no switch without a view", () => {
+    render(toolbar());
+    expect(screen.queryByRole("button", { name: "Option" })).toBeNull();
+  });
+});

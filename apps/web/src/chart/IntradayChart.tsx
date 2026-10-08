@@ -51,8 +51,25 @@ interface Drag {
 
 const line = (point: Point) => ({ time: seconds(point.t), value: point.value });
 
-/** How a fill's arrow looks: buys below the candle pointing up, sells above pointing down (spec §8). */
-export function markerLook(marker: Marker) {
+/**
+ * How a fill's arrow looks: buys below the candle pointing up, sells above pointing down (spec §8). On the option view
+ * the arrow's tip is at the fill's own price (premium-chart spec §6.2).
+ */
+export function markerLook(marker: Marker, atPrice = false) {
+  if (atPrice && marker.price != null && marker.side === "buy")
+    return {
+      position: "atPriceTop" as const,
+      shape: "arrowUp" as const,
+      color: COLORS.up,
+      price: marker.price,
+    };
+  if (atPrice && marker.price != null && marker.side === "sell")
+    return {
+      position: "atPriceBottom" as const,
+      shape: "arrowDown" as const,
+      color: COLORS.down,
+      price: marker.price,
+    };
   if (marker.side === "buy")
     return { position: "belowBar" as const, shape: "arrowUp" as const, color: COLORS.up };
   if (marker.side === "sell")
@@ -70,6 +87,8 @@ export function IntradayChart({
   lines = NO_LINES,
   editing,
   height = 420,
+  markersAtPrice = false,
+  viewKey = "stock",
 }: {
   model: IntradayModel;
   show: Record<Toggle, boolean>;
@@ -78,6 +97,10 @@ export function IntradayChart({
   /** The scalp review's placing and dragging; without it the mouse only pans and zooms. */
   editing?: ChartEditing;
   height?: number;
+  /** The option view: fills sit at their prices (premium-chart spec §6.2). */
+  markersAtPrice?: boolean;
+  /** Which view the model is, so a switch keeps the time range in view (premium-chart spec §6.1). */
+  viewKey?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const parts = useRef<Parts | null>(null);
@@ -86,6 +109,9 @@ export function IntradayChart({
   const current = useRef({ lines, editing });
   const [hovered, setHovered] = useState<number | null>(null);
   const [grab, setGrab] = useState(false);
+  // The view the chart last drew, and the view whose time range was kept on a switch (premium-chart spec §6.1).
+  const drawnView = useRef<string | null>(null);
+  const keptFor = useRef<string | null>(null);
 
   useEffect(() => {
     current.current = { lines, editing };
@@ -244,21 +270,27 @@ export function IntradayChart({
   useEffect(() => {
     const chart = parts.current;
     if (!chart) return;
+    const switched = drawnView.current != null && drawnView.current !== viewKey;
+    const range = switched ? chart.chart.timeScale().getVisibleRange() : null;
+    drawnView.current = viewKey;
     times.current = model.candles.map((candle) => candle.t);
-    chart.candles.setData(
-      model.candles.map((candle) => {
-        const bar = {
-          time: seconds(candle.t),
-          open: candle.o,
-          high: candle.h,
-          low: candle.l,
-          close: candle.c,
-        };
-        if (!candle.extended) return bar;
-        const color = candle.c >= candle.o ? COLORS.upExtended : COLORS.downExtended;
-        return { ...bar, color, wickColor: color, borderColor: color };
-      }),
-    );
+    const bars = model.candles.map((candle) => {
+      const bar = {
+        time: seconds(candle.t),
+        open: candle.o,
+        high: candle.h,
+        low: candle.l,
+        close: candle.c,
+      };
+      if (!candle.extended) return bar;
+      const color = candle.c >= candle.o ? COLORS.upExtended : COLORS.downExtended;
+      return { ...bar, color, wickColor: color, borderColor: color };
+    });
+    if (model.slots) {
+      // Empty minutes are whitespace, so a thin strike's candles keep their place in time.
+      const byTime = new Map(bars.map((bar) => [bar.time as number, bar]));
+      chart.candles.setData(model.slots.map((t) => byTime.get(seconds(t)) ?? { time: seconds(t) }));
+    } else chart.candles.setData(bars);
     chart.volume.setData(
       model.candles.map((candle) => ({
         time: seconds(candle.t),
@@ -284,18 +316,36 @@ export function IntradayChart({
       series.setData(level ? model.levelTimes.map((t) => ({ time: seconds(t), value: level.price })) : []);
     }
     chart.markers.setMarkers(
-      model.markers.map((marker) => ({ time: seconds(marker.t), text: marker.text, ...markerLook(marker) })),
+      model.markers.map((marker) => ({
+        time: seconds(marker.t),
+        text: marker.text,
+        ...markerLook(marker, markersAtPrice),
+      })),
     );
-  }, [model]);
+    // A switch keeps the time range the reader was looking at, when this view has candles there.
+    if (
+      range &&
+      model.candles.some(
+        (candle) => seconds(candle.t) >= Number(range.from) && seconds(candle.t) <= Number(range.to),
+      )
+    ) {
+      chart.chart.timeScale().setVisibleRange(range);
+      keptFor.current = viewKey;
+    }
+  }, [model, markersAtPrice, viewKey]);
 
   // The opening view: on first data, on a new timeframe, and on Fit trade.
   const from = model.window?.from;
   const to = model.window?.to;
   // biome-ignore lint/correctness/useExhaustiveDependencies: fitKey is the Fit trade button's request to re-apply
   useEffect(() => {
+    if (keptFor.current === viewKey) {
+      keptFor.current = null;
+      return;
+    }
     if (from === undefined || to === undefined) return;
     parts.current?.chart.timeScale().setVisibleLogicalRange({ from, to });
-  }, [from, to, fitKey]);
+  }, [from, to, fitKey, viewKey]);
 
   useEffect(() => {
     const chart = parts.current;

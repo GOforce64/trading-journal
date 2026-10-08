@@ -22,6 +22,10 @@ export const library = {
   removed: 0,
   series: [] as FakeSeries[],
   ranges: [] as unknown[],
+  /** Every setVisibleRange call: a time range kept across a view switch. */
+  timeRanges: [] as unknown[],
+  /** What getVisibleRange answers: the time range the reader is looking at. */
+  visibleRange: null as unknown,
   markers: [] as unknown[][],
   crosshair: null as ((param: { time?: unknown }) => void) | null,
   /** Every chart.applyOptions call, in order. */
@@ -33,6 +37,8 @@ export function resetLibrary(): void {
   library.removed = 0;
   library.series = [];
   library.ranges = [];
+  library.timeRanges = [];
+  library.visibleRange = null;
   library.markers = [];
   library.crosshair = null;
   library.chartOptions = [];
@@ -84,6 +90,11 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
       timeScale: () => ({
         setVisibleLogicalRange: (range: unknown) => {
           library.ranges.push(range);
+        },
+        getVisibleRange: () => library.visibleRange,
+        setVisibleRange: (range: unknown) => {
+          library.timeRanges.push(range);
+          library.visibleRange = range;
         },
       }),
       subscribeCrosshairMove: (handler: (param: { time?: unknown }) => void) => {

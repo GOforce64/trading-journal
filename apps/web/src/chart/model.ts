@@ -7,6 +7,7 @@ import {
   nyClock,
   type PriceBar,
   sessionLevels,
+  sessionSlots,
   vwap,
 } from "@tj/core";
 
@@ -33,6 +34,8 @@ export interface Marker {
   t: number;
   side: "buy" | "sell" | "expired" | "held";
   text: string;
+  /** The fill's price, for the option view's markers (premium-chart spec §6.2). */
+  price?: number;
 }
 export interface LevelLine {
   label: "PM H" | "PM L" | "PD H" | "PD L";
@@ -57,6 +60,8 @@ export interface IntradayModel {
   levelTimes: number[];
   markers: Marker[];
   window: ViewWindow | null;
+  /** The option view's slots, empty ones included, which the chart's logical range counts in. */
+  slots: number[] | null;
 }
 export interface DailyModel {
   candles: PriceBar[];
@@ -88,6 +93,7 @@ export function tradeMarks(trade: ChartTrade): Marker[] {
         t: fill.executedAt,
         side: bought ? "buy" : "sell",
         text: `${bought ? "B" : "S"} ${Math.abs(fill.quantity)} @ ${priceText(fill.price)}`,
+        price: fill.price,
       };
     });
   }
@@ -100,6 +106,7 @@ export function tradeMarks(trade: ChartTrade): Marker[] {
         t: trade.openedAt,
         side: long ? "buy" : "sell",
         text: `${long ? "B" : "S"} ${size} @ ${priceText(leg.openPrice)}`,
+        price: leg.openPrice,
       },
     ];
     if (trade.closedAt != null && leg.closePrice != null) {
@@ -107,6 +114,7 @@ export function tradeMarks(trade: ChartTrade): Marker[] {
         t: trade.closedAt,
         side: long ? "sell" : "buy",
         text: `${long ? "S" : "B"} ${size} @ ${priceText(leg.closePrice)}`,
+        price: leg.closePrice,
       });
     }
     return marks;
@@ -149,14 +157,19 @@ function openingWindow(candles: readonly { t: number }[], marks: readonly Marker
   return { from: Math.max(0, first - WINDOW_PAD), to: last + WINDOW_PAD };
 }
 
-/** Everything the intraday chart draws, from 1-minute bars (spec §7–8). */
+/**
+ * Everything the intraday chart draws, from 1-minute bars (spec §7–8). With `slots`, the option view's empty minutes
+ * are counted too (premium-chart spec §6.2), so the window is in slots rather than candles.
+ */
 export function intradayModel(
   bars: readonly PriceBar[],
   trade: ChartTrade,
   minutes: number,
   emaLengths: readonly number[],
+  options: { slots?: boolean } = {},
 ): IntradayModel {
   const candles = aggregate(bars, minutes);
+  const slots = options.slots ? sessionSlots(candles, minutes) : null;
   const closes = candles.map((candle) => candle.c);
   const firstDay = nyClock(trade.openedAt).date;
   const found = sessionLevels(bars, firstDay);
@@ -182,7 +195,8 @@ export function intradayModel(
     levels,
     levelTimes: candles.filter((candle) => nyClock(candle.t).date === firstDay).map((candle) => candle.t),
     markers,
-    window: openingWindow(candles, marks),
+    window: openingWindow(slots ? slots.map((t) => ({ t })) : candles, marks),
+    slots,
   };
 }
 
