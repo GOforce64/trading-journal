@@ -27,6 +27,15 @@ export const EMA_WARMUP = 3;
 export const MAX_BAR_DAYS = 45;
 /** Alpaca's free plan shares SIP prices 15 minutes after the fact; a minute more allows for clock drift. */
 export const ALPACA_DELAY_MS = 16 * 60_000;
+/** Options trade the regular session, and some, such as SPY's, a quarter-hour past it (premium-chart spec §5). */
+const OPTION_EXTRA_MINUTES = 15;
+/** How far behind Alpaca serves option bars once it refuses the stock's delay (premium-chart spec §5.2). */
+export const OPTION_LONG_DELAY_MS = 80 * 60_000;
+/** Alpaca's first day of option bars (premium-chart spec §3). */
+export const OPTION_BARS_SINCE = "2024-01-18";
+
+/** The minute options stop trading on `date`: the regular close plus 15 minutes. */
+export const optionClose = (date: string): number => regularClose(date) + OPTION_EXTRA_MINUTES;
 
 const HOUR = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -83,6 +92,27 @@ export function aggregate(bars: readonly PriceBar[], minutes: number): Candle[] 
     });
   }
   return candles;
+}
+
+/**
+ * The option view's time slots (premium-chart spec §6.2): every candle's start, and each day's empty slots from the one
+ * holding 09:30 to the later of the options' close and the day's last candle, on `aggregate`'s boundaries. The chart
+ * draws empty slots as whitespace, so a thin strike's candles keep their place in time.
+ */
+export function sessionSlots(candles: readonly { t: number }[], minutes: number): number[] {
+  const slotOf = (minute: number) =>
+    PREMARKET_OPEN + Math.floor((minute - PREMARKET_OPEN) / minutes) * minutes;
+  const lastByDay = new Map<string, number>();
+  for (const candle of candles) {
+    const { date, minute } = nyClock(candle.t);
+    lastByDay.set(date, Math.max(lastByDay.get(date) ?? 0, minute));
+  }
+  const slots = new Set(candles.map((candle) => candle.t));
+  for (const [date, lastMinute] of lastByDay) {
+    const end = slotOf(Math.max(optionClose(date) - 1, lastMinute));
+    for (let slot = slotOf(REGULAR_OPEN); slot <= end; slot += minutes) slots.add(nyWallClock(date, slot));
+  }
+  return [...slots].sort((a, b) => a - b);
 }
 
 /**
