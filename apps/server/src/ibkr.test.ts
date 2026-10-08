@@ -43,10 +43,12 @@ interface Answers {
 /** The app with a fake Flex client that answers each query from the fixtures, and a clock the test moves. */
 function setup(config: typeof CONFIG | null = CONFIG, answers: Answers = {}) {
   const asked: string[] = [];
+  const deadlines: (number | undefined)[] = [];
   let clock = NOW;
   const client: FlexClient = {
-    async statement(queryId) {
+    async statement(queryId, until) {
       asked.push(queryId);
+      deadlines.push(until);
       // A statement takes a moment, as IBKR's does, so two syncs at once really overlap.
       await new Promise((resolve) => setTimeout(resolve, 5));
       const answer =
@@ -62,6 +64,7 @@ function setup(config: typeof CONFIG | null = CONFIG, answers: Answers = {}) {
   return {
     app,
     asked,
+    deadlines,
     advance: (ms: number) => {
       clock += ms;
     },
@@ -141,6 +144,13 @@ describe("POST /api/ibkr/sync", () => {
       lastError: string;
     };
     expect(status).toMatchObject({ lastStatus: "error", lastError: message });
+  });
+
+  it("gives both statements one deadline, two and a half minutes from the start", async () => {
+    const { sync, asked, deadlines } = setup();
+    await sync();
+    expect(asked).toEqual([CONFIG.todayQueryId, CONFIG.activityQueryId]);
+    expect(deadlines).toEqual([NOW + 150_000, NOW + 150_000]);
   });
 
   it("keeps today's fills when the Activity statement fails", async () => {
