@@ -437,3 +437,14 @@ All 16 of §13's deferred minors, each test-first, on the user's word ("fix the 
 - **Tests:** a run keeps its temp journals in a folder of its own and removes it (`scripts/vitest-tmp.ts`).
 
 Still as built (§13): no shaded hold band, and no dotted line for other missed trades on the chart.
+
+**Its final review** (Opus, whole branch) found nothing Critical. Three fixes, each test-first:
+- the day's trades said "Click to open" on `/missed/new`, where a click places the entry; the chart now offers it only when a click opens the trade;
+- a refused new exit emptied both typed fields; the draft now shows until the exit saves;
+- the test run's temp setup now restores TMPDIR, TEMP and TMP, so watch mode survives a config restart.
+
+**Still deferred:**
+- the hold-range fill can be asked before a first exit's save lands (unlikely locally; the MFE line then waits for a reload);
+- `testTmp.test.ts` passes only under the root config;
+- `/missed/new`'s "Place it on …" note isn't cleared by a later click whose create fails;
+- the month order leans on Intl's English month names.
