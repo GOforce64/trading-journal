@@ -14,7 +14,8 @@
     "dev:server": "pnpm --filter @tj/server dev",
     "dev:web": "pnpm --filter @tj/web dev",
     "build": "pnpm --filter @tj/web build",
-    "start": "pnpm build && pnpm --filter @tj/server start"
+    "start": "pnpm build && pnpm --filter @tj/server start",
+    "demo": "pnpm build && pnpm --filter @tj/server demo"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
