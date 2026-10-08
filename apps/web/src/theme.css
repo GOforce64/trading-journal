@@ -54,3 +54,16 @@ body {
   /* biome-ignore lint/complexity/noImportantStyles: Lightweight Charts sets an inline cursor on its canvases */
   cursor: crosshair !important;
 }
+
+/* A missed trade's points move in time and price; another trade's faint marker opens it (missed-trades spec §6.4). */
+[data-cursor="move"],
+[data-cursor="move"] * {
+  /* biome-ignore lint/complexity/noImportantStyles: Lightweight Charts sets an inline cursor on its canvases */
+  cursor: move !important;
+}
+
+[data-cursor="pointer"],
+[data-cursor="pointer"] * {
+  /* biome-ignore lint/complexity/noImportantStyles: Lightweight Charts sets an inline cursor on its canvases */
+  cursor: pointer !important;
+}

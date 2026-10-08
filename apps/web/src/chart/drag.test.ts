@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inPane, lineName, nearestLine, priceAt } from "./drag.js";
+import { inPane, lineName, nearestLine, nearestPoint, priceAt } from "./drag.js";
 
 // 240 at the top of a 400 px pane, 220 at the bottom: 0.05 a pixel.
 const toY = (price: number) => ((240 - price) / 20) * 400;
@@ -52,5 +52,23 @@ describe("lineName", () => {
   it("names the stop, and a target by its number", () => {
     expect(lineName("stop")).toBe("the stop");
     expect(lineName("t2")).toBe("T2");
+  });
+});
+
+describe("missed trades' points and levels", () => {
+  it("names a missed trade's levels for the placing hint", () => {
+    expect(lineName("entry")).toBe("the entry");
+    expect(lineName("exit")).toBe("the exit");
+    expect(lineName("target")).toBe("the target");
+  });
+
+  it("grabs the point within reach, the closer of two", () => {
+    const points = [
+      { id: "entry" as const, x: 100, y: 200 },
+      { id: "exit" as const, x: 108, y: 200 },
+    ];
+    expect(nearestPoint(103, 202, points)).toBe("entry");
+    expect(nearestPoint(106, 199, points)).toBe("exit");
+    expect(nearestPoint(100, 210, points)).toBeNull();
   });
 });

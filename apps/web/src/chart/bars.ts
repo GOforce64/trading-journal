@@ -35,10 +35,10 @@ export function useMinuteBars(symbol: string, from: string, to: string, live: bo
 }
 
 /** Two years of daily bars up to the trade's last day. */
-export function useDailyBars(symbol: string, to: string) {
+export function useDailyBars(symbol: string, to: string, wanted = true) {
   return useQuery({
     queryKey: ["daily-bars", symbol, to],
-    enabled: TICKER.test(symbol),
+    enabled: wanted && TICKER.test(symbol),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     queryFn: async () => {

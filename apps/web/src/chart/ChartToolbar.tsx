@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ChartView } from "./option.js";
 import { type ChartPrefs, TIMEFRAMES, type Toggle, timeframeLabel } from "./prefs.js";
 
@@ -12,6 +13,8 @@ export function ChartToolbar({
   hiddenEmas,
   onFit,
   view,
+  showDay = false,
+  extra,
 }: {
   prefs: ChartPrefs;
   onChange: (next: ChartPrefs) => void;
@@ -20,6 +23,10 @@ export function ChartToolbar({
   onFit: () => void;
   /** A scalp's view and its switch (premium-chart spec §6.1); none on other trades. */
   view?: { current: ChartView; onChange: (next: ChartView) => void };
+  /** A missed trade's chart: the Day's trades toggle (missed-trades spec §6.4). */
+  showDay?: boolean;
+  /** The page's own buttons, before Fit trade, such as a scalp's + Missed. */
+  extra?: ReactNode;
 }) {
   const onOption = view?.current === "option";
   const toggles: { toggle: Toggle; label: string; title?: string; disabled?: boolean }[] = [
@@ -37,6 +44,7 @@ export function ChartToolbar({
     },
     { toggle: "pd", label: "PD levels" },
     { toggle: "volume", label: "Volume" },
+    ...(showDay ? [{ toggle: "day" as const, label: "Day's trades" }] : []),
   ];
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -81,11 +89,8 @@ export function ChartToolbar({
           {label}
         </button>
       ))}
-      <button
-        type="button"
-        onClick={onFit}
-        className={`${BUTTON} ml-auto border-line text-fg hover:border-accent`}
-      >
+      <span className="ml-auto flex items-center gap-1">{extra}</span>
+      <button type="button" onClick={onFit} className={`${BUTTON} border-line text-fg hover:border-accent`}>
         Fit trade
       </button>
     </div>

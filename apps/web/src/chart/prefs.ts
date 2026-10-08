@@ -2,7 +2,8 @@ import { useState } from "react";
 
 export const TIMEFRAMES = [1, 2, 3, 5, 10, 15, 30, 60] as const;
 export const timeframeLabel = (minutes: number): string => (minutes === 60 ? "1h" : `${minutes}m`);
-export const TOGGLES = ["ema0", "ema1", "ema2", "ema3", "vwap", "pm", "pd", "volume"] as const;
+/** `day` is a missed trade's chart showing the day's other trades (missed-trades spec §6.4). */
+export const TOGGLES = ["ema0", "ema1", "ema2", "ema3", "vwap", "pm", "pd", "volume", "day"] as const;
 export type Toggle = (typeof TOGGLES)[number];
 
 export interface ChartPrefs {
@@ -13,7 +14,17 @@ export interface ChartPrefs {
 
 export const DEFAULT_PREFS: ChartPrefs = {
   minutes: 3,
-  show: { ema0: true, ema1: true, ema2: true, ema3: true, vwap: true, pm: true, pd: true, volume: true },
+  show: {
+    ema0: true,
+    ema1: true,
+    ema2: true,
+    ema3: true,
+    vwap: true,
+    pm: true,
+    pd: true,
+    volume: true,
+    day: true,
+  },
   emaLengths: [8, 20, 50, 167],
 };
 

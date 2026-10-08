@@ -12,6 +12,8 @@ export interface FakeSeries {
 
 /** The fake's plot: 800 × 400 px, with 240 at the top and 220 at the bottom, so 0.05 a pixel. */
 export const PANE = { width: 800, height: 400, high: 240, low: 220 };
+/** Each candle's width on the fake's time scale: candle `i` sits at x = i × BAR_PX. */
+export const BAR_PX = 2;
 /** The height a price sits at on the fake's scale. */
 export const yOf = (price: number) => ((PANE.high - price) / (PANE.high - PANE.low)) * PANE.height;
 const priceOf = (y: number) => PANE.high - (y / PANE.height) * (PANE.high - PANE.low);
@@ -88,6 +90,8 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
       paneSize: () => ({ width: PANE.width, height: PANE.height }),
       priceScale: () => ({ applyOptions: () => {} }),
       timeScale: () => ({
+        coordinateToLogical: (x: number) => x / BAR_PX,
+        logicalToCoordinate: (logical: number) => logical * BAR_PX,
         setVisibleLogicalRange: (range: unknown) => {
           library.ranges.push(range);
         },
