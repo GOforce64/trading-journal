@@ -2,7 +2,7 @@ import { bsPrice, expiryMoment, type Grade, nyWallClock, type OptionRight, type 
 import { cents } from "./prices.js";
 import { chance, int, normal, pick, type Rng, uniform, weighted } from "./random.js";
 import { expiryFor, FEE_PER_CONTRACT_SIDE } from "./scalps.js";
-import { symbolInfo } from "./symbols.js";
+import { strikeStep } from "./symbols.js";
 
 const YEAR_MS = 365 * 86_400_000;
 const ENTRY_MINUTE = 15 * 60 + 45;
@@ -126,18 +126,15 @@ export function planFly(
   entryStock: readonly PriceBar[],
   exitStock: readonly PriceBar[],
 ): FlyPlan {
-  const { strikeStep } = symbolInfo(event.symbol);
   const openedAt =
     nyWallClock(event.entryDate, int(rng, 15 * 60 + 40, 15 * 60 + 54)) + int(rng, 0, 59) * 1_000;
   const closedAt = nyWallClock(event.exitDate, int(rng, 9 * 60 + 45, 10 * 60 + 29)) + int(rng, 0, 59) * 1_000;
   const entryPrice = barAt(entryStock, openedAt).c;
   const exitPrice = barAt(exitStock, closedAt).c;
   const expiry = expiryFor(event.symbol, event.exitDate);
-  const body = Math.round(entryPrice / strikeStep) * strikeStep;
-  const width = Math.max(
-    strikeStep,
-    Math.round((1.5 * event.impliedMove * entryPrice) / strikeStep) * strikeStep,
-  );
+  const step = strikeStep(entryPrice);
+  const body = Math.round(entryPrice / step) * step;
+  const width = Math.max(step, Math.round((1.5 * event.impliedMove * entryPrice) / step) * step);
   const ivAfter = uniform(rng, 0.3, 0.45);
   const contracts = int(rng, 1, 3);
 

@@ -1,7 +1,7 @@
 import { addDays, type Grade, isTradingDay, type OptionRight, type PriceBar, weekdayOfDate } from "@tj/core";
 import { cents, optionBars } from "./prices.js";
 import { chance, int, pick, type Rng, uniform, weighted } from "./random.js";
-import { symbolInfo } from "./symbols.js";
+import { strikeStep, symbolInfo } from "./symbols.js";
 
 /** A contract a side: $0.65 commission and $0.02 exchange fees (demo spec §3.3). */
 export const FEE_PER_CONTRACT_SIDE = 0.67;
@@ -81,7 +81,7 @@ const strikeFor = (right: OptionRight, price: number, step: number) =>
 
 /**
  * Up to two scalps on one symbol's session (demo spec §2): an entry mostly in the first 90 minutes, a direction that
- * reads the next half hour right 58% of the time, and an exit at the first of the target, the stop or the time stop.
+ * reads the next half hour right 68% of the time, and an exit at the first of the target, the stop or the time stop.
  */
 export function planScalps(
   rng: Rng,
@@ -106,7 +106,7 @@ export function planScalps(
     const entry = morning
       ? int(rng, earliest, Math.min(90, lastEntry))
       : int(rng, Math.max(earliest, 90), lastEntry);
-    const plan = planOne(rng, date, symbol, stock, entry, reviewed, info.strikeStep, info.iv, contractBars);
+    const plan = planOne(rng, date, symbol, stock, entry, reviewed, info.vol, info.iv, contractBars);
     plans.push(plan);
     earliest = Math.ceil((plan.closedAt - (stock[0]?.t ?? 0)) / 60_000) + 5;
   }
@@ -120,7 +120,7 @@ function planOne(
   stock: readonly PriceBar[],
   entry: number,
   reviewed: boolean,
-  strikeStep: number,
+  vol: number,
   iv: number,
   contractBars: Map<string, PriceBar[]>,
 ): ScalpPlan {
@@ -131,8 +131,12 @@ function planOne(
   };
   const start = bar(entry);
   const drift = bar(entry + 30).c - start.c;
-  const right: OptionRight = drift >= 0 === chance(rng, 0.58) ? "C" : "P";
-  const contract = { right, strike: strikeFor(right, start.o, strikeStep), expiry: expiryFor(symbol, date) };
+  const right: OptionRight = drift >= 0 === chance(rng, 0.68) ? "C" : "P";
+  const contract = {
+    right,
+    strike: strikeFor(right, start.o, strikeStep(start.o)),
+    expiry: expiryFor(symbol, date),
+  };
   const key = `${contract.right}${contract.strike}`;
   const options = contractBars.get(key) ?? optionBars(stock, contract, iv, rng);
   contractBars.set(key, options);
@@ -147,13 +151,15 @@ function planOne(
 
   const basis = chance(rng, 0.8) ? "stock" : "premium";
   const stockEntry = start.o + ((start.c - start.o) * entrySecond) / 60;
+  // Stock levels sit a share of the stock's daily move away, so a quiet index gets tighter ones than a wild stock.
+  const dailyMove = vol / Math.sqrt(252);
   const stop =
     basis === "stock"
-      ? cents(stockEntry * (1 - up * uniform(rng, 0.0015, 0.0035)))
+      ? cents(stockEntry * (1 - up * dailyMove * uniform(rng, 0.11, 0.17)))
       : cents(openPrice * (1 - uniform(rng, 0.3, 0.5)));
   const target =
     basis === "stock"
-      ? cents(stockEntry * (1 + up * uniform(rng, 0.0025, 0.006)))
+      ? cents(stockEntry * (1 + up * dailyMove * uniform(rng, 0.08, 0.14)))
       : cents(openPrice * (1 + uniform(rng, 0.25, 0.6)));
   const maxHold = int(rng, 5, 40);
 
