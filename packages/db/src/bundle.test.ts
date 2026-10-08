@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { NewTrade } from "@tj/core";
 import { describe, expect, it } from "vitest";
 import { addFill, bundleOf, copyOf, dump, journal, MIGRATIONS, scalp } from "./bundle.fixture.js";
 import { BUNDLE_TABLES, canonical, exportBundle, mergeBundle, type Row, readTable } from "./bundle.js";
@@ -512,5 +513,61 @@ describe("mergeBundle and screenshots", () => {
       grade: "A",
       attachments: [expect.objectContaining({ sha256: "c".repeat(64) })],
     });
+  });
+});
+
+describe("mergeBundle and missed trades", () => {
+  const missedTrade: NewTrade = {
+    ...scalp,
+    book: "missed",
+    legs: [],
+    netPnl: null,
+    closedAt: null,
+    missed: { direction: "long", entryPrice: 178.42, stopPrice: null, targetPrice: null, exitPrice: null },
+  };
+
+  it("carries a missed trade's levels in the bundle", () => {
+    const a = journal();
+    a.trades.create(missedTrade);
+    expect(bundleOf(a.db).tables.missed_details).toEqual([
+      {
+        trade_id: expect.any(String),
+        direction: "long",
+        entry_price: 178.42,
+        stop_price: null,
+        target_price: null,
+        exit_price: null,
+      },
+    ]);
+  });
+
+  it("moves the levels with the side whose trade wins, never mixing the two", () => {
+    const a = journal(1_000);
+    const b = journal(1_000);
+    const { id } = a.trades.create(missedTrade);
+    mergeBundle(b.db, bundleOf(a.db));
+    a.clock.now = 3_000;
+    a.trades.update(id, { missed: { stopPrice: 177.8 } });
+    b.clock.now = 5_000;
+    b.trades.update(id, { missed: { targetPrice: 181.2 } });
+    // B's edit is newer: its whole trade wins, so A's stop doesn't arrive.
+    expect(mergeBundle(a.db, bundleOf(b.db))).toMatchObject({ updated: 1 });
+    expect(a.trades.get(id)?.missed).toMatchObject({ stopPrice: null, targetPrice: 181.2 });
+    // The two journals are the same now: nothing moves back.
+    expect(mergeBundle(b.db, bundleOf(a.db))).toMatchObject({ updated: 0, kept: 0 });
+    expect(dump(a.db)).toEqual(dump(b.db));
+  });
+
+  it("keeps the local levels when a bundle from before missed trades wins the trade", () => {
+    const a = journal(1_000);
+    const b = journal(1_000);
+    const { id } = a.trades.create(missedTrade);
+    mergeBundle(b.db, bundleOf(a.db));
+    a.clock.now = 3_000;
+    a.trades.update(id, { grade: "A" });
+    const old = bundleOf(a.db);
+    delete (old.tables as Partial<typeof old.tables>).missed_details;
+    expect(mergeBundle(b.db, old)).toMatchObject({ updated: 1 });
+    expect(b.trades.get(id)).toMatchObject({ grade: "A", missed: { entryPrice: 178.42 } });
   });
 });
