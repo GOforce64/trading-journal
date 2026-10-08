@@ -1,6 +1,7 @@
 import { addDays, isTradingDay, nyDate, nyWallClock, occSymbol, type PriceBar } from "@tj/core";
 import type { Db } from "@tj/db";
 import { type EarningsEvent, earningsSchedule, type FlyPlan, planFly } from "./flies.js";
+import { type MissedPlan, planMissed } from "./missed.js";
 import { dailyBar, dailyWalk, minuteBars, syntheticDailyBar, tradingDays } from "./prices.js";
 import { chance, int, pick, stream } from "./random.js";
 import { planScalps, type ScalpPlan } from "./scalps.js";
@@ -21,6 +22,8 @@ export interface DemoSummary {
   to: string;
   scalps: number;
   flies: number;
+  /** Missed trades, apart from the scalps and flies (missed-trades spec §8). */
+  missed: number;
   bars: number;
 }
 
@@ -96,6 +99,15 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
       scalps.push(...planScalps(rngFor, date, symbol, minutesOf(symbol, date), date < reviewedBefore));
     }
   }
+  // About twenty missed trades over six months, each in its own stream so the taken trades don't change.
+  const missed: MissedPlan[] = [];
+  for (const date of sessions) {
+    const rng = stream(seed, `missed:${date}`);
+    if (!chance(rng, 0.14)) continue;
+    const symbol = pick(rng, SCALP_SYMBOLS);
+    const plan = planMissed(stream(seed, `${symbol}:${date}:missed`), symbol, minutesOf(symbol, date));
+    if (plan) missed.push(plan);
+  }
   const flies: FlyPlan[] = [];
   for (const [symbol, list] of events) {
     for (const event of list) {
@@ -133,6 +145,7 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
     entry.bars.set(nyDate(plan.openedAt), plan.optionBars);
   }
   for (const plan of flies) cover(plan.symbol, plan.openedAt, plan.closedAt);
+  for (const plan of missed) cover(plan.symbol, plan.openedAt, plan.closedAt);
 
   const bars: DemoBars = [];
   for (const symbol of Object.keys(SYMBOLS)) {
@@ -168,10 +181,18 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
   const written = writeDemo(db, {
     scalps,
     flies,
+    missed,
     bars,
     minutesOf,
     now,
     jitter: (key) => int(stream(seed, key), 3, 30),
   });
-  return { from: first, to: last, scalps: scalps.length, flies: flies.length, bars: written };
+  return {
+    from: first,
+    to: last,
+    scalps: scalps.length,
+    flies: flies.length,
+    missed: missed.length,
+    bars: written,
+  };
 }

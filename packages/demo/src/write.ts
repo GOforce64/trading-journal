@@ -1,6 +1,7 @@
 import { holdRange, newTradeSchema, nyDate, type PriceBar, stockAt } from "@tj/core";
 import { createBarsRepo, createTaxonomyRepo, createTradesRepo, type Db } from "@tj/db";
 import type { FlyPlan } from "./flies.js";
+import type { MissedPlan } from "./missed.js";
 import { cents } from "./prices.js";
 import type { ScalpPlan } from "./scalps.js";
 import { symbolInfo } from "./symbols.js";
@@ -32,6 +33,7 @@ export function writeDemo(
   input: {
     scalps: readonly ScalpPlan[];
     flies: readonly FlyPlan[];
+    missed: readonly MissedPlan[];
     bars: DemoBars;
     minutesOf: (symbol: string, date: string) => PriceBar[];
     now: () => number;
@@ -150,6 +152,40 @@ export function writeDemo(
           `demo trade refused: ${plan.symbol} ${new Date(plan.openedAt).toISOString()}: ${(error as Error).message}`,
         );
       }
+    }
+
+    // Missed trades (missed-trades spec §8): marked after the session, with the hold range the filler would fetch.
+    for (const plan of input.missed) {
+      clock = plan.closedAt + input.jitter(`${plan.symbol}:${plan.openedAt}:missed`) * MINUTE_MS;
+      const trade = trades.create(
+        newTradeSchema.parse({
+          strategy: "scalp",
+          book: "missed",
+          underlying: plan.symbol,
+          underlyingName: symbolInfo(plan.symbol).name,
+          openedAt: plan.openedAt,
+          closedAt: plan.closedAt,
+          notes: plan.notes,
+          grade: plan.grade,
+          source: "manual",
+          setupId: setups.get(plan.setup) ?? null,
+          tagIds: tagIds(plan.tags),
+          missed: {
+            direction: plan.direction,
+            entryPrice: plan.entryPrice,
+            stopPrice: plan.stopPrice,
+            targetPrice: plan.targetPrice,
+            exitPrice: plan.exitPrice,
+          },
+        }),
+      );
+      const day = input.minutesOf(plan.symbol, nyDate(plan.openedAt));
+      const hold = holdRange(day, plan.openedAt, plan.closedAt, true);
+      trades.setScalpPrices(
+        trade.id,
+        { entryPrice: null, holdHigh: hold?.high ?? null, holdLow: hold?.low ?? null },
+        clock,
+      );
     }
   })();
   return stored;

@@ -104,7 +104,7 @@ describe("the demo journal without market keys", () => {
 
   it("draws every trade's charts from its own bars", async () => {
     const service = createBarService({ db, now: () => nyWallClock("2027-01-04", 12 * 60) });
-    const trades = createTradesRepo(db).list();
+    const trades = createTradesRepo(db).list({ taken: true });
     const scalps = trades.filter((trade) => trade.strategy === "scalp").slice(0, 3);
     const fly = trades.find((trade) => trade.strategy === "iron_fly");
     expect(scalps).toHaveLength(3);
