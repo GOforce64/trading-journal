@@ -10,7 +10,7 @@ import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.j
 import { Shell } from "./components/Shell.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
-import { MissedPage } from "./missed/MissedPage.js";
+import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
 import { NewMissed } from "./missed/NewMissed.js";
 import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
@@ -195,12 +195,18 @@ const playbookRoute = createRoute({
 const missedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/missed",
-  component: () => (
-    <MissedPage
-      onOpenTrade={openTrade}
-      onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
-    />
-  ),
+  validateSearch: parseMissedSearch,
+  component: function MissedRoute() {
+    const { period } = missedRoute.useSearch();
+    return (
+      <MissedPage
+        period={period}
+        onPeriod={(next) => router.navigate({ to: "/missed", search: parseMissedSearch({ period: next }) })}
+        onOpenTrade={openTrade}
+        onNewMissed={(symbol, date) => router.navigate({ to: "/missed/new", search: { symbol, date } })}
+      />
+    );
+  },
 });
 
 /** Nav destinations whose features arrive in later plans; better than a dead link. */

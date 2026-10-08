@@ -35,6 +35,16 @@ const PERIODS = [
 ] as const;
 type PeriodId = (typeof PERIODS)[number]["id"];
 
+/** The page's URL: its period, left out at the default, Last 30 days, so Back from a trade keeps it. */
+export interface MissedSearch {
+  period?: PeriodId;
+}
+
+export function parseMissedSearch(raw: Record<string, unknown>): MissedSearch {
+  const found = PERIODS.find((each) => each.id === raw.period);
+  return found && found.id !== "30" ? { period: found.id } : {};
+}
+
 const tone = (value: number | null | undefined) =>
   value == null || value === 0 ? "" : value > 0 ? "text-up" : "text-down";
 
@@ -48,13 +58,20 @@ const NEEDS: Record<string, string> = {
 
 /** The Missed page (missed-trades spec §6.1): what the period's skips would have made, and the list of them. */
 export function MissedPage({
+  period: chosen,
+  onPeriod,
   onOpenTrade,
   onNewMissed,
 }: {
+  /** The URL's period; without `onPeriod` the page keeps its own. */
+  period?: PeriodId;
+  onPeriod?: (period: PeriodId) => void;
   onOpenTrade?: (id: string) => void;
   onNewMissed?: (symbol: string, date: string) => void;
 }) {
-  const [period, setPeriod] = useState<PeriodId>("30");
+  const [own, setOwn] = useState<PeriodId>(chosen ?? "30");
+  const period = onPeriod ? (chosen ?? "30") : own;
+  const setPeriod = onPeriod ?? setOwn;
   const [adding, setAdding] = useState(false);
   const { data: missed, isLoading } = useMissedTrades();
   const { data: all } = useAllTrades();

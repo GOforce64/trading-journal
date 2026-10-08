@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { nyWallClock } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MissedPage } from "./MissedPage.js";
+import { MissedPage, parseMissedSearch } from "./MissedPage.js";
 
 /** Thursday Oct 8, after the close: the last session is today's. */
 const NOW = nyWallClock("2026-10-08", 17 * 60);
@@ -181,5 +181,32 @@ describe("MissedPage", () => {
     expect(
       await screen.findByText("No missed trades in this period. + Missed trade marks one on a day's chart."),
     ).toBeTruthy();
+  });
+});
+
+describe("the Missed page's period", () => {
+  it("comes from the URL: Last 30 days when it names none, or one the page doesn't have", () => {
+    expect(parseMissedSearch({ period: "all" })).toEqual({ period: "all" });
+    expect(parseMissedSearch({ period: "90" })).toEqual({ period: "90" });
+    expect(parseMissedSearch({ period: "30" })).toEqual({});
+    expect(parseMissedSearch({ period: "7" })).toEqual({});
+  });
+
+  it("shows the period it's given and hands a new one back, so Back from a trade keeps it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("[]", { headers: { "content-type": "application/json" } })),
+    );
+    const onPeriod = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MissedPage period="all" onPeriod={onPeriod} />
+      </QueryClientProvider>,
+    );
+    const select = (await screen.findByRole("combobox", { name: "Period" })) as HTMLSelectElement;
+    expect(select.value).toBe("all");
+    fireEvent.change(select, { target: { value: "90" } });
+    expect(onPeriod).toHaveBeenCalledWith("90");
   });
 });
