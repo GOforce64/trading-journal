@@ -16,8 +16,8 @@ export interface AnalyticsSearch {
   tab?: "scalps" | "flies" | "missed";
   from?: string;
   to?: string;
-  /** One book; absent means both. */
-  books?: Book;
+  /** The books, comma-separated in the order live, paper, missed; absent means live and paper (spec §6.8). */
+  books?: string;
   ticker?: string;
   /** A setup's id (scalp-analytics spec §5.2). */
   setup?: string;
@@ -51,6 +51,25 @@ function isDate(value: string | undefined): value is string {
   return !Number.isNaN(ms) && new Date(ms).toISOString().startsWith(value);
 }
 
+export const BOOK_ORDER: readonly Book[] = ["live", "paper", "missed"];
+const DEFAULT_BOOKS: readonly Book[] = ["live", "paper"];
+
+/** The known books among `names`, once each, in the filter's order. */
+export const canonicalBooks = (names: readonly string[]): Book[] =>
+  BOOK_ORDER.filter((book) => names.includes(book));
+
+/** The books a search keeps: live and paper unless it names others. */
+export const booksOf = (search: Pick<AnalyticsSearch, "books">): Book[] =>
+  search.books ? canonicalBooks(search.books.split(",")) : [...DEFAULT_BOOKS];
+
+/** The search's `books` after one is switched: one must stay on, and the default is left out of the URL. */
+export function toggledBooks(search: Pick<AnalyticsSearch, "books">, book: Book): string | undefined | null {
+  const now = booksOf(search);
+  const next = now.includes(book) ? now.filter((each) => each !== book) : canonicalBooks([...now, book]);
+  if (next.length === 0) return null;
+  return next.join(",") === DEFAULT_BOOKS.join(",") ? undefined : next.join(",");
+}
+
 /** Keeps what's valid and drops the rest, so an old or hand-edited link still opens. */
 export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSearch {
   const search: AnalyticsSearch = {};
@@ -59,7 +78,11 @@ export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSea
   if (isDate(from)) search.from = from;
   const to = text(raw.to);
   if (isDate(to)) search.to = to;
-  if (raw.books === "live" || raw.books === "paper") search.books = raw.books;
+  const books = text(raw.books);
+  if (books) {
+    const kept = canonicalBooks(books.split(","));
+    if (kept.length > 0 && kept.join(",") !== DEFAULT_BOOKS.join(",")) search.books = kept.join(",");
+  }
   const ticker = text(raw.ticker)?.toUpperCase();
   if (ticker && TICKER.test(ticker)) search.ticker = ticker;
   const setup = text(raw.setup);
@@ -82,7 +105,7 @@ export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSea
 
 export function toFilter(search: AnalyticsSearch): TradeFilter {
   const filter: TradeFilter = {
-    books: search.books ? [search.books] : ["live", "paper"],
+    books: booksOf(search),
     includeExcluded: search.excluded === true,
   };
   if (search.ticker) filter.ticker = search.ticker;

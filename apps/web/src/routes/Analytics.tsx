@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
-import { filterTrades, useAllTrades } from "../analytics/data.js";
+import { type Book, filterTrades, useAllTrades } from "../analytics/data.js";
 import { segmentClass } from "../analytics/format.js";
 import {
   type AnalyticsSearch,
   activePreset,
+  BOOK_ORDER,
+  booksOf,
   DATE_PRESETS,
   presetRange,
   toFilter,
+  toggledBooks,
 } from "../analytics/search.js";
 import { TabButton } from "../components/ui.js";
 import { todayNy } from "../market.js";
@@ -98,7 +101,7 @@ function FilterRow({
   const preset = activePreset(search, today);
   const [customOpen, setCustomOpen] = useState(false);
   const showCustom = customOpen || preset === "custom";
-  const books = search.books ? [search.books] : ["live", "paper"];
+  const books = booksOf(search);
   // Archived setups stay out of the list unless the link names one. A linked setup the list doesn't have yet (the
   // setups still loading, or failed) still filters the trades, so it keeps an option rather than showing All.
   const setupOptions = setups
@@ -108,13 +111,10 @@ function FilterRow({
     setupOptions.unshift({ id: search.setup, name: "this setup" } as Setup);
   }
 
-  // One book must stay on: switching off the other leaves just this one, and the last one can't be switched off.
-  const toggleBook = (book: "live" | "paper") => {
-    if (books.length === 1) {
-      if (books[0] !== book) onSearch({ books: undefined });
-      return;
-    }
-    onSearch({ books: book === "live" ? "paper" : "live" });
+  // One book must stay on: the last one can't be switched off.
+  const toggleBook = (book: Book) => {
+    const next = toggledBooks(search, book);
+    if (next !== null) onSearch({ books: next });
   };
 
   return (
@@ -161,17 +161,24 @@ function FilterRow({
         </>
       )}
       <span className="ml-2 text-muted uppercase tracking-wider">Book</span>
-      {(["live", "paper"] as const).map((book) => (
-        <button
-          key={book}
-          type="button"
-          aria-pressed={books.includes(book)}
-          onClick={() => toggleBook(book)}
-          className={segmentClass(books.includes(book))}
-        >
-          {book === "live" ? "Live" : "Paper"}
-        </button>
-      ))}
+      <fieldset aria-label="Book" className="flex items-center gap-2">
+        {BOOK_ORDER.map((book) => (
+          <button
+            key={book}
+            type="button"
+            aria-pressed={books.includes(book)}
+            onClick={() => toggleBook(book)}
+            title={
+              book === "missed"
+                ? "Adds missed trades to counts, win rate and Avg R, never to dollars"
+                : undefined
+            }
+            className={segmentClass(books.includes(book))}
+          >
+            {book === "live" ? "Live" : book === "paper" ? "Paper" : "Missed"}
+          </button>
+        ))}
+      </fieldset>
       <label className="ml-2 flex items-center gap-1 text-muted uppercase tracking-wider">
         Ticker
         <select

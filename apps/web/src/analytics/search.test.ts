@@ -180,3 +180,21 @@ describe("the Missed tab's search", () => {
     expect(parseAnalyticsSearch({ mby: "dte" })).toEqual({});
   });
 });
+
+describe("the books list", () => {
+  it("keeps the books named, once each, in the filter's order", () => {
+    expect(parseAnalyticsSearch({ books: "missed,live" })).toEqual({ books: "live,missed" });
+    expect(parseAnalyticsSearch({ books: "live" })).toEqual({ books: "live" });
+    expect(parseAnalyticsSearch({ books: "missed" })).toEqual({ books: "missed" });
+  });
+
+  it("leaves the default and junk out of the URL", () => {
+    expect(parseAnalyticsSearch({ books: "live,paper" })).toEqual({});
+    expect(parseAnalyticsSearch({ books: "nope" })).toEqual({});
+  });
+
+  it("filters on the books it names", () => {
+    expect(toFilter({ books: "paper,missed" }).books).toEqual(["paper", "missed"]);
+    expect(toFilter({}).books).toEqual(["live", "paper"]);
+  });
+});
