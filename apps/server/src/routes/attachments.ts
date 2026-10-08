@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { zValidator } from "@hono/zod-validator";
 import { createAttachmentsRepo, type Db } from "@tj/db";
@@ -12,17 +12,28 @@ const EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "
 const TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", webp: "image/webp" };
 /** A stored file's name: its content's SHA-256 and extension. Nothing else is ever read from the directory. */
 export const FILE_NAME = /^([0-9a-f]{64})\.(png|jpg|webp)$/;
-const MAX_BYTES = 20 * 1024 * 1024;
+/** The largest screenshot: an upload's limit, and a bundle's for each file. */
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
+/** A hidden temp file in `dir` holding `bytes`. Its name never matches a stored file's, so it's never served. */
+export function stageFile(dir: string, name: string, bytes: Uint8Array): string {
+  const temp = join(dir, `.${name}.${randomUUID()}.tmp`);
+  writeFileSync(temp, bytes);
+  return temp;
+}
+
+/** Moves a staged file into place as `dir/name`, unless the same content is there already. */
+export function commitFile(dir: string, name: string, temp: string): void {
+  const target = join(dir, name);
+  if (existsSync(target)) rmSync(temp, { force: true });
+  else renameSync(temp, target);
+}
+
 /** Writes `dir/name` unless it's there, through a temp file, so a half-written image is never served. */
 export function storeFile(dir: string, name: string, bytes: Uint8Array): void {
-  const target = join(dir, name);
-  if (existsSync(target)) return;
-  const temp = join(dir, `.${name}.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(temp, bytes);
-  renameSync(temp, target);
+  if (!existsSync(join(dir, name))) commitFile(dir, name, stageFile(dir, name, bytes));
 }
 
 const NO_DIR = { error: "unavailable", message: "Screenshots need a data directory." };
@@ -35,7 +46,7 @@ export function attachmentRoutes(db: Db, { dir, now }: { dir?: string; now?: () 
     .post(
       "/trades/:id/attachments",
       bodyLimit({
-        maxSize: MAX_BYTES,
+        maxSize: MAX_IMAGE_BYTES,
         onError: (c) => c.json({ error: "too_large", message: "That image is over 20 MB." }, 413),
       }),
       async (c) => {

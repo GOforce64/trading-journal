@@ -35,8 +35,6 @@ export interface BundleManifest {
 export interface Bundle {
   manifest: BundleManifest;
   tables: Record<BundleTable, Row[]>;
-  /** The screenshots' files, `<sha256>.<ext>` to base64 (screenshots spec §4); the server reads and writes them. */
-  files?: Record<string, string>;
 }
 
 /**
@@ -46,7 +44,6 @@ export interface Bundle {
 export interface IncomingBundle {
   manifest: BundleManifest;
   tables: Partial<Record<BundleTable, Row[]>>;
-  files?: Record<string, string>;
 }
 
 /** Each table's key columns: a row's identity on every machine. */
