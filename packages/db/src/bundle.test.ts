@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { addFill, bundleOf, copyOf, dump, journal, MIGRATIONS, scalp } from "./bundle.fixture.js";
 import { BUNDLE_TABLES, canonical, exportBundle, mergeBundle, type Row, readTable } from "./bundle.js";
+import { createAttachmentsRepo } from "./repositories/attachments.js";
 
 const MIGRATION_COUNT = (
   JSON.parse(readFileSync(join(MIGRATIONS, "meta", "_journal.json"), "utf8")) as { entries: unknown[] }
@@ -432,5 +433,40 @@ describe("mergeBundle and tags merged into one, after the tombstone review", () 
         [small, "Zeta"],
       ]),
     );
+  });
+});
+
+describe("mergeBundle and screenshots", () => {
+  const IMAGE = { sha256: "c".repeat(64), ext: "png", mime: "image/png", bytes: 10 };
+
+  it("carries a trade's screenshots with it, both ways", () => {
+    const a = journal(1_000);
+    const b = journal(1_000);
+    const trade = a.trades.create(scalp);
+    a.clock.now = 2_000;
+    createAttachmentsRepo(a.db, () => a.clock.now).create(trade.id, IMAGE);
+    mergeBundle(b.db, bundleOf(a.db));
+    expect(b.trades.get(trade.id)?.attachments).toEqual([
+      expect.objectContaining({ sha256: "c".repeat(64) }),
+    ]);
+    expect(mergeBundle(a.db, bundleOf(b.db)).unchanged).toBe(true);
+  });
+
+  it("keeps local screenshots when a bundle from before them wins the trade", () => {
+    const a = journal(1_000);
+    const b = journal(1_000);
+    const trade = a.trades.create(scalp);
+    mergeBundle(b.db, bundleOf(a.db));
+    b.clock.now = 2_000;
+    createAttachmentsRepo(b.db, () => b.clock.now).create(trade.id, IMAGE);
+    a.clock.now = 3_000;
+    a.trades.update(trade.id, { grade: "A" });
+    const old = bundleOf(a.db);
+    delete (old.tables as Partial<typeof old.tables>).attachments;
+    expect(mergeBundle(b.db, old)).toMatchObject({ updated: 1 });
+    expect(b.trades.get(trade.id)).toMatchObject({
+      grade: "A",
+      attachments: [expect.objectContaining({ sha256: "c".repeat(64) })],
+    });
   });
 });
