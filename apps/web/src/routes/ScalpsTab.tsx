@@ -67,21 +67,22 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   const join = <R extends Parameters<typeof withMissedGroups>[0][number]>(
     rows: readonly R[],
     extra: MissedRow[] | null,
-  ) => (missed.length > 0 && extra ? withMissedGroups(rows, extra) : rows);
+    dimension: Parameters<typeof withMissedGroups>[2],
+  ) => (missed.length > 0 && extra ? withMissedGroups(rows, extra, dimension) : rows);
   // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
   const openRows = useMemo(
-    () => join(bucketStats(scalps, "open"), missedRows(missed, "open", context)),
+    () => join(bucketStats(scalps, "open"), missedRows(missed, "open", context), "open"),
     [scalps, missed, context],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
   const holdRows = useMemo(
-    () => join(bucketStats(scalps, "hold"), missedRows(missed, "hold", context)),
+    () => join(bucketStats(scalps, "hold"), missedRows(missed, "hold", context), "hold"),
     [scalps, missed, context],
   );
   const missedByDimension = useMemo(() => missedRows(missed, by, context), [missed, by, context]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
   const breakdown = useMemo(
-    () => join(scalpBreakdown(scalps, by, context), missedByDimension),
+    () => join(scalpBreakdown(scalps, by, context), missedByDimension, by),
     [scalps, by, context, missedByDimension, missed],
   );
   const contractNote =

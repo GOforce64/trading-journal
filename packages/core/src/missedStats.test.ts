@@ -288,6 +288,68 @@ describe("missedRows and withMissedGroups", () => {
     });
   });
 
+  const takenRow = (label: string) => ({
+    label,
+    ...groupStats([]),
+    trades: 1,
+    rCount: 1,
+    avgR: 1,
+    winRate: 1,
+  });
+  const missedRow = (label: string) => ({
+    label,
+    trades: 1,
+    rCount: 1,
+    wins: 1,
+    losses: 0,
+    winRate: 1,
+    totalR: 1,
+    avgR: 1,
+    avgMfe: null,
+  });
+  const labels = (by: Parameters<typeof missedRows>[1], taken: string[], missed: string[]) =>
+    withMissedGroups(taken.map(takenRow), missed.map(missedRow), by).map((row) => row.label);
+
+  it("puts a group only missed trades have in its dimension's order", () => {
+    expect(labels("weekday", ["Mon", "Wed"], ["Tue", "Fri"])).toEqual(["Mon", "Tue", "Wed", "Fri"]);
+    expect(labels("open", ["0–5", "60+"], ["before open", "5–15"])).toEqual([
+      "before open",
+      "0–5",
+      "5–15",
+      "60+",
+    ]);
+    expect(labels("grade", ["A", "C"], ["B", "ungraded"])).toEqual(["A", "B", "C", "ungraded"]);
+    // "no setup" stays last, and a setup only missed trades have comes before it.
+    expect(labels("setup", ["ORB breakout", "no setup"], ["Gap fill", "no setup"])).toEqual([
+      "ORB breakout",
+      "Gap fill",
+      "no setup",
+    ]);
+    expect(labels("setup", ["ORB breakout"], ["no setup", "Gap fill"])).toEqual([
+      "ORB breakout",
+      "Gap fill",
+      "no setup",
+    ]);
+  });
+
+  it("orders missed trades' months by date, as the scalps' are", () => {
+    const sep = scalp({ id: "s1", openedAt: ny("2026-09-14T10:00"), closedAt: ny("2026-09-14T10:10") });
+    const months = missedRows(
+      [
+        { ...MISSED[0], openedAt: ny("2026-10-05T10:00"), closedAt: ny("2026-10-05T10:20") },
+        { ...MISSED[0], openedAt: ny("2026-08-04T10:00"), closedAt: ny("2026-08-04T10:20") },
+      ] as typeof MISSED,
+      "month",
+      context,
+    );
+    expect(months?.map((row) => row.label)).toEqual(["Aug 2026", "Oct 2026"]);
+    expect(
+      withMissedGroups(scalpBreakdown([sep], "month", context), months ?? [], "month").map(
+        (row) => row.label,
+      ),
+    ).toEqual(["Aug 2026", "Sep 2026", "Oct 2026"]);
+  });
+
   it("leaves rows without missed trades as they were", () => {
     const rows = scalpBreakdown(SCALPS, "grade", context);
     expect(withMissedGroups(rows, [])).toEqual(rows);

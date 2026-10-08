@@ -263,10 +263,12 @@ export function missedRows(
       return toRows(groupTrades(trades, (trade) => nyWeekday(trade.openedAt), WEEKDAYS));
     case "book":
       return trades.length ? [{ label: "Missed", ...missedGroup(trades) }] : [];
-    case "month":
-      return toRows(
-        groupTrades(trades, (trade) => monthLabel(nyDate(trade.closedAt ?? trade.openedAt).slice(0, 7))),
-      );
+    case "month": {
+      // By date, as the scalps' months are.
+      const monthOf = (trade: MissedStatTrade) => nyDate(trade.closedAt ?? trade.openedAt).slice(0, 7);
+      const months = [...new Set(trades.map(monthOf))].sort();
+      return toRows(groupTrades(trades, (trade) => monthLabel(monthOf(trade)), months.map(monthLabel)));
+    }
     case "open":
       return toRows(groupTrades(trades, openLabel, OPEN_ORDER));
     case "hold":
@@ -289,14 +291,46 @@ export type MissedOnlyRow = Omit<GroupStats, "net" | "profitFactor" | "avgReturn
   missedOnly: true;
 };
 
+/** Rows that stay at the end of a breakdown, whatever joins it. */
+const LAST = new Set([NO_SETUP, "none", UNKNOWN]);
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A label's place in a dimension with an order of its own; null for one ordered by its numbers. */
+function rankOf(by: Breakdown | "open" | "hold"): ((label: string) => number) | null {
+  const within = (order: readonly string[]) => (label: string) => {
+    const index = order.indexOf(label);
+    return index < 0 ? order.length : index;
+  };
+  switch (by) {
+    case "weekday":
+      return within(WEEKDAYS);
+    case "grade":
+      return within(GRADE_ORDER);
+    case "open":
+      return within(OPEN_ORDER);
+    case "hold":
+      return within([...HOLD_TIME_BUCKETS, UNKNOWN]);
+    case "month":
+      // "Sep 2026".
+      return (label) => {
+        const [name = "", year = "0"] = label.split(" ");
+        return Number(year) * 12 + MONTH_NAMES.indexOf(name);
+      };
+    default:
+      return null;
+  }
+}
+
 /**
  * Taken rows with the missed trades that have an R added, label by label (spec §6.8): N, win % and avg R gain them,
- * and the dollar columns stay the taken trades'. A label only missed trades have is appended with blank dollars.
+ * and the dollar columns stay the taken trades'. A label only missed trades have joins with blank dollars, in its
+ * dimension's order (`by`), or else after the others but before "no setup", "none" and "unknown".
  * Avg R is weighted from the row's rounded avg R and its R count, close enough at two decimals.
  */
 export function withMissedGroups<R extends GroupStats & { label: string }>(
   rows: readonly R[],
   missed: readonly MissedRow[],
+  by?: Breakdown | "open" | "hold",
 ): (R | MissedOnlyRow)[] {
   const byLabel = new Map(missed.filter((row) => row.rCount > 0).map((row) => [row.label, row]));
   const merged = rows.map((row): R => {
@@ -330,5 +364,19 @@ export function withMissedGroups<R extends GroupStats & { label: string }>(
         missedOnly: true,
       }),
     );
-  return [...merged, ...added];
+  const rank = by ? rankOf(by) : null;
+  if (rank) {
+    // A stable sort: rows of the same rank keep the order they came in.
+    return [...merged, ...added]
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => rank(a.row.label) - rank(b.row.label) || a.index - b.index)
+      .map(({ row }) => row);
+  }
+  const last = (row: { label: string }) => LAST.has(row.label);
+  return [
+    ...merged.filter((row) => !last(row)),
+    ...added.filter((row) => !last(row)),
+    ...merged.filter(last),
+    ...added.filter(last),
+  ];
 }
