@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import { bundleFileName, machineName } from "./routes/bundle.js";
@@ -23,10 +26,20 @@ const SCALP = {
 /** One machine's app, with a recorded merge backup. */
 function machine() {
   const mergeBackup = vi.fn(() => "/backups/journal-merge-1.db");
-  const app = testApp({ mergeBackup });
+  const dir = mkdtempSync(join(tmpdir(), "tj-shots-"));
+  const app = testApp({ mergeBackup, attachmentsDir: dir });
   return {
     app,
+    dir,
     mergeBackup,
+    async attach(tradeId: string, bytes: Uint8Array) {
+      const res = await app.request(`/api/trades/${tradeId}/attachments`, {
+        method: "POST",
+        headers: { ...LOCAL, "content-type": "image/png" },
+        body: bytes,
+      });
+      return (await res.json()) as { sha256: string };
+    },
     async create() {
       const res = await app.request("/api/trades", {
         method: "POST",
@@ -123,5 +136,46 @@ describe("POST /api/bundle/merge", () => {
       },
     });
     expect(b.mergeBackup).not.toHaveBeenCalled();
+  });
+});
+
+describe("screenshots in the bundle", () => {
+  const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9, 9]);
+  const read = (bytes: Uint8Array) => JSON.parse(gunzipSync(bytes).toString("utf8"));
+
+  it("carries the screenshots' files to the other machine", async () => {
+    const a = machine();
+    const b = machine();
+    const id = await a.create();
+    const { sha256 } = await a.attach(id, PNG);
+    const bundle = read((await a.exported()).bytes);
+    expect(Object.keys(bundle.files)).toEqual([`${sha256}.png`]);
+    expect((await b.merge(gzipJson(bundle))).status).toBe(200);
+    expect(readdirSync(b.dir)).toEqual([`${sha256}.png`]);
+    const served = await b.app.request(`/api/attachments/files/${sha256}.png`, { headers: LOCAL });
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
+  });
+
+  it("refuses a file whose content doesn't match its name, before any backup", async () => {
+    const a = machine();
+    const b = machine();
+    await a.attach(await a.create(), PNG);
+    const bundle = read((await a.exported()).bytes);
+    const [name] = Object.keys(bundle.files);
+    bundle.files[name ?? ""] = Buffer.from("not the image").toString("base64");
+    expect(await b.merge(gzipJson(bundle))).toMatchObject({ status: 400 });
+    expect(b.mergeBackup).not.toHaveBeenCalled();
+    bundle.files = { "../journal.db": Buffer.from("x").toString("base64") };
+    expect(await b.merge(gzipJson(bundle))).toMatchObject({ status: 400 });
+  });
+
+  it("merges a bundle from before screenshots", async () => {
+    const a = machine();
+    const b = machine();
+    await a.create();
+    const bundle = read((await a.exported()).bytes);
+    delete bundle.files;
+    delete bundle.tables.attachments;
+    expect(await b.merge(gzipJson(bundle))).toMatchObject({ status: 200, body: { added: 1 } });
   });
 });
