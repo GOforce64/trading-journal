@@ -172,3 +172,21 @@ Under the data directory line:
   - merge it into an empty scratch journal and back into a copy of itself;
   - time both;
   - check the counts and that the second merge reads "Nothing to merge".
+
+---
+
+## 9. Deviations from the plan
+
+- **`setupsAdded` and `tagsAdded` count names new to the journal,** not rows new under their final id. The live check's first merge read "1 setup added, 3 tags added" for names both journals had seeded (§4.6).
+- **The summary line names trades on its first trade count,** so a merge with nothing added reads "3 trades updated from the bundle".
+- **`Db` carries drizzle's raw `$client`,** which `openDatabase` already returned, so the bundle reads and writes plain rows.
+- **The 100 MB limit (413) has no test.** `hono/body-limit` enforces it.
+
+## 10. Live check (2026-10-08)
+
+Two stand-ins: A over a copy of the real journal (42 iron flies, 166 legs, 1 account, the seeded setups and tags), and B over an empty, freshly migrated journal.
+- **Export from A:** 14 KB gzipped (95 KB of JSON) in 19 ms, named `journal-kyriu-2026-10-08-0624.tjbundle`, with schema 8.
+- **A's bundle into B:** 42 trades added in 75 ms, after a `journal-merge-…db` backup. No setups or tags were counted as added: B had seeded the same names.
+- **A's bundle into A:** "Nothing to merge" (`unchanged: true`).
+- **B's bundle back into A:** afterwards every table on A and B is identical, row for row.
+- **In headless Firefox,** B's Settings → Data → Merge a bundle… with A's file read "Merged journal-kyriu-2026-10-08-0624.tjbundle: 42 trades added." and then, the second time, "Nothing to merge: this journal already has everything in …". The Iron Flies page then listed 42 trades, with no console errors.
