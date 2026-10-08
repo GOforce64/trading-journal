@@ -9,8 +9,15 @@ import { join } from "node:path";
  */
 export default function setup(): () => void {
   const root = mkdtempSync(join(tmpdir(), "tj-test-run-"));
-  for (const name of ["TMPDIR", "TEMP", "TMP"]) process.env[name] = root;
+  const names = ["TMPDIR", "TEMP", "TMP"] as const;
+  const before = names.map((name) => [name, process.env[name]] as const);
+  for (const name of names) process.env[name] = root;
   return () => {
+    // Put the variables back first: watch mode runs this setup again in the same process after a config change.
+    for (const [name, value] of before) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
     try {
       rmSync(root, { recursive: true, force: true, maxRetries: 3 });
     } catch {
