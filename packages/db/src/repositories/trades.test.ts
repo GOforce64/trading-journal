@@ -70,6 +70,7 @@ const sampleFly: NewTrade = {
     ivAfter: null,
     sourceNotes: "sample row",
   },
+  missed: null,
 };
 
 describe("trades repository", () => {

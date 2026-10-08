@@ -545,7 +545,15 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       if (!existing) return null;
 
       const timestamp = now();
-      const { legs: _legs, ironFly: _ironFly, tagIds: _tagIds, scalp, reviewed, ...rest } = patch;
+      const {
+        legs: _legs,
+        ironFly: _ironFly,
+        tagIds: _tagIds,
+        scalp,
+        reviewed,
+        missed: _missed,
+        ...rest
+      } = patch;
       // Drop keys the caller never sent, so a patch only touches what it names.
       const columns = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined));
       // The review rules (scalp-review spec §6.2) are checked before anything is written.
@@ -570,7 +578,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           })
           .where(eq(trades.id, id))
           .run();
-        writeChildren(tx, id, patch, timestamp);
+        writeChildren(tx, id, { ...patch, missed: undefined }, timestamp);
         if (levels) {
           const { targets, ...row } = levels;
           tx.insert(scalpDetails)

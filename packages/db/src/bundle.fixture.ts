@@ -86,6 +86,7 @@ export const scalp: NewTrade = {
     },
   ],
   ironFly: null,
+  missed: null,
 };
 
 /** Every bundle table's rows by key, as canonical JSON: two journals with equal dumps hold the same data. */
