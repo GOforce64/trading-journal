@@ -13,6 +13,7 @@ const SETUPS = [
     strategy: "scalp",
     archived: false,
     tradeCount: 3,
+    missedCount: 2,
   },
   {
     id: "crush",
@@ -81,7 +82,9 @@ describe("Playbook", () => {
     expect(orb.textContent).toContain("ORB breakout");
     expect(orb.textContent).toContain("Scalps");
     expect(orb.textContent).toContain("Break of the opening range");
-    expect(orb.textContent).toContain("3");
+    expect(within(orb).getByTestId("trades-orb").textContent).toBe("3");
+    expect(within(orb).getByTestId("missed-orb").textContent).toBe("2");
+    expect(screen.getByRole("columnheader", { name: "Missed" })).toBeTruthy();
     expect(screen.getByTestId("setup-crush").textContent).toContain("Iron flies");
     expect(screen.queryByTestId("setup-old")).toBeNull();
     fireEvent.click(within(setupsPanel()).getByLabelText("Show archived"));

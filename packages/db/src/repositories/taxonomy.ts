@@ -4,8 +4,11 @@ import { setups, tags, trades, tradeTags } from "../schema.js";
 
 export type SetupRow = typeof setups.$inferSelect;
 export type TagRow = typeof tags.$inferSelect;
-/** A setup or tag as the Playbook and the pickers list it: with how many live trades use it. */
-export type SetupListItem = SetupRow & { tradeCount: number };
+/**
+ * A setup or tag as the Playbook and the pickers list it: with how many live trades use it. A setup counts the trades
+ * taken on it and its missed trades apart (missed-trades spec §6.7).
+ */
+export type SetupListItem = SetupRow & { tradeCount: number; missedCount: number };
 export type TagListItem = TagRow & { tradeCount: number };
 
 /** A name already taken (scalp-review spec §6.3). The route answers 409 with the message. */
@@ -97,14 +100,20 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
   }
 
   /** How many live (not deleted) trades use each setup, and each tag. */
-  function setupCounts(): Map<string, number> {
+  function setupCounts(): Map<string, { taken: number; missed: number }> {
     const rows = db
-      .select({ id: trades.setupId, count: sql<number>`count(*)` })
+      .select({
+        id: trades.setupId,
+        taken: sql<number>`sum(${trades.book} != 'missed')`,
+        missed: sql<number>`sum(${trades.book} = 'missed')`,
+      })
       .from(trades)
       .where(and(isNull(trades.deletedAt), isNotNull(trades.setupId)))
       .groupBy(trades.setupId)
       .all();
-    return new Map(rows.flatMap((row) => (row.id ? [[row.id, row.count] as const] : [])));
+    return new Map(
+      rows.flatMap((row) => (row.id ? [[row.id, { taken: row.taken, missed: row.missed }] as const] : [])),
+    );
   }
 
   function tagCounts(): Map<string, number> {
@@ -160,7 +169,11 @@ export function createTaxonomyRepo(db: Db, now: () => number = Date.now) {
         )
         .orderBy(asc(setups.name))
         .all()
-        .map((row) => ({ ...row, tradeCount: counts.get(row.id) ?? 0 }));
+        .map((row) => ({
+          ...row,
+          tradeCount: counts.get(row.id)?.taken ?? 0,
+          missedCount: counts.get(row.id)?.missed ?? 0,
+        }));
     },
 
     createSetup,

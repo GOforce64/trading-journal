@@ -143,6 +143,7 @@ function SetupsPanel({
         />
       </td>
       <td />
+      <td />
       <td className="whitespace-nowrap text-right">
         <button type="button" onClick={save} className={BUTTON}>
           Save
@@ -179,6 +180,7 @@ function SetupsPanel({
             <th className="w-28 text-left font-medium">Strategy</th>
             <th className="text-left font-medium">Description</th>
             <th className="w-16 text-right font-medium">Trades</th>
+            <th className="w-16 text-right font-medium">Missed</th>
             <th className="w-44" />
           </tr>
         </thead>
@@ -195,7 +197,12 @@ function SetupsPanel({
                 <td className="py-1 text-fg">{setup.name}</td>
                 <td className="text-muted">{strategyLabel(setup.strategy)}</td>
                 <td className="text-muted">{setup.description ?? ""}</td>
-                <td className="num text-right">{setup.tradeCount}</td>
+                <td data-testid={`trades-${setup.id}`} className="num text-right">
+                  {setup.tradeCount}
+                </td>
+                <td data-testid={`missed-${setup.id}`} className="num text-right text-muted">
+                  {setup.missedCount || ""}
+                </td>
                 <td className="whitespace-nowrap text-right">
                   <button
                     type="button"

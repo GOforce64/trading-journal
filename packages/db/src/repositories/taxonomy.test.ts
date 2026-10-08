@@ -136,7 +136,26 @@ describe("taxonomy repository", () => {
     trades.create(scalp);
     trades.softDelete(trades.create(scalp).id);
     expect(repo().listSetups()[0]?.tradeCount).toBe(2);
+    expect(repo().listSetups()[0]?.missedCount).toBe(0);
     expect(repo().listTags()[0]?.tradeCount).toBe(2);
+    // A missed trade on the setup counts apart from the trades taken on it.
+    trades.create(
+      newTradeSchema.parse({
+        strategy: "scalp",
+        book: "missed",
+        underlying: "NVDA",
+        openedAt: 1_000,
+        setupId: orb.id,
+        missed: {
+          direction: "long",
+          entryPrice: 178.42,
+          stopPrice: null,
+          targetPrice: null,
+          exitPrice: null,
+        },
+      }),
+    );
+    expect(repo().listSetups()[0]).toMatchObject({ tradeCount: 2, missedCount: 1 });
     repo().createSetup({ name: "Unused" });
     expect(
       repo()
