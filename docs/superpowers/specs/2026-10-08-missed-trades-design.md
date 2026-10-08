@@ -356,3 +356,29 @@ missedRisk(trade, live?: { direction?, entry?, stop?, target?, exit? }): MissedR
   - the Analytics tabs are Overview, Scalps, Iron flies and **Missed**;
   - the Book filter gets Missed as described in §6.8;
   - the Missed opportunity KPI lives on the Missed page and tab.
+
+---
+
+## 12. Live check (2026-10-08)
+
+On a `.backup()` copy of the real journal (42 iron flies, no scalps), with the real Alpaca key, read-only. Two taken NVDA scalps were added to the copy on Oct 7 (09:36 → 10:02 long call, 10:16 → 10:31 long put, both VWAP reclaim), since the journal had none.
+
+- **+ Missed** on the first scalp's chart opened `/missed/new?symbol=NVDA&date=2026-10-07`.
+- **Two missed trades marked by clicking,** entry, then stop, then exit, on the 3-minute chart:
+  - **Long,** 10:54 at 237.29, stop 236.89, exit 13:24 at 237.40: R +0.28 (0.11 ÷ 0.40), MAE −1.62R (low 236.64), MFE +1.24R (high 237.785). All match the 1-minute bars by hand.
+  - **Short** (the stop clicked above the entry turned it short), 10:08 at 238.85 (that minute's high), stop 244.58, exit 10:44 at 237.76 (that minute's low): R +0.19, MAE −0.04R (high 239.08), MFE +0.22R (low 237.61). All match.
+  - Setup, grade B and the Hesitated skip reason were set from the panel.
+- **Day's trades:** on, the two taken scalps show as dimmed arrows and the other missed trade as "Missed long +0.28R"; off, they're gone.
+- **The Missed page:** +0.47R missed opportunity, 2 of 2 would have won, avg R +0.23R against the taken scalps' +1.31R, Top reason Hesitated (1 · +0.19R). The + Missed trade popover defaults to Oct 8 after the close.
+- **The Missed tab:** Took 50% (2 taken, 2 missed); by setup, VWAP reclaim took 67% (2 of 3).
+- **The Book filter with Missed:** Overview's Avg R +0.77R = (1.22 + 1.40 + 0.28 + 0.19) ÷ 4, "includes 2 missed"; Net and the dollars unchanged; the Scalps tab counts 4 scalps and +$121.61.
+- **The Playbook:** the VWAP reclaim card shows Missed 1, would win 100%, missed avg R +0.19R; Hesitated counts 1.
+- **The Journal:** missed rows show MISSED, "—" for Net and Return, the stock R and the grade.
+
+**Fixed from the check:**
+- A click on a 3-minute candle put the point at the candle's start with a price from the whole candle's range, so the panel warned "Outside 10:54's range" on every click-placed point. The chart model now carries the 1-minute bars, and `snapToMinute` puts the point on the first minute inside the candle that traded the price, or the nearest one.
+- The new missed trade's chart drew Open and Close marks at 09:30 and 16:00, from the placeholder trade that spans the session. It now passes no points, so those marks are dropped.
+
+**Left as minors:**
+- The new missed trade's page has no Day's trades, so the taken scalps only show after the first click.
+- With Missed on, the Scalps tab's "R covers all 2 scalps" counts only the taken scalps, beside a Scalps KPI of 4.
