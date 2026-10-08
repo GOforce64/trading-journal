@@ -437,10 +437,10 @@ Each phase ends usable, and each gets its own implementation plan.
 
 **Phase 3: Public demo and polish**
 1. Spike: in-browser `createApp()` on sql.js. Go, or fall back to a Node host.
-2. Deterministic fake-data and synthetic-bar generator.
+2. Deterministic fake-data and synthetic-bar generator. *(Built: `pnpm demo`; see [the demo data spec](2026-10-08-demo-data-design.md).)*
 3. Demo build and GitHub Pages deploy workflow.
 4. PWA install, keyboard review flow, full command palette.
-5. README with screenshots/GIF, an architecture diagram, "run it yourself" instructions for Linux and Windows, and CONTRIBUTING.
+5. README with screenshots/GIF, an architecture diagram, "run it yourself" instructions for Linux and Windows, and CONTRIBUTING. *(Built with the demo data: screenshots, not a GIF.)*
 
 ---
 
