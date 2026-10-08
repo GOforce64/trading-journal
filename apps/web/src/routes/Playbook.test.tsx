@@ -39,7 +39,8 @@ function stubApi(refusal?: string, trades: unknown[] = []) {
     const url = String(input);
     const method = String(init?.method ?? "GET").toUpperCase();
     if (url.includes("/api/trades")) return json(trades);
-    if (url.includes("/api/risk/fill")) return json({ filled: 0, missing: [], unavailable: null });
+    if (url.includes("/api/risk/fill"))
+      return json({ filled: 0, missing: [], optionMissing: [], unavailable: null });
     if (method !== "GET") {
       if (refusal) return json({ error: "duplicate", message: refusal }, 409);
       return json({ id: "new", ...JSON.parse(String(init?.body)) }, method === "POST" ? 201 : 200);

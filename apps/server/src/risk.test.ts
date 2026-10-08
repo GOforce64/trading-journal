@@ -1,5 +1,5 @@
 import { nyWallClock, type PriceBar } from "@tj/core";
-import { AlpacaError, type BarHistory } from "@tj/market-data";
+import { AlpacaError, type BarHistory, type OptionBarHistory } from "@tj/market-data";
 import { describe, expect, it, vi } from "vitest";
 import { createMarketData } from "./marketData.js";
 import { fakeSources, LOCAL, testApp } from "./testing.js";
@@ -26,16 +26,31 @@ const SEP_28 = [
   bar("2026-09-28", 586, 232.6, 232.9, 232.2, 232.3),
   bar("2026-09-28", 587, 232.3, 245, 210, 232),
 ];
+/** The contract's minutes around the same hold: high 1.53 at the entry minute, low 0.64 at the exit minute. */
+const OPTION_SEP_28 = [
+  bar("2026-09-28", 570, 0.9, 1, 0.85, 0.95),
+  bar("2026-09-28", 571, 0.97, 1.53, 0.97, 1.1),
+  bar("2026-09-28", 580, 1.2, 1.37, 1.15, 1.3),
+  bar("2026-09-28", 586, 1.1, 1.32, 0.64, 1.29),
+  bar("2026-09-28", 587, 1.29, 3, 0.1, 1.2),
+];
 
 interface FillBody {
   filled: number;
   missing: { tradeId: string; reason: string }[];
+  optionMissing: { tradeId: string; reason: string }[];
   unavailable: { reason: string; message: string } | null;
 }
 interface RiskView {
   id: string;
   strategy: string;
-  scalpPrices: { entryPrice: number | null; holdHigh: number | null; holdLow: number | null } | null;
+  scalpPrices: {
+    entryPrice: number | null;
+    holdHigh: number | null;
+    holdLow: number | null;
+    optionHigh: number | null;
+    optionLow: number | null;
+  } | null;
   risk: {
     problem: string | null;
     plannedRisk: number | null;
@@ -80,13 +95,24 @@ const fly = {
   },
 };
 
-/** The app over fake Alpaca minute bars; `null` sets up no key. */
-function setup(history: Partial<BarHistory> | null = {}) {
+/** The app over fake Alpaca minute bars, the stock's and the contract's; `null` sets up no key. */
+function setup(
+  history: Partial<BarHistory> | null = {},
+  options: OptionBarHistory["minuteBars"] = async () => OPTION_SEP_28,
+) {
   const minuteBars = vi.fn(history?.minuteBars ?? (async () => SEP_28));
+  const optionBars = vi.fn(options);
   const market = history
     ? createMarketData(
         { keyId: "PKTEST", secretKey: "s" },
-        { build: () => fakeSources({ history: { minuteBars, dailyBars: async () => [] } }), log: () => {} },
+        {
+          build: () =>
+            fakeSources({
+              history: { minuteBars, dailyBars: async () => [] },
+              optionHistory: { minuteBars: optionBars },
+            }),
+          log: () => {},
+        },
       )
     : undefined;
   const app = testApp({ market, now: () => NOW });
@@ -94,6 +120,7 @@ function setup(history: Partial<BarHistory> | null = {}) {
     app.request(path, { method, headers: JSON_HEADERS, body: JSON.stringify(body) });
   return {
     minuteBars,
+    optionBars,
     async create(body: Record<string, unknown> = nvda()) {
       return ((await (await send("POST", "/api/trades", body)).json()) as { id: string }).id;
     },
@@ -115,7 +142,12 @@ describe("POST /api/risk/fill", () => {
   it("fills the stock at entry, by the second, and the hold's range; the trade then carries its R", async () => {
     const app = setup();
     const id = await app.create();
-    expect((await app.fill([id])).body).toEqual({ filled: 1, missing: [], unavailable: null });
+    expect((await app.fill([id])).body).toEqual({
+      filled: 1,
+      missing: [],
+      optionMissing: [],
+      unavailable: null,
+    });
     expect(app.minuteBars).toHaveBeenCalledWith(
       "NVDA",
       nyWallClock("2026-09-28", 0),
@@ -145,14 +177,19 @@ describe("POST /api/risk/fill", () => {
     const app = setup();
     const id = await app.create();
     await app.fill([id]);
-    expect((await app.fill()).body).toEqual({ filled: 0, missing: [], unavailable: null });
+    expect((await app.fill()).body).toEqual({ filled: 0, missing: [], optionMissing: [], unavailable: null });
     expect(app.minuteBars).toHaveBeenCalledTimes(1);
   });
 
   it("reads only an open scalp's entry day, and leaves its range for the close", async () => {
     const app = setup();
     const id = await app.create(nvda({ closedAt: null, netPnl: null }));
-    expect((await app.fill([id])).body).toEqual({ filled: 1, missing: [], unavailable: null });
+    expect((await app.fill([id])).body).toEqual({
+      filled: 1,
+      missing: [],
+      optionMissing: [],
+      unavailable: null,
+    });
     // One request, for Sep 28: today (Sep 29) would be a second.
     expect(app.minuteBars).toHaveBeenCalledTimes(1);
     expect((await app.trade(id)).scalpPrices).toMatchObject({ holdHigh: null, holdLow: null });
@@ -165,6 +202,7 @@ describe("POST /api/risk/fill", () => {
     expect((await app.fill([id])).body).toEqual({
       filled: 0,
       missing: [{ tradeId: id, reason: "too_recent" }],
+      optionMissing: [],
       unavailable: null,
     });
     expect(app.minuteBars).not.toHaveBeenCalled();
@@ -178,6 +216,7 @@ describe("POST /api/risk/fill", () => {
     expect((await app.fill([id])).body).toEqual({
       filled: 1,
       missing: [{ tradeId: id, reason: "too_recent" }],
+      optionMissing: [{ tradeId: id, reason: "too_recent" }],
       unavailable: null,
     });
     expect((await app.trade(id)).scalpPrices?.entryPrice).toBeCloseTo(231.1, 6);
@@ -192,6 +231,7 @@ describe("POST /api/risk/fill", () => {
     expect((await app.fill([id])).body).toEqual({
       filled: 1,
       missing: [{ tradeId: id, reason: "too_recent" }],
+      optionMissing: [{ tradeId: id, reason: "too_recent" }],
       unavailable: null,
     });
   });
@@ -204,6 +244,7 @@ describe("POST /api/risk/fill", () => {
     expect((await app.fill([id])).body).toEqual({
       filled: 1,
       missing: [{ tradeId: id, reason: "no_bars" }],
+      optionMissing: [],
       unavailable: null,
     });
     expect((await app.trade(id)).scalpPrices).toMatchObject({
@@ -217,7 +258,12 @@ describe("POST /api/risk/fill", () => {
     // A thin name: nothing trades at or after 09:46 on Sep 28, and the day is long over.
     const app = setup({ minuteBars: async () => SEP_28.slice(0, 3) });
     const id = await app.create();
-    expect((await app.fill([id])).body).toEqual({ filled: 1, missing: [], unavailable: null });
+    expect((await app.fill([id])).body).toEqual({
+      filled: 1,
+      missing: [],
+      optionMissing: [],
+      unavailable: null,
+    });
     expect((await app.trade(id)).scalpPrices).toMatchObject({ holdHigh: 233.21, holdLow: 230.71 });
   });
 
@@ -227,6 +273,7 @@ describe("POST /api/risk/fill", () => {
     expect((await app.fill([id])).body).toEqual({
       filled: 0,
       missing: [],
+      optionMissing: [],
       unavailable: { reason: "no_key", message: "Add an Alpaca key in Settings to fetch the stock price." },
     });
   });
@@ -242,6 +289,7 @@ describe("POST /api/risk/fill", () => {
     expect((await app.fill()).body).toEqual({
       filled: 0,
       missing: [],
+      optionMissing: [],
       unavailable: { reason: "unreachable", message: "Alpaca didn't answer. Reopen the trade to try again." },
     });
     expect(app.minuteBars).toHaveBeenCalledTimes(1);
@@ -250,7 +298,7 @@ describe("POST /api/risk/fill", () => {
   it("fills scalps only, leaving flies to the move filler", async () => {
     const app = setup();
     await app.create(fly);
-    expect((await app.fill()).body).toEqual({ filled: 0, missing: [], unavailable: null });
+    expect((await app.fill()).body).toEqual({ filled: 0, missing: [], optionMissing: [], unavailable: null });
     expect(app.minuteBars).not.toHaveBeenCalled();
   });
 
@@ -269,6 +317,91 @@ describe("POST /api/risk/fill", () => {
     const run = app.fill([id]);
     await new Promise((resolve) => setTimeout(resolve, 20));
     await app.patch(id, { openedAt: OPENED + 120_000 });
+    release();
+    expect((await run).body.filled).toBe(0);
+    expect((await app.trade(id)).scalpPrices).toBeNull();
+  });
+
+  it("stores each closed scalp's option range beside the stock's", async () => {
+    const app = setup();
+    const id = await app.create();
+    expect((await app.fill([id])).body).toMatchObject({ filled: 1, missing: [], optionMissing: [] });
+    expect(app.optionBars).toHaveBeenCalledWith(
+      "NVDA260928C00232500",
+      nyWallClock("2026-09-28", 0),
+      nyWallClock("2026-09-29", 0),
+    );
+    expect((await app.trade(id)).scalpPrices).toMatchObject({ optionHigh: 1.53, optionLow: 0.64 });
+  });
+
+  it("fetches only the option range when the stock's is stored, and keeps going without it when Alpaca fails", async () => {
+    let up = false;
+    const app = setup({}, async () => {
+      if (!up) throw new AlpacaError(500, "");
+      return OPTION_SEP_28;
+    });
+    const first = await app.create();
+    const second = await app.create(nvda({ openedAt: OPENED + 60_000 }));
+    const body = (await app.fill()).body;
+    expect(body.filled).toBe(2);
+    expect(body.optionMissing).toEqual([
+      { tradeId: first, reason: "unreachable" },
+      { tradeId: second, reason: "unreachable" },
+    ]);
+    // One failed option request ends the run's option fetching.
+    expect(app.optionBars).toHaveBeenCalledTimes(1);
+    expect((await app.trade(first)).scalpPrices).toMatchObject({
+      entryPrice: expect.any(Number),
+      optionHigh: null,
+    });
+
+    up = true;
+    const stockCalls = app.minuteBars.mock.calls.length;
+    expect((await app.fill([first])).body).toMatchObject({ filled: 1, optionMissing: [] });
+    expect(app.minuteBars).toHaveBeenCalledTimes(stockCalls);
+    expect((await app.trade(first)).scalpPrices).toMatchObject({ optionHigh: 1.53, optionLow: 0.64 });
+  });
+
+  it("waits for Alpaca's delay without asking, and asks nothing before its option history", async () => {
+    const app = setup();
+    const recent = await app.create(nvda({ openedAt: NOW - 20 * 60_000, closedAt: NOW - 10 * 60_000 }));
+    expect((await app.fill([recent])).body.optionMissing).toEqual([
+      { tradeId: recent, reason: "too_recent" },
+    ]);
+    const old = await app.create(
+      nvda({
+        openedAt: Date.UTC(2023, 11, 15, 15),
+        closedAt: Date.UTC(2023, 11, 15, 15, 10),
+        legs: [{ right: "C", strike: 470, expiry: "2023-12-15", quantity: 1, openPrice: 1, closePrice: 1.2 }],
+      }),
+    );
+    expect((await app.fill([old])).body.optionMissing).toEqual([]);
+    expect(app.optionBars).not.toHaveBeenCalled();
+  });
+
+  it("calls a finished hold with no option bars no_bars", async () => {
+    const app = setup({}, async () => []);
+    const id = await app.create();
+    expect((await app.fill([id])).body.optionMissing).toEqual([{ tradeId: id, reason: "no_bars" }]);
+  });
+
+  it("drops an option range fetched while the contract was edited", async () => {
+    let release: () => void = () => {};
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = setup({}, async () => {
+      await hold;
+      return OPTION_SEP_28;
+    });
+    const id = await app.create();
+    const run = app.fill([id]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await app.patch(id, {
+      legs: [
+        { right: "C", strike: 235, expiry: "2026-09-28", quantity: 2, openPrice: 1.06, closePrice: 1.295 },
+      ],
+    });
     release();
     expect((await run).body.filled).toBe(0);
     expect((await app.trade(id)).scalpPrices).toBeNull();

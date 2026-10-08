@@ -131,7 +131,7 @@ describe("Analytics Scalps tab", () => {
     expect(JSON.parse(String(fill?.[1]?.body))).toEqual({ tradeIds: ["s4"] });
     const noKey = { reason: "no_key", message: "Add an Alpaca key in Settings to fetch the stock price." };
     answer(
-      new Response(JSON.stringify({ filled: 0, missing: [], unavailable: noKey }), {
+      new Response(JSON.stringify({ filled: 0, missing: [], optionMissing: [], unavailable: noKey }), {
         headers: { "content-type": "application/json" },
       }),
     );

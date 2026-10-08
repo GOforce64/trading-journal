@@ -51,7 +51,7 @@ function renderPage(trade: TradeView) {
   return { rerender: (next: TradeView) => view.rerender(ui(next)) };
 }
 
-const filledAll = () => ({ filled: 1, missing: [], unavailable: null });
+const filledAll = () => ({ filled: 1, missing: [], optionMissing: [], unavailable: null });
 
 afterEach(() => {
   vi.useRealTimers();
@@ -60,7 +60,12 @@ afterEach(() => {
 
 describe("useFillScalpPrices", () => {
   it("sends a long list, such as a first sync's changed trades, in requests of at most 1,000 ids", async () => {
-    const fetchMock = stubFill((tradeIds) => ({ filled: tradeIds.length, missing: [], unavailable: null }));
+    const fetchMock = stubFill((tradeIds) => ({
+      filled: tradeIds.length,
+      missing: [],
+      optionMissing: [],
+      unavailable: null,
+    }));
     const hook: { fill?: ReturnType<typeof useFillScalpPrices> } = {};
     function Probe() {
       hook.fill = useFillScalpPrices();
@@ -74,7 +79,7 @@ describe("useFillScalpPrices", () => {
     const ids = Array.from({ length: 1001 }, (_, index) => `t${index}`);
     const result = await hook.fill?.mutateAsync(ids);
     expect(bodies(fetchMock).map((body) => body.tradeIds.length)).toEqual([1000, 1]);
-    expect(result).toEqual({ filled: 1001, missing: [], unavailable: null });
+    expect(result).toEqual({ filled: 1001, missing: [], optionMissing: [], unavailable: null });
   });
 });
 
@@ -121,6 +126,7 @@ describe("useAutoFillPrices", () => {
     const fetchMock = stubFill((tradeIds) => ({
       filled: 0,
       missing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      optionMissing: [],
       unavailable: null,
     }));
     renderPage(scalp("t1"));
@@ -153,6 +159,7 @@ describe("useAutoFillPrices", () => {
     const fetchMock = stubFill((tradeIds) => ({
       filled: 0,
       missing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      optionMissing: [],
       unavailable: null,
     }));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -180,6 +187,7 @@ describe("useAutoFillPrices", () => {
     stubFill((tradeIds) => ({
       filled: 0,
       missing: tradeIds.map((tradeId) => ({ tradeId, reason: "no_bars" })),
+      optionMissing: [],
       unavailable: null,
     }));
     renderPage(scalp("t1"));
@@ -190,7 +198,12 @@ describe("useAutoFillPrices", () => {
     );
     vi.unstubAllGlobals();
     const message = "Add an Alpaca key in Settings to fetch the stock price.";
-    stubFill(() => ({ filled: 0, missing: [], unavailable: { reason: "no_key", message } }));
+    stubFill(() => ({
+      filled: 0,
+      missing: [],
+      optionMissing: [],
+      unavailable: { reason: "no_key", message },
+    }));
     renderPage(scalp("t9"));
     await waitFor(() => expect(screen.getAllByTestId("note").at(-1)?.textContent).toBe(message));
   });
@@ -261,6 +274,7 @@ describe("useBackfillPrices", () => {
     stubFill(() => ({
       filled: 0,
       missing: [],
+      optionMissing: [],
       unavailable: { reason: "no_key", message: "Add an Alpaca key in Settings to fetch the stock price." },
     }));
     renderBackfill([scalp("a")]);
@@ -285,6 +299,7 @@ describe("useBackfillPrices", () => {
     const fetchMock = stubFill((tradeIds) => ({
       filled: 0,
       missing: tradeIds.filter((id) => id === "late").map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      optionMissing: [],
       unavailable: null,
     }));
     renderBackfill([scalp("early"), scalp("late")]);

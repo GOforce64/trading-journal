@@ -121,7 +121,8 @@ const json = (body: unknown, status = 200) =>
 /** Answers the trade, an empty queue, and patches. */
 function stubApi({ trade = SCALP as unknown, patch = () => json(trade) } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes("/api/risk/fill")) return json({ filled: 0, missing: [], unavailable: null });
+    if (String(input).includes("/api/risk/fill"))
+      return json({ filled: 0, missing: [], optionMissing: [], unavailable: null });
     if (String(init?.method).toUpperCase() === "PATCH") return patch();
     return json(String(input).includes("review=pending") ? [] : trade);
   });

@@ -27,7 +27,7 @@ export function useFillScalpPrices() {
     mutationKey: PRICE_FILL_KEY,
     mutationFn: async (tradeIds: string[]): Promise<PriceFillResult> => {
       // The server takes 1,000 ids a request; a longer list, such as a first sync's, goes in batches answered as one.
-      let merged: PriceFillResult = { filled: 0, missing: [], unavailable: null };
+      let merged: PriceFillResult = { filled: 0, missing: [], optionMissing: [], unavailable: null };
       for (let start = 0; start < tradeIds.length; start += BATCH) {
         const res = await api.api.risk.fill.$post({
           json: { tradeIds: tradeIds.slice(start, start + BATCH) },
@@ -37,6 +37,7 @@ export function useFillScalpPrices() {
         merged = {
           filled: merged.filled + result.filled,
           missing: [...merged.missing, ...result.missing],
+          optionMissing: [...merged.optionMissing, ...result.optionMissing],
           unavailable: result.unavailable,
         };
         if (result.unavailable) break;

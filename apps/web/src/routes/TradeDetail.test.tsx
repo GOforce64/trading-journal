@@ -658,7 +658,7 @@ function stubSynced(
       : url.includes("/reset")
         ? reset
         : url.includes("/fill")
-          ? { filled: 0, missing: [], unavailable: null }
+          ? { filled: 0, missing: [], optionMissing: [], unavailable: null }
           : body;
     return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
   });
