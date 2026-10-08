@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { nyWallClock } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TradeDetailView } from "../api.js";
@@ -71,6 +71,10 @@ const TAGS = [
   { id: "calm", name: "Calm", kind: "emotion", archived: false },
 ];
 
+/** What the price filler answers. */
+const FILLED = { filled: 0, missing: [], optionMissing: [], unavailable: null };
+const fill: { answer: unknown } = { answer: FILLED };
+
 function setup(trade = missedTrade(), deleteStatus = 200, patchRefusal: string | null = null) {
   const patches: unknown[] = [];
   const onDeleted = vi.fn();
@@ -94,8 +98,8 @@ function setup(trade = missedTrade(), deleteStatus = 200, patchRefusal: string |
         });
       return json(trade);
     }
-    if (url.includes("/api/bars") || url.includes("/api/risk"))
-      return json({ bars: [], filled: 0, missing: [] });
+    if (url.includes("/api/risk")) return json(fill.answer);
+    if (url.includes("/api/bars")) return json({ bars: [], filled: 0, missing: [] });
     return json([]);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -119,6 +123,7 @@ const editing = () => {
 afterEach(() => {
   vi.unstubAllGlobals();
   charts.props = null;
+  fill.answer = FILLED;
 });
 
 describe("MissedWorkspace", () => {
@@ -274,5 +279,21 @@ describe("MissedWorkspace", () => {
     const time = screen.getByLabelText("Entry time");
     await waitFor(() => expect(time.parentElement?.textContent).toContain("Place it on Sep 30"));
     expect(patches).toEqual([]);
+  });
+
+  it("says why the stock's range is missing: no key, or Alpaca not answering", async () => {
+    const noRange = () =>
+      missedTrade({
+        scalpPrices: null,
+        missedRisk: { risk: 0.62, r: 2.387, plannedRR: 4.484, mae: null, mfe: null, problem: null },
+      });
+    fill.answer = { ...FILLED, unavailable: { reason: "unreachable", message: "Alpaca didn't answer" } };
+    setup(noRange());
+    expect(await screen.findByText("Alpaca didn't answer: reload to try again.")).toBeTruthy();
+    expect(screen.queryByText("Add an Alpaca key in Settings to fetch the stock's range.")).toBeNull();
+    cleanup();
+    fill.answer = { ...FILLED, unavailable: { reason: "no_key", message: "No Alpaca key" } };
+    setup(noRange());
+    expect(await screen.findByText("Add an Alpaca key in Settings to fetch the stock's range.")).toBeTruthy();
   });
 });

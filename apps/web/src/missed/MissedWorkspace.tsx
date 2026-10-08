@@ -19,7 +19,7 @@ import { TradeCharts } from "../chart/TradeCharts.js";
 import { Chip, Panel } from "../components/ui.js";
 import { type TradePatchBody, useSaveTrade } from "../review/data.js";
 import { SetupPicker, TagChips } from "../review/Pickers.js";
-import { useAutoFillPrices, useRangeUnavailable } from "../review/prices.js";
+import { useAutoFillPrices, useRangeProblem } from "../review/prices.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
 import { useDayTrades, useDeleteMissed } from "./data.js";
 import { dayText, excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
@@ -135,7 +135,7 @@ export function MissedWorkspace({
   // biome-ignore lint/correctness/useExhaustiveDependencies: the stored exit changing is the signal
   useEffect(() => setExitDraft({ time: "", price: "" }), [trade.closedAt, stored.exitPrice]);
   useAutoFillPrices(trade);
-  const rangeUnavailable = useRangeUnavailable(trade.id);
+  const rangeProblem = useRangeProblem(trade.id);
 
   const levels: MissedLevels = { ...stored, ...live };
   const risk = missedRisk(trade, live);
@@ -475,11 +475,7 @@ export function MissedWorkspace({
                 <div>{excursions}</div>
               ) : (
                 trade.closedAt != null &&
-                rangeUnavailable && (
-                  <div className="text-[10px] text-muted">
-                    Add an Alpaca key in Settings to fetch the stock's range.
-                  </div>
-                )
+                rangeProblem && <div className="text-[10px] text-muted">{rangeProblem}</div>
               )}
             </div>
             <div className="mt-1 flex flex-col gap-1.5 border-line border-t pt-1.5">
