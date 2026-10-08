@@ -136,10 +136,8 @@ export function writeDemo(
                 netCost: fly.netCost,
                 earningsDate: fly.earningsDate,
                 earningsTiming: fly.earningsTiming,
-                impliedMovePct: fly.impliedMovePct,
-                actualMovePct: fly.actualMovePct,
-                ivBefore: fly.ivBefore,
-                ivAfter: fly.ivAfter,
+                // Moves and IVs are left for the app to work out from the legs and stock prices, as a synced fly's
+                // are: typed in, they would read as the user's own overrides.
               },
             }),
           );

@@ -95,11 +95,6 @@ export interface FlyPlan {
   netCost: number;
   earningsDate: string;
   earningsTiming: "BMO" | "AMC";
-  /** Percent, as the trade stores them. */
-  impliedMovePct: number;
-  actualMovePct: number;
-  ivBefore: number;
-  ivAfter: number;
   bodyStrike: number;
   putWing: number;
   callWing: number;
@@ -175,9 +170,6 @@ export function planFly(
   const fees = cents(4 * contracts * 2 * FEE_PER_CONTRACT_SIDE);
   const legPnl = legs.reduce((sum, leg) => sum + (leg.closePrice - leg.openPrice) * leg.quantity * 100, 0);
   const netPnl = cents(legPnl - fees);
-  const straddle = (legs[1]?.openPrice ?? 0) + (legs[2]?.openPrice ?? 0);
-  const previousClose = entryStock.at(-1)?.c ?? entryPrice;
-  const reactionOpen = exitStock[0]?.o ?? exitPrice;
   const won = netPnl > 0;
 
   return {
@@ -195,10 +187,6 @@ export function planFly(
     netCost: cents(-credit * contracts * 100 + fees / 2),
     earningsDate: event.date,
     earningsTiming: event.timing,
-    impliedMovePct: cents((straddle / entryPrice) * 100),
-    actualMovePct: cents((reactionOpen / previousClose - 1) * 100),
-    ivBefore: cents(event.ivBefore * 100),
-    ivAfter: cents(ivAfter * 100),
     bodyStrike: body,
     putWing: body - width,
     callWing: body + width,

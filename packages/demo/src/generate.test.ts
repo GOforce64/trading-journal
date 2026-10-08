@@ -10,6 +10,7 @@ import {
   REGULAR_OPEN,
   regularClose,
   reviewStatus,
+  tradeMoves,
 } from "@tj/core";
 import { createBarsRepo, createTradesRepo, type Db, openDatabase, runMigrations } from "@tj/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -117,6 +118,23 @@ describe("generateDemo", () => {
     );
     expect(recent.some((each) => each.status === "pending")).toBe(true);
     for (const trade of scalps) expect(trade.scalpPrices?.entryPrice).toBeGreaterThan(0);
+  });
+
+  it("leaves a fly's moves and IVs for the app to work out from its fills, as a synced fly's are", () => {
+    const flies = createTradesRepo(db).list({ strategy: "iron_fly" });
+    expect(flies.length).toBeGreaterThan(0);
+    for (const fly of flies) {
+      expect(fly.ironFly).toMatchObject({
+        impliedMovePct: null,
+        actualMovePct: null,
+        ivBefore: null,
+        ivAfter: null,
+      });
+      const moves = tradeMoves(fly);
+      expect(moves.impliedMove?.source).toBe("computed");
+      expect(moves.actualMove?.source).toBe("computed");
+      expect(moves.ivBefore?.source).toBe("computed");
+    }
   });
 
   it("makes the same trades again from the same seed", { timeout: 30_000 }, () => {

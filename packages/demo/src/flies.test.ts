@@ -54,7 +54,7 @@ describe("earningsSchedule", () => {
 describe("planFly", () => {
   it("sells the body at the money with wings around it, for a credit, with P&L from the legs less fees", () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const { plan, before, reactionOpen } = flyFor(seed);
+      const { plan } = flyFor(seed);
       expect(plan.creditPerShare).toBeGreaterThan(0);
       expect(plan.putWing).toBeLessThan(plan.bodyStrike);
       expect(plan.callWing).toBeGreaterThan(plan.bodyStrike);
@@ -71,7 +71,6 @@ describe("planFly", () => {
       const fees = Math.round(4 * plan.contracts * 2 * 0.67 * 100) / 100;
       expect(plan.fees).toBeCloseTo(fees, 2);
       expect(plan.netPnl).toBeCloseTo(legs - fees, 2);
-      expect(plan.actualMovePct).toBeCloseTo((reactionOpen / before - 1) * 100, 1);
       expect(plan.openedAt).toBeGreaterThanOrEqual(nyWallClock(plan.entryDate, 15 * 60 + 40));
       expect(plan.closedAt).toBeLessThanOrEqual(nyWallClock(plan.exitDate, 10 * 60 + 31));
       expect(
