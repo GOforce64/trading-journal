@@ -81,7 +81,7 @@ const strikeFor = (right: OptionRight, price: number, step: number) =>
 
 /**
  * Up to two scalps on one symbol's session (demo spec §2): an entry mostly in the first 90 minutes, a direction that
- * reads the next half hour right 68% of the time, and an exit at the first of the target, the stop or the time stop.
+ * reads the next half hour right 74% of the time, and an exit at the first of the target, the stop or the time stop.
  */
 export function planScalps(
   rng: Rng,
@@ -103,8 +103,9 @@ export function planScalps(
   const contractBars = new Map<string, PriceBar[]>();
   for (let count = 0; count < wanted && earliest < lastEntry; count++) {
     const morning = chance(rng, 0.7) && earliest < 90;
+    // Morning entries crowd the open, as a scalper's do.
     const entry = morning
-      ? int(rng, earliest, Math.min(90, lastEntry))
+      ? earliest + Math.floor((Math.min(90, lastEntry) - earliest) * rng() ** 2)
       : int(rng, Math.max(earliest, 90), lastEntry);
     const plan = planOne(rng, date, symbol, stock, entry, reviewed, info.vol, info.iv, contractBars);
     plans.push(plan);
@@ -131,7 +132,7 @@ function planOne(
   };
   const start = bar(entry);
   const drift = bar(entry + 30).c - start.c;
-  const right: OptionRight = drift >= 0 === chance(rng, 0.68) ? "C" : "P";
+  const right: OptionRight = drift >= 0 === chance(rng, 0.74) ? "C" : "P";
   const contract = {
     right,
     strike: strikeFor(right, start.o, strikeStep(start.o)),
@@ -155,12 +156,12 @@ function planOne(
   const dailyMove = vol / Math.sqrt(252);
   const stop =
     basis === "stock"
-      ? cents(stockEntry * (1 - up * dailyMove * uniform(rng, 0.11, 0.17)))
-      : cents(openPrice * (1 - uniform(rng, 0.3, 0.5)));
+      ? cents(stockEntry * (1 - up * dailyMove * uniform(rng, 0.08, 0.13)))
+      : cents(openPrice * (1 - uniform(rng, 0.25, 0.4)));
   const target =
     basis === "stock"
-      ? cents(stockEntry * (1 + up * dailyMove * uniform(rng, 0.08, 0.14)))
-      : cents(openPrice * (1 + uniform(rng, 0.25, 0.6)));
+      ? cents(stockEntry * (1 + up * dailyMove * uniform(rng, 0.12, 0.22)))
+      : cents(openPrice * (1 + uniform(rng, 0.4, 0.8)));
   const maxHold = int(rng, 5, 40);
 
   let exit: ScalpPlan["exit"] = "time";
