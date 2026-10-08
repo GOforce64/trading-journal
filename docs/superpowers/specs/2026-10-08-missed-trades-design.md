@@ -1,7 +1,7 @@
 # Missed Trades — Design Spec
 
 - **Date:** 2026-10-08
-- **Status:** Approved 2026-10-08. The user made the decisions in §2 in the brainstorm, over four mockups, and approved the three design sections. They then said "proceed, you don't need me for anything, go on autopilot for now", so the written spec and the plan go ahead without a review stop.
+- **Status:** Approved 2026-10-08. The user made the decisions in §2 in the brainstorm, over four mockups, and approved the three design sections. They then said "proceed, you don't need me for anything, go on autopilot for now", so the written spec and the plan go ahead without a review stop. Implemented on feat/missed-trades. Plan: [2026-10-08-missed-trades.md](../plans/2026-10-08-missed-trades.md).
 - **Scope:** parent spec §8.4 (Phase 2, item 5): missed trades marked on the chart, scored in R, with their own page, an Analytics tab, and a place on the Playbook.
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §2 (Book, Missed trade, R), §6, §8.4 and §9.
 

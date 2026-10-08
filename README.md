@@ -15,8 +15,8 @@ pnpm install
 pnpm demo           # http://127.0.0.1:4179
 ```
 
-`pnpm demo` builds the app, makes a fresh journal of about six months of fake scalps and
-earnings iron flies, with synthetic prices so every chart draws without an API key, and
+`pnpm demo` builds the app, makes a fresh journal of about six months of fake scalps,
+earnings iron flies and missed trades, with synthetic prices so every chart draws without an API key, and
 opens it on its own port. It lives in your system's temp directory (or `TJ_DEMO_DIR`),
 is replaced on the next run, and never touches your own journal. `--end YYYY-MM-DD` and
 `--seed N` pick the period and the data. The screenshots here are of
@@ -88,8 +88,11 @@ Windows. The server binds to loopback only and refuses requests that don't come 
   P&L calendar, open and recent trades) and an Analytics page with every split at once,
   a Scalps tab (time of day, hold time, breakdowns in R and return on cost, and what each
   mistake costs), and an Iron flies tab measured against max profit.
-- **Missed trades** — setups you saw but didn't take, scored in R, kept out of the
-  dollar statistics.
+- **Missed trades** — setups you saw but didn't take, marked on the day's chart (entry,
+  stop, target, exit) and scored in R on the stock, with a skip reason: what hesitating
+  cost, which skips were good calls, and each setup's taken trades beside its missed ones.
+  The day's other trades show faintly on the chart, and Analytics can count them in R and
+  win rate, never in dollars.
 - **Screenshots** — on every trade: paste (Ctrl+V), drop or pick PNG, JPEG or WebP images,
   with captions and a lightbox; stored once each, by content, in the data directory.
 - **Two machines** — Settings → Data exports the journal as one `.tjbundle` file (a tar
@@ -108,13 +111,13 @@ Windows. The server binds to loopback only and refuses requests that don't come 
   </tr>
 </table>
 
+![Missed trades: what the skips would have made, why they were skipped, and each one's R](docs/images/missed.png)
+
 ![The Journal: every trade in one list, with filters](docs/images/journal.png)
 
 *All screenshots are of `pnpm demo`'s fake data.*
 
-Missed trades arrive in a later step; see
-[the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
-[the plans](docs/superpowers/plans/).
+The design specs and plans behind each step are in [docs/superpowers](docs/superpowers/).
 
 ## Architecture
 
