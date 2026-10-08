@@ -220,6 +220,25 @@ describe("Journal", () => {
     });
   });
 
+  it("offers the Missed book only where a list can hold missed trades", async () => {
+    stubApi();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const shown = (lockedFilter?: Parameters<typeof Journal>[0]["lockedFilter"]) => {
+      const { unmount } = render(
+        <QueryClientProvider client={client}>
+          <Journal lockedFilter={lockedFilter} />
+        </QueryClientProvider>,
+      );
+      const missed = screen.queryByRole("button", { name: /^missed$/i }) !== null;
+      unmount();
+      return missed;
+    };
+    expect(shown()).toBe(true);
+    expect(shown({ strategy: "scalp", taken: true })).toBe(false);
+    expect(shown({ strategy: "scalp", review: "pending" })).toBe(false);
+    expect(shown({ strategy: "iron_fly" })).toBe(false);
+  });
+
   it("shows the note, truncated, with the full text available on hover", async () => {
     stubApi();
     renderJournal();

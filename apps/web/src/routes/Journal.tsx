@@ -90,6 +90,9 @@ export interface JournalProps {
 export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade, emptyText }: JournalProps) {
   const [book, setBook] = useState<JournalFilter["book"]>(undefined);
   const { data, isLoading, error } = useTrades({ ...lockedFilter, book });
+  // Missed trades are scalps never taken: a list of taken trades, the review queue or iron flies holds none.
+  const holdsMissed = !lockedFilter?.taken && !lockedFilter?.review && lockedFilter?.strategy !== "iron_fly";
+  const books = holdsMissed ? BOOKS : BOOKS.filter((option) => option !== "missed");
   const { data: setups } = useSetups();
   const setupNames = new Map((setups ?? []).map((setup) => [setup.id, setup.name]));
   const { data: quotes } = useQuotes(data?.map((trade) => trade.underlying) ?? []);
@@ -104,7 +107,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
       title={title}
       right={
         <span className="flex items-center gap-1">
-          {BOOKS.map((option) => (
+          {books.map((option) => (
             <button
               key={option}
               type="button"

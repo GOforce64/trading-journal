@@ -104,7 +104,7 @@ function useFillResults(): FillOutcome[] {
 function lastWord(
   outcomes: readonly FillOutcome[],
   tradeId: string,
-): PriceReason | "failed" | { message: string } | null {
+): PriceReason | "failed" | { reason: "no_key" | "unreachable"; message: string } | null {
   for (let index = outcomes.length - 1; index >= 0; index--) {
     const outcome = outcomes[index];
     if (!outcome) continue;
@@ -114,15 +114,23 @@ function lastWord(
     }
     const found = outcome.result.missing.find((gap) => gap.tradeId === tradeId);
     if (found) return found.reason;
-    if (outcome.result.unavailable) return { message: outcome.result.unavailable.message };
+    if (outcome.result.unavailable) return outcome.result.unavailable;
   }
   return null;
 }
 
-/** Whether the newest fill couldn't run at all for this trade, such as without an Alpaca key. */
-export function useRangeUnavailable(tradeId: string): boolean {
+/** Why a missed trade's stock range couldn't be fetched, by what stopped the newest fill. */
+const STOCK_RANGE_COPY = {
+  no_key: "Add an Alpaca key in Settings to fetch the stock's range.",
+  unreachable: "Alpaca didn't answer: reload to try again.",
+  failed: "Couldn't fetch the stock's range: reload to try again.",
+} as const;
+
+/** What stopped the newest fill from running for this trade, in the page's words, or null. */
+export function useRangeProblem(tradeId: string): string | null {
   const word = lastWord(useFillResults(), tradeId);
-  return typeof word === "object" && word !== null;
+  if (word === "failed") return STOCK_RANGE_COPY.failed;
+  return typeof word === "object" && word !== null ? STOCK_RANGE_COPY[word.reason] : null;
 }
 
 /** The newest finished fill's word on this scalp's option range (premium-chart spec §9.4). */

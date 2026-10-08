@@ -7,5 +7,7 @@ export default defineConfig({
     projects: ["packages/*", "apps/*"],
     // `tsc -b` emits compiled copies of the tests; only the sources should run.
     exclude: ["**/node_modules/**", "**/dist/**"],
+    // The run's temp journals go in a folder of its own, removed at the end.
+    globalSetup: ["./scripts/vitest-tmp.ts"],
   },
 });

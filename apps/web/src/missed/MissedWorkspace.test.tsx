@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { nyWallClock } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TradeDetailView } from "../api.js";
@@ -71,7 +71,26 @@ const TAGS = [
   { id: "calm", name: "Calm", kind: "emotion", archived: false },
 ];
 
-function setup(trade = missedTrade(), deleteStatus = 200) {
+/** What the price filler answers. */
+const FILLED = { filled: 0, missing: [], optionMissing: [], unavailable: null };
+const fill: { answer: unknown } = { answer: FILLED };
+
+/** The page as TradeDetail renders it: from the cached trade, so a save's optimistic change and rollback show. */
+function FromCache({ id, onDeleted }: { id: string; onDeleted: () => void }) {
+  const { data } = useQuery<TradeDetailView>({
+    queryKey: ["trade", id],
+    queryFn: () => Promise.reject(new Error("the cache holds it")),
+    enabled: false,
+  });
+  return data ? <MissedWorkspace trade={data} onDeleted={onDeleted} /> : null;
+}
+
+function setup(
+  trade = missedTrade(),
+  deleteStatus = 200,
+  patchRefusal: string | null = null,
+  fromCache = false,
+) {
   const patches: unknown[] = [];
   const onDeleted = vi.fn();
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,21 +106,33 @@ function setup(trade = missedTrade(), deleteStatus = 200) {
       });
     if (init?.method === "PATCH") {
       patches.push(JSON.parse(String(init.body)));
+      // A refusal comes back after a round trip, as it does from the server, so the optimistic change shows first.
+      if (patchRefusal) await new Promise((resolve) => setTimeout(resolve, 20));
+      if (patchRefusal)
+        return new Response(JSON.stringify({ error: "invalid", message: patchRefusal }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
       return json(trade);
     }
-    if (url.includes("/api/bars") || url.includes("/api/risk"))
-      return json({ bars: [], filled: 0, missing: [] });
+    if (url.includes("/api/risk")) return json(fill.answer);
+    if (url.includes("/api/bars")) return json({ bars: [], filled: 0, missing: [] });
     return json([]);
   });
   vi.stubGlobal("fetch", fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["trade", trade.id], trade);
-  render(
+  const page = (shown: TradeDetailView) => (
     <QueryClientProvider client={client}>
-      <MissedWorkspace trade={trade} onDeleted={onDeleted} />
-    </QueryClientProvider>,
+      {fromCache ? (
+        <FromCache id={shown.id} onDeleted={onDeleted} />
+      ) : (
+        <MissedWorkspace trade={shown} onDeleted={onDeleted} />
+      )}
+    </QueryClientProvider>
   );
-  return { patches, client, onDeleted };
+  const { rerender } = render(page(trade));
+  return { patches, client, onDeleted, rerender: (next: TradeDetailView) => rerender(page(next)) };
 }
 
 const editing = () => {
@@ -113,6 +144,7 @@ const editing = () => {
 afterEach(() => {
   vi.unstubAllGlobals();
   charts.props = null;
+  fill.answer = FILLED;
 });
 
 describe("MissedWorkspace", () => {
@@ -207,5 +239,100 @@ describe("MissedWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByText("Couldn't delete: delete failed: 404")).toBeTruthy();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  const type = (label: string, text: string) => {
+    const field = screen.getByLabelText(label);
+    fireEvent.change(field, { target: { value: text } });
+    fireEvent.blur(field);
+    return field;
+  };
+  const justCreated = () =>
+    missedTrade(
+      {
+        createdAt: Date.now(),
+        closedAt: null,
+        missedRisk: { risk: null, r: null, plannedRR: null, mae: null, mfe: null, problem: "no_stop" },
+      },
+      { stopPrice: null, targetPrice: null, exitPrice: null },
+    );
+
+  it("forgets a typed exit time once the exit is cleared, so a new exit needs its time again", async () => {
+    const { patches, rerender } = setup();
+    type("Exit time", "10:30");
+    await waitFor(() => expect(patches).toEqual([{ closedAt: nyWallClock("2026-09-30", 10 * 60 + 30) }]));
+    // × cleared the exit: the trade comes back without one, and the time field shows empty.
+    rerender(missedTrade({}, { exitPrice: null }));
+    type("Exit price", "179");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(patches).toHaveLength(1);
+  });
+
+  it("goes on to the exit when the stop being placed is typed instead", async () => {
+    const { patches } = setup(justCreated());
+    expect(editing().placing).toBe("stop");
+    type("Stop", "177.9");
+    await waitFor(() => expect(patches).toEqual([{ missed: { stopPrice: 177.9 } }]));
+    expect(editing().placing).toBe("exit");
+  });
+
+  it("stops placing the target once it's typed", async () => {
+    const { patches } = setup(missedTrade({}, { targetPrice: null }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Target" }));
+    expect(editing().placing).toBe("target");
+    type("Target", "181");
+    await waitFor(() => expect(patches).toEqual([{ missed: { targetPrice: 181 } }]));
+    expect(editing().placing).toBeNull();
+  });
+
+  it("shows a refused save under the field that sent it", async () => {
+    setup(missedTrade(), 200, "The exit can't be before the entry");
+    const time = type("Exit time", "09:30");
+    await waitFor(() =>
+      expect(time.parentElement?.textContent).toContain("The exit can't be before the entry"),
+    );
+    expect(screen.queryByText(/Couldn't save/)).toBeNull();
+  });
+
+  it("keeps a dragged point on the trade's day, saying so under its time", async () => {
+    const { patches } = setup(missedTrade({}, { exitPrice: null }));
+    act(() => editing().onDropPoint?.("entry", nyWallClock("2026-09-29", 15 * 60), 177.1));
+    const time = screen.getByLabelText("Entry time");
+    await waitFor(() => expect(time.parentElement?.textContent).toContain("Place it on Sep 30"));
+    expect(patches).toEqual([]);
+  });
+
+  it("says why the stock's range is missing: no key, or Alpaca not answering", async () => {
+    const noRange = () =>
+      missedTrade({
+        scalpPrices: null,
+        missedRisk: { risk: 0.62, r: 2.387, plannedRR: 4.484, mae: null, mfe: null, problem: null },
+      });
+    fill.answer = { ...FILLED, unavailable: { reason: "unreachable", message: "Alpaca didn't answer" } };
+    setup(noRange());
+    expect(await screen.findByText("Alpaca didn't answer: reload to try again.")).toBeTruthy();
+    expect(screen.queryByText("Add an Alpaca key in Settings to fetch the stock's range.")).toBeNull();
+    cleanup();
+    fill.answer = { ...FILLED, unavailable: { reason: "no_key", message: "No Alpaca key" } };
+    setup(noRange());
+    expect(await screen.findByText("Add an Alpaca key in Settings to fetch the stock's range.")).toBeTruthy();
+  });
+
+  it("keeps a refused new exit's typed time and price, to fix and send again", async () => {
+    const { patches } = setup(
+      missedTrade({}, { exitPrice: null }),
+      200,
+      "The exit must come after the entry",
+      true,
+    );
+    type("Exit time", "09:30");
+    type("Exit price", "180");
+    await waitFor(() => expect(patches).toHaveLength(1));
+    const price = screen.getByLabelText("Exit price") as HTMLInputElement;
+    await waitFor(() =>
+      expect(price.parentElement?.textContent).toContain("The exit must come after the entry"),
+    );
+    expect((screen.getByLabelText("Exit time") as HTMLInputElement).value).toBe("09:30");
+    expect(price.value).toBe("180");
   });
 });

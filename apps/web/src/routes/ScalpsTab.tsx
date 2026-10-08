@@ -44,7 +44,6 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   const { data: tags, isError: tagsFailed } = useTags();
   // Every scalp, not just the filtered ones: the backfill runs once a visit (spec §8).
   const fill = useBackfillPrices(useAllTrades().data);
-  const metric: Metric = search.metric ?? "net";
   const by = search.by ?? "setup";
   const costEdges = resolveEdges("cost", search.costEdges);
   const contractEdges = resolveEdges("contracts", search.contractEdges);
@@ -68,21 +67,22 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   const join = <R extends Parameters<typeof withMissedGroups>[0][number]>(
     rows: readonly R[],
     extra: MissedRow[] | null,
-  ) => (missed.length > 0 && extra ? withMissedGroups(rows, extra) : rows);
+    dimension: Parameters<typeof withMissedGroups>[2],
+  ) => (missed.length > 0 && extra ? withMissedGroups(rows, extra, dimension) : rows);
   // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
   const openRows = useMemo(
-    () => join(bucketStats(scalps, "open"), missedRows(missed, "open", context)),
+    () => join(bucketStats(scalps, "open"), missedRows(missed, "open", context), "open"),
     [scalps, missed, context],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
   const holdRows = useMemo(
-    () => join(bucketStats(scalps, "hold"), missedRows(missed, "hold", context)),
+    () => join(bucketStats(scalps, "hold"), missedRows(missed, "hold", context), "hold"),
     [scalps, missed, context],
   );
   const missedByDimension = useMemo(() => missedRows(missed, by, context), [missed, by, context]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: join reads the missed trades, listed here
   const breakdown = useMemo(
-    () => join(scalpBreakdown(scalps, by, context), missedByDimension),
+    () => join(scalpBreakdown(scalps, by, context), missedByDimension, by),
     [scalps, by, context, missedByDimension, missed],
   );
   const contractNote =
@@ -97,6 +97,9 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
   );
   const none = summary.trades === 0;
   const empty = none && missed.length === 0;
+  // Missed alone has no dollars to draw, so its bars default to R and Net is off (missed-trades spec §6.8).
+  const dollarless = none && missed.length > 0;
+  const metric: Metric = search.metric ?? (dollarless ? "r" : "net");
 
   let edges: EdgeControl | undefined;
   if (by === "cost") {
@@ -164,7 +167,11 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p data-testid="r-coverage" className="text-[10px] text-muted">
-              {coverageText(summary.coverage, fill)}
+              {coverageText(
+                summary.coverage,
+                fill,
+                missed.length > 0 ? { total: missed.length, withR: missedWithR } : null,
+              )}
             </p>
             <fieldset aria-label="Bars" className="flex items-center gap-1 text-[11px]">
               <span className="mr-1 text-[9px] text-muted uppercase tracking-wider">Bars</span>
@@ -173,6 +180,8 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
                   key={each.id}
                   type="button"
                   aria-pressed={each.id === metric}
+                  disabled={dollarless && each.id === "net"}
+                  title={dollarless && each.id === "net" ? "Missed trades have no dollars" : undefined}
                   onClick={() => onSearch({ metric: each.id === "net" ? undefined : each.id })}
                   className={segmentClass(each.id === metric)}
                 >

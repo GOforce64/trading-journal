@@ -195,6 +195,25 @@ describe("ChartToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Fit trade" }));
     expect(onFit).toHaveBeenCalled();
   });
+
+  it("keeps Fit trade and the page's buttons together at the end, apart from the toggles that wrap", () => {
+    render(
+      <ChartToolbar
+        prefs={DEFAULT_PREFS}
+        onChange={vi.fn()}
+        hiddenEmas={[]}
+        onFit={vi.fn()}
+        showDay
+        extra={<button type="button">+ Missed</button>}
+      />,
+    );
+    const fit = screen.getByRole("button", { name: "Fit trade" });
+    const toggles = screen.getByRole("button", { name: "Day's trades" }).parentElement;
+    // A wrap moves the toggles' last line down; Fit trade stays top right, with the page's buttons.
+    expect(fit.parentElement).not.toBe(toggles);
+    expect(fit.parentElement).toBe(screen.getByRole("button", { name: "+ Missed" }).parentElement);
+    expect(screen.getByRole("button", { name: "3m" }).parentElement).toBe(toggles);
+  });
 });
 
 describe("IntradayChart editing the review's lines", () => {
@@ -521,7 +540,7 @@ describe("IntradayChart and a missed trade's points", () => {
       price: candle(220).c,
       kind: "missed" as const,
       label: "Missed short −0.62R",
-      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R", "Click to open"],
+      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R"],
     };
     render(
       <IntradayChart
@@ -541,5 +560,24 @@ describe("IntradayChart and a missed trade's points", () => {
     );
     fireEvent.mouseDown(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c), button: 0 });
     expect(onOpenTrade).toHaveBeenCalledWith("m9");
+  });
+
+  it("offers no click to open while placing, since a click then places (spec §6.4)", () => {
+    const onOpenTrade = vi.fn();
+    const edit = editing("entry");
+    const mark = {
+      tradeId: "t9",
+      t: candle(220).t,
+      price: candle(220).c,
+      kind: "missed" as const,
+      label: "Missed short −0.62R",
+      tip: ["Missed · Short", "10:52 → 11:06", "−0.62R"],
+    };
+    renderPoints(edit, { points: [], context: [mark], onOpenTrade });
+    fireEvent.mouseMove(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c) });
+    expect(screen.getByTestId("context-tip").textContent).toBe("Missed · Short10:52 → 11:06−0.62R");
+    fireEvent.mouseDown(chart(), { clientX: 220 * BAR_PX + 1, clientY: yOf(candle(220).c), button: 0 });
+    expect(onOpenTrade).not.toHaveBeenCalled();
+    expect(edit.onPlacePoint).toHaveBeenCalled();
   });
 });

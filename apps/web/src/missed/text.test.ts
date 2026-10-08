@@ -1,6 +1,6 @@
 import { nyWallClock } from "@tj/core";
 import { describe, expect, it } from "vitest";
-import { excursionLine, missedLine, rangeWarning } from "./text.js";
+import { dayText, excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
 
 const risk = (overrides: Record<string, unknown> = {}) => ({
   risk: 0.62,
@@ -59,5 +59,24 @@ describe("rangeWarning", () => {
     expect(rangeWarning(237.32, subCent)).toBeNull();
     expect(rangeWarning(237.24, subCent)).toBe("Outside 09:41's range (237.25–237.32)");
     expect(rangeWarning(237.33, subCent)).toBe("Outside 09:41's range (237.25–237.32)");
+  });
+});
+
+describe("parseClock", () => {
+  it("reads a time on the trade's New York date", () => {
+    expect(parseClock("09:41", "2026-09-30")).toBe(nyWallClock("2026-09-30", 9 * 60 + 41));
+    expect(parseClock(" 9:41 ", "2026-09-30")).toBe(nyWallClock("2026-09-30", 9 * 60 + 41));
+  });
+
+  it("refuses a time that isn't on the clock", () => {
+    expect(parseClock("25:00", "2026-09-30")).toBe("Type a time like 09:41");
+    expect(parseClock("09:60", "2026-09-30")).toBe("Type a time like 09:41");
+    expect(parseClock("0941", "2026-09-30")).toBe("Type a time like 09:41");
+  });
+});
+
+describe("dayText", () => {
+  it("names a New York date the way the pages do", () => {
+    expect(dayText("2026-09-30")).toBe("Sep 30");
   });
 });

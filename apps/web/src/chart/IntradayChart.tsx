@@ -660,17 +660,13 @@ export function IntradayChart({
             <div
               // biome-ignore lint/suspicious/noArrayIndexKey: a tooltip's lines are fixed in order
               key={index}
-              className={
-                index === 0
-                  ? "font-semibold text-fg"
-                  : index === tip.mark.tip.length - 1
-                    ? "text-muted"
-                    : "num text-fg"
-              }
+              className={index === 0 ? "font-semibold text-fg" : "num text-fg"}
             >
               {line}
             </div>
           ))}
+          {/* Only when a click opens it: while placing, a click places instead (spec §6.4). */}
+          {onOpenTrade && !editing?.placing && <div className="text-muted">Click to open</div>}
         </div>
       )}
       {editing?.placing && (

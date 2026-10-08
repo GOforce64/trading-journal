@@ -64,14 +64,28 @@ export interface FillState {
 }
 
 /** The line under the KPI strip saying which scalps lack R, and why (spec §6.2). Empty without scalps. */
-export function coverageText(coverage: Coverage, fill: FillState = { fetching: 0, problem: null }): string {
-  if (coverage.total === 0) return "";
+export function coverageText(
+  coverage: Coverage,
+  fill: FillState = { fetching: 0, problem: null },
+  /** With Missed in the books, how many missed trades there are and how many have an R (missed-trades §6.8). */
+  missed: { total: number; withR: number } | null = null,
+): string {
+  const missedPart =
+    missed && missed.total > 0
+      ? missed.withR === missed.total
+        ? missed.total === 1
+          ? "the missed trade"
+          : `all ${missed.total} missed trades`
+        : `${missed.withR} of ${count(missed.total, "missed trade", "missed trades")}`
+      : null;
+  if (coverage.total === 0) return missedPart ? `R covers ${missedPart}` : "";
   if (fill.fetching > 0) return `Fetching prices for ${count(fill.fetching, "scalp", "scalps")}…`;
   const { total, withR } = coverage;
   let text =
     withR === total
       ? `R covers ${total === 1 ? "the scalp" : `all ${total} scalps`}`
       : `R covers ${withR} of ${count(total, "scalp", "scalps")}`;
+  if (missedPart) text += ` and ${missedPart}`;
   const parts = [
     [coverage.noStop, "no stop"],
     [coverage.noStockPrice, "no stock price"],
