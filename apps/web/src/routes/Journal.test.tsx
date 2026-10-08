@@ -122,6 +122,49 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** A missed NVDA long with no exit yet, and one scored +2.39R. */
+const missedOpen = {
+  ...trade,
+  id: "m1",
+  strategy: "scalp",
+  book: "missed",
+  underlying: "NVDA",
+  closedAt: null,
+  netPnl: null,
+  fees: 0,
+  ironFly: null,
+  metrics: null,
+  legs: [],
+  risk: null,
+  missed: { direction: "long", entryPrice: 178.42, stopPrice: 177.8, targetPrice: null, exitPrice: null },
+  missedRisk: { risk: 0.62, r: null, plannedRR: null, mae: null, mfe: null, problem: "no_exit" },
+};
+const missedScored = {
+  ...missedOpen,
+  id: "m2",
+  closedAt: 1788_001_000_000,
+  missedRisk: { risk: 0.62, r: 2.387, plannedRR: null, mae: null, mfe: null, problem: null },
+};
+
+describe("Journal and missed trades", () => {
+  it("shows a missed trade's stock R, with no P&L or return", async () => {
+    stubApi({ trades: [missedScored] });
+    renderJournal();
+    await waitFor(() => expect(screen.getByText("MISSED")).toBeTruthy());
+    expect(screen.getByTestId("r-m2").textContent).toBe("+2.39R");
+    expect(screen.getByTestId("pct-m2").textContent).toBe("—");
+  });
+
+  it("never asks for option quotes for a missed trade without an exit", async () => {
+    const fetchMock = stubApi({ trades: [missedOpen] });
+    renderJournal();
+    await waitFor(() => expect(screen.getByText("MISSED")).toBeTruthy());
+    expect(urlsFor(fetchMock, "/api/option-quotes")).toEqual([]);
+    expect(screen.queryByTestId("est-m1")).toBeNull();
+    expect(screen.getByTestId("r-m1").textContent).toBe("—");
+  });
+});
+
 describe("Journal", () => {
   it("lists trades with P&L and the share of max profit kept", async () => {
     stubApi();

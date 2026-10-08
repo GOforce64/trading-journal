@@ -35,7 +35,7 @@ export function Scalps({
       {tab === "all" ? (
         <Journal
           title="Scalps"
-          lockedFilter={{ strategy: "scalp" }}
+          lockedFilter={{ strategy: "scalp", taken: true }}
           onOpenTrade={onOpenTrade}
           actions={
             onNewScalp && (

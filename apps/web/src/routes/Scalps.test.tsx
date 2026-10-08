@@ -66,6 +66,16 @@ describe("Scalps", () => {
     expect(screen.getByRole("columnheader", { name: "Return" })).toBeTruthy();
   });
 
+  it("lists taken scalps, leaving the missed ones to the Missed page", async () => {
+    const fetchMock = setup();
+    expect(await screen.findByText("NVDA")).toBeTruthy();
+    const listCalls = fetchMock.mock.calls
+      .map((call) => String(call[0]))
+      .filter((url) => url.includes("/api/trades") && !url.includes("review=pending"));
+    expect(listCalls.length).toBeGreaterThan(0);
+    expect(listCalls.every((url) => url.includes("taken=true"))).toBe(true);
+  });
+
   it("asks for scalps only, and lists them under its own title", async () => {
     const fetchMock = setup();
     expect(await screen.findByText("NVDA")).toBeTruthy();
