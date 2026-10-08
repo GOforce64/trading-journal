@@ -6,6 +6,24 @@ scalps near the market open, and earnings IV-crush iron flies.
 It runs entirely on your own machine. There is no account, no server to sign up for,
 and no telemetry.
 
+![The Dashboard: a month's KPIs, equity curve with drawdown, P&L calendar, review queue and recent trades](docs/images/dashboard.png)
+
+## Try it with demo data
+
+```
+pnpm install
+pnpm demo           # http://127.0.0.1:4179
+```
+
+`pnpm demo` builds the app, makes a fresh journal of about six months of fake scalps and
+earnings iron flies, with synthetic prices so every chart draws without an API key, and
+opens it on its own port. It lives in your system's temp directory (or `TJ_DEMO_DIR`),
+is replaced on the next run, and never touches your own journal. `--end YYYY-MM-DD` and
+`--seed N` pick the period and the data. The screenshots here are of
+`pnpm demo --end 2026-09-30`, with the Dashboard stepped back to August. By default the
+demo ends with yesterday's session. Nothing in it comes from a real account or real
+market data.
+
 ## Your data stays yours
 
 The repository holds code only. Your trades live in a data directory outside it:
@@ -26,7 +44,10 @@ page, the journal shows each symbol's last price, lets the builder pick expiries
 strikes from the listed chain, and estimates what closing an open trade would realise.
 Estimates are shown, never stored. Without a key everything else works as before.
 
-## Quickstart
+## Run it yourself
+
+Requires Node 22 or newer and pnpm (`corepack enable` sets pnpm up). Then, on Linux,
+macOS or Windows:
 
 ```
 pnpm install
@@ -40,10 +61,9 @@ To run it the way you'd use it day to day, with UI and API served together:
 pnpm start          # http://127.0.0.1:4178
 ```
 
-Linux/macOS: `./scripts/start.sh` · Windows: `scripts\start.cmd`
-
-Requires Node 22 or newer and pnpm. The server binds to loopback only and refuses
-requests that don't come from `localhost`.
+Or use the start scripts: `./scripts/start.sh` on Linux and macOS, `scripts\start.cmd` on
+Windows. The server binds to loopback only and refuses requests that don't come from
+`localhost`.
 
 ## What it tracks
 
@@ -77,9 +97,46 @@ requests that don't come from `localhost`.
   edit of a trade wins, deletes travel, IBKR fills and screenshots are combined, and
   merging the same file twice changes nothing.
 
+<table>
+  <tr>
+    <td><img src="docs/images/scalp.png" alt="A scalp's page: the option's 1-minute candles with the fills, the daily chart, and the review with levels on premium, R and R:R"></td>
+    <td><img src="docs/images/iron-fly.png" alt="An earnings iron fly: structure, max profit and loss, implied against actual move, IV crush, legs and review"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/analytics.png" alt="Analytics, Scalps tab: KPIs, time of day, hold time, breakdown by setup, and what each mistake costs"></td>
+    <td><img src="docs/images/iron-flies-analytics.png" alt="Analytics, Iron flies tab: results measured against max profit"></td>
+  </tr>
+</table>
+
+![The Journal: every trade in one list, with filters](docs/images/journal.png)
+
+*All screenshots are of `pnpm demo`'s fake data.*
+
 Missed trades arrive in a later step; see
 [the design spec](docs/superpowers/specs/2026-09-22-trading-journal-design.md) and
 [the plans](docs/superpowers/plans/).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  UI["React UI<br/>apps/web"] -->|typed hc client| API["Hono createApp()<br/>apps/server"]
+  API --> Repos["Repositories<br/>packages/db"]
+  Repos --> DB[("SQLite<br/>journal.db")]
+  API --> Market["Market data<br/>packages/market-data"] --> Alpaca["Alpaca"]
+  API --> IBKR["IBKR Flex sync<br/>packages/importers"]
+  API --> Core["Domain logic<br/>packages/core"]
+  Demo["Demo generator<br/>packages/demo"] --> Repos
+```
+
+A pnpm monorepo in TypeScript throughout. `packages/core` holds the pure domain logic:
+P&L, iron-fly structure, R by Black-Scholes, the market calendar, statistics.
+`packages/db` keeps everything in one SQLite file through Drizzle, with migrations,
+backups and the export/merge bundle. The server is a single `createApp()` that takes its
+database, market data and broker client as arguments. The real app passes the real ones,
+the tests pass in-memory or fake ones, and `pnpm demo` passes a journal filled by
+`packages/demo`. The UI calls it through Hono's typed client, so a route's types reach
+the React code unchanged.
 
 ## Known limitations
 
@@ -103,9 +160,11 @@ Missed trades arrive in a later step; see
 pnpm test           # vitest, all packages
 pnpm typecheck      # tsc --build
 pnpm lint           # biome
+pnpm format         # biome, writing fixes
 ```
 
-CI runs the same three on Ubuntu and Windows.
+CI runs the tests, the type check and the lint on Ubuntu and Windows. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how changes are made.
 
 ## Licence
 

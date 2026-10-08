@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,13 @@ function tempDir(): string {
 }
 
 describe("runMigrations", () => {
+  it("closes its connection, so the journal can be moved or deleted at once (Windows locks open files)", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-migrate-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    // SQLite removes a WAL journal's -wal file when its last connection closes.
+    expect(existsSync(`${file}-wal`)).toBe(false);
+  });
+
   it("adds the scalp review's and scalp R's tables and columns", () => {
     const file = join(tempDir(), "journal.db");
     runMigrations(file, { migrationsFolder: MIGRATIONS });
