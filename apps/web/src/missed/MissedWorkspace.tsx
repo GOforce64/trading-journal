@@ -22,7 +22,7 @@ import { SetupPicker, TagChips } from "../review/Pickers.js";
 import { useAutoFillPrices, useRangeUnavailable } from "../review/prices.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
 import { useDayTrades, useDeleteMissed } from "./data.js";
-import { excursionLine, missedLine, rangeWarning } from "./text.js";
+import { dayText, excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
 
 const LABEL = "w-14 shrink-0 text-[10px] text-muted uppercase tracking-wider";
 const INPUT =
@@ -41,15 +41,6 @@ const price = (value: number | null | undefined) => (value == null ? "" : value.
 function parsePrice(text: string): number | string {
   const value = Number(text.trim());
   return text.trim() !== "" && Number.isFinite(value) && value > 0 ? value : "Type a price above 0";
-}
-
-/** "09:41" on the trade's New York date, or a message. */
-function parseTime(text: string, date: string): number | string {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
-  const hour = Number(match?.[1]);
-  const minute = Number(match?.[2]);
-  if (!match || hour > 23 || minute > 59) return "Type a time like 09:41";
-  return nyWallClock(date, hour * 60 + minute);
 }
 
 /** One typed value: saves on blur or Enter, shows what the save refused, and a warning that doesn't stop it. */
@@ -159,6 +150,15 @@ export function MissedWorkspace({
     });
   };
   const refusedFor = (field: string) => (refused?.field === field ? refused.message : null);
+  /** A point put on another of the chart's days: a missed trade keeps its date, so it's refused, under its time. */
+  const offDay = (id: "entry" | "exit", t: number) => {
+    if (nyDate(t) === date) return false;
+    setRefused({
+      field: id === "entry" ? "Entry time" : "Exit time",
+      message: `Place it on ${dayText(date)}`,
+    });
+    return true;
+  };
   /** A level placed, clicked or typed: placing goes on from the stop to an unmarked exit, as on a new trade. */
   const placed = (what: Exclude<Placing, null>) => {
     if (placing === what) setPlacing(what === "stop" && trade.closedAt == null ? "exit" : null);
@@ -236,10 +236,12 @@ export function MissedWorkspace({
       setLive({});
     },
     onPlacePoint(id, t, at) {
+      if (offDay(id, t)) return;
       if (id === "exit") send({ closedAt: t, missed: { exitPrice: at } });
       setPlacing(null);
     },
     onDropPoint(id, t, at) {
+      if (offDay(id, t)) return;
       if (id === "entry") send({ openedAt: t, missed: { entryPrice: at } });
       else send({ closedAt: t, missed: { exitPrice: at } });
     },
@@ -263,7 +265,7 @@ export function MissedWorkspace({
     setExitDraft(next);
     if (trade.closedAt != null && stored.exitPrice != null) {
       if (part === "time") {
-        const t = parseTime(text, date);
+        const t = parseClock(text, date);
         if (typeof t === "string") return t;
         send({ closedAt: t }, "Exit time");
       } else {
@@ -275,7 +277,7 @@ export function MissedWorkspace({
     }
     // A new exit needs its time and price together.
     if (next.time.trim() === "" || next.price.trim() === "") return null;
-    const t = parseTime(next.time, date);
+    const t = parseClock(next.time, date);
     if (typeof t === "string") return t;
     const parsed = parsePrice(next.price);
     if (typeof parsed === "string") return parsed;
@@ -373,7 +375,7 @@ export function MissedWorkspace({
                 label="Entry time"
                 value={clockText(trade.openedAt)}
                 onCommit={(text) => {
-                  const t = parseTime(text, date);
+                  const t = parseClock(text, date);
                   if (typeof t === "string") return t;
                   send({ openedAt: t }, "Entry time");
                   return null;

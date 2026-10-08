@@ -1,4 +1,4 @@
-import { type Direction, type MissedRisk, round2 } from "@tj/core";
+import { type Direction, type MissedRisk, nyWallClock, round2 } from "@tj/core";
 import { rText } from "../analytics/format.js";
 import { clockText } from "../chart/option.js";
 
@@ -43,4 +43,18 @@ export function excursionLine(risk: MissedRisk | null): string | null {
 export function rangeWarning(price: number, bar: { t: number; h: number; l: number } | null): string | null {
   if (!bar || (price >= round2(bar.l) && price <= round2(bar.h))) return null;
   return `Outside ${clockText(bar.t)}'s range (${bar.l.toFixed(2)}–${bar.h.toFixed(2)})`;
+}
+
+const DAY = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+
+/** "Sep 30", for a New York date. */
+export const dayText = (date: string) => DAY.format(new Date(`${date}T00:00:00Z`));
+
+/** "09:41" on the trade's New York date, or a message. */
+export function parseClock(text: string, date: string): number | string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
+  const hour = Number(match?.[1]);
+  const minute = Number(match?.[2]);
+  if (!match || hour > 23 || minute > 59) return "Type a time like 09:41";
+  return nyWallClock(date, hour * 60 + minute);
 }

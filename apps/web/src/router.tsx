@@ -122,7 +122,15 @@ const newMissedRoute = createRoute({
   component: function NewMissedRoute() {
     const { symbol, date } = newMissedRoute.useSearch();
     if (!symbol || !date) return <p className="text-muted">Pick a ticker and a date on the Missed page.</p>;
-    return <NewMissed key={`${symbol}-${date}`} symbol={symbol} date={date} onCreated={openCreatedMissed} />;
+    return (
+      <NewMissed
+        key={`${symbol}-${date}`}
+        symbol={symbol}
+        date={date}
+        onCreated={openCreatedMissed}
+        onOpenTrade={openTrade}
+      />
+    );
   },
 });
 

@@ -11,6 +11,8 @@ const charts: {
     emptyText?: string;
     trade?: { openedAt: number };
     points?: readonly unknown[];
+    context?: readonly { tradeId: string }[];
+    showDay?: boolean;
   } | null;
 } = { props: null };
 
@@ -21,12 +23,30 @@ vi.mock("../chart/TradeCharts.js", () => ({
   },
 }));
 
+/** A taken scalp from the same day, which the chart shows faintly. */
+const DAY_TRADES = [
+  {
+    id: "t1",
+    strategy: "scalp",
+    book: "live",
+    underlying: "NVDA",
+    openedAt: nyWallClock("2026-09-30", 10 * 60 + 4),
+    closedAt: nyWallClock("2026-09-30", 10 * 60 + 16),
+    netPnl: 186.4,
+    legs: [{ right: "C", strike: 180, quantity: 3 }],
+    risk: null,
+    missed: null,
+  },
+];
+
 function setup() {
   const posts: unknown[] = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") posts.push(JSON.parse(String(init.body)));
+      else if (String(input).includes("/api/trades"))
+        return new Response(JSON.stringify(DAY_TRADES), { headers: { "content-type": "application/json" } });
       return new Response(JSON.stringify({ id: "new-1" }), {
         status: init?.method === "POST" ? 201 : 200,
         headers: { "content-type": "application/json" },
@@ -96,5 +116,28 @@ describe("NewMissed", () => {
     expect(posts).toMatchObject([
       { openedAt: nyWallClock("2026-09-30", 9 * 60 + 41), missed: { entryPrice: 178.42 } },
     ]);
+  });
+
+  it("won't create a trade from a typed time that isn't on the clock", () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Entry time"), { target: { value: "25:00" } });
+    fireEvent.change(screen.getByLabelText("Entry price"), { target: { value: "178.42" } });
+    expect((screen.getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Type a time like 09:41")).toBeTruthy();
+  });
+
+  it("keeps the entry on the day picked: a click on the warm-up days says so and creates nothing", async () => {
+    const { posts } = setup();
+    act(() =>
+      charts.props?.levels?.editing.onPlacePoint?.("entry", nyWallClock("2026-09-29", 15 * 60), 177.1),
+    );
+    expect(await screen.findByText("Place it on Sep 30")).toBeTruthy();
+    expect(posts).toEqual([]);
+  });
+
+  it("shows the day's other trades faintly on the chart", async () => {
+    setup();
+    expect(charts.props?.showDay).toBe(true);
+    await waitFor(() => expect(charts.props?.context?.map((mark) => mark.tradeId)).toContain("t1"));
   });
 });

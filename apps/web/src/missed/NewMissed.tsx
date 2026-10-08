@@ -1,13 +1,14 @@
-import { nyWallClock, regularClose } from "@tj/core";
+import { nyDate, nyWallClock, regularClose } from "@tj/core";
 import { useMemo, useState } from "react";
+import { contextMarks } from "../chart/context.js";
 import type { ChartEditing, PointMark } from "../chart/drag.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { Chip, Panel } from "../components/ui.js";
-import { useCreateMissed } from "./data.js";
+import { useCreateMissed, useDayTrades } from "./data.js";
+import { dayText as dayName, parseClock } from "./text.js";
 
 const INPUT =
   "num w-[4.6rem] rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent";
-const DAY = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 /** No points yet, which keeps the session's open and close marks off the chart (missed-trades spec §6.4). */
 const NO_POINTS: readonly PointMark[] = [];
 
@@ -19,16 +20,21 @@ export function NewMissed({
   symbol,
   date,
   onCreated,
+  onOpenTrade,
 }: {
   symbol: string;
   /** YYYY-MM-DD, New York. */
   date: string;
   onCreated: (id: string) => void;
+  onOpenTrade?: (id: string) => void;
 }) {
   const create = useCreateMissed();
   const [time, setTime] = useState("");
   const [price, setPrice] = useState("");
-  const dayText = DAY.format(new Date(`${date}T00:00:00Z`));
+  const [offDay, setOffDay] = useState(false);
+  const dayText = dayName(date);
+  const day = useDayTrades(symbol, date);
+  const context = useMemo(() => contextMarks(day), [day]);
   const chartTrade = useMemo(
     () => ({
       underlying: symbol,
@@ -51,14 +57,17 @@ export function NewMissed({
     onDrag: () => {},
     onDrop: () => {},
     onCancel: () => {},
-    onPlacePoint: (_id, t, at) => make(t, at),
+    // The chart holds a week of warm-up: the entry stays on the day picked.
+    onPlacePoint: (_id, t, at) => (nyDate(t) === date ? make(t, at) : setOffDay(true)),
   };
 
+  const clock = parseClock(time, date);
+  // Said only once the time looks whole ("25:00"), not while it's being typed.
+  const badTime = typeof clock === "string" && /^\d{1,2}:\d{2}$/.test(time.trim()) ? clock : null;
   const typed = (() => {
-    const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
     const value = Number(price);
-    if (!match || !Number.isFinite(value) || value <= 0) return null;
-    return { openedAt: nyWallClock(date, Number(match[1]) * 60 + Number(match[2])), entryPrice: value };
+    if (typeof clock === "string" || !Number.isFinite(value) || value <= 0) return null;
+    return { openedAt: clock, entryPrice: value };
   })();
 
   return (
@@ -74,10 +83,14 @@ export function NewMissed({
           daily={false}
           levels={{ lines: [], editing }}
           points={NO_POINTS}
+          context={context}
+          onOpenTrade={onOpenTrade}
+          showDay
           emptyText={`No bars for ${symbol} on ${dayText}. Check the ticker.`}
         />
         <Panel title="Missed trade">
           <p className="mb-2 text-fg">Click the chart to place the entry</p>
+          {offDay && <p className="mb-2 text-down">Place it on {dayText}</p>}
           <p className="mb-2 text-[11px] text-muted">Or type it:</p>
           <div className="flex flex-wrap items-center gap-1.5">
             <input
@@ -103,6 +116,7 @@ export function NewMissed({
               Create
             </button>
           </div>
+          {badTime && <p className="mt-1 text-[10px] text-down">{badTime}</p>}
           {create.error && <p className="mt-2 text-down">Couldn't create it: {create.error.message}</p>}
         </Panel>
       </div>

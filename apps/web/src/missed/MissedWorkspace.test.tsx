@@ -267,4 +267,12 @@ describe("MissedWorkspace", () => {
     );
     expect(screen.queryByText(/Couldn't save/)).toBeNull();
   });
+
+  it("keeps a dragged point on the trade's day, saying so under its time", async () => {
+    const { patches } = setup(missedTrade({}, { exitPrice: null }));
+    act(() => editing().onDropPoint?.("entry", nyWallClock("2026-09-29", 15 * 60), 177.1));
+    const time = screen.getByLabelText("Entry time");
+    await waitFor(() => expect(time.parentElement?.textContent).toContain("Place it on Sep 30"));
+    expect(patches).toEqual([]);
+  });
 });
