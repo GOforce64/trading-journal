@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addDays, isTradingDay, nyDate, nyMinuteOfDay, regularClose } from "@tj/core";
+import { useMemo } from "react";
 import { api, refusal, type TradeView } from "../api.js";
 
 /** Every missed trade, excluded ones too, for the Missed page (missed-trades spec §6.1). */
@@ -56,8 +57,11 @@ export function useDayTrades(symbol: string, date: string, exceptId?: string): T
     },
     enabled: symbol !== "",
   });
-  if (!data) return NONE;
-  return data.filter((trade) => trade.id !== exceptId && nyDate(trade.openedAt) === date);
+  // The same array while nothing changes, so the chart repaints only when the day's trades do.
+  return useMemo(
+    () => (data ? data.filter((trade) => trade.id !== exceptId && nyDate(trade.openedAt) === date) : NONE),
+    [data, date, exceptId],
+  );
 }
 
 /** The last session whose bars are all in: today once it has closed, otherwise the trading day before (spec §6.1). */

@@ -125,7 +125,7 @@ export function useCreateSetup() {
 export function useCreateTag() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { name: string; kind: "mistake" | "emotion" }) => {
+    mutationFn: async (input: { name: string; kind: "mistake" | "emotion" | "skip" }) => {
       const res = await api.api.tags.$post({ json: input });
       if (!res.ok) throw await refusal(res, "create the tag");
       return res.json();

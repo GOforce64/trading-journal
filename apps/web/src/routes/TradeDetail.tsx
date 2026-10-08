@@ -5,6 +5,7 @@ import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct, premiumText, Tile, usd } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { MissedWorkspace } from "../missed/MissedWorkspace.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
@@ -43,12 +44,15 @@ export function TradeDetail({
   onEdit,
   onSettle,
   onOpenTrade,
+  onDeleted,
 }: {
   tradeId: string;
   onEdit?: (id: string) => void;
   onSettle?: (id: string) => void;
   /** Opens another trade: the queue bar's Next and Prev. */
   onOpenTrade?: (id: string) => void;
+  /** A missed trade was deleted from its page (missed-trades spec §6.3). */
+  onDeleted?: () => void;
 }) {
   const { data: trade, isLoading } = useQuery({
     queryKey: ["trade", tradeId],
@@ -63,6 +67,10 @@ export function TradeDetail({
   const { data: optionQuotes } = useOptionQuotes(trade && isOpen(trade) ? openContracts(trade, today) : []);
 
   if (isLoading || !trade) return <p className="text-muted">Loading…</p>;
+  // A missed trade has its own page: the chart and its levels, and no fills or P&L (missed-trades spec §6.3).
+  if (trade.book === "missed" && trade.missed) {
+    return <MissedWorkspace trade={trade} onOpenTrade={onOpenTrade} onDeleted={onDeleted} />;
+  }
   const metrics = trade.metrics;
   const detail = trade.ironFly;
   // What closing now would realise; shown, never stored (spec §9).

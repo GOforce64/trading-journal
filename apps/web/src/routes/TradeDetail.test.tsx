@@ -145,6 +145,13 @@ const openQuotes = {
 };
 
 /** Answers the trade for its own URL and the given quotes for option quotes. */
+// A missed trade's page has its own tests; here it's a placeholder.
+vi.mock("../missed/MissedWorkspace.js", () => ({
+  MissedWorkspace: ({ trade }: { trade: { underlying: string } }) => (
+    <div data-testid="missed-workspace">{trade.underlying}</div>
+  ),
+}));
+
 function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes, available = true) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const payload = String(input).includes("/api/option-quotes") ? { quotes, available } : body;
@@ -816,5 +823,33 @@ describe("heldText", () => {
     expect(heldText(3 * 3_600_000 + 20 * 60_000)).toBe("3 h 20 min");
     expect(heldText(2 * 3_600_000)).toBe("2 h");
     expect(heldText(52 * 3_600_000)).toBe("2 d 4 h");
+  });
+});
+
+describe("TradeDetail for a missed trade", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("hands the page to the missed trade's own workspace, with no Edit button", async () => {
+    stubTrade({
+      id: "t1",
+      strategy: "scalp",
+      book: "missed",
+      underlying: "NVDA",
+      openedAt: 1_790_775_660_000,
+      closedAt: null,
+      netPnl: null,
+      fees: 0,
+      legs: [],
+      tagIds: [],
+      attachments: [],
+      fills: [],
+      ironFly: null,
+      metrics: null,
+      missed: { direction: "long", entryPrice: 178.42, stopPrice: null, targetPrice: null, exitPrice: null },
+    });
+    renderDetail();
+    expect((await screen.findByTestId("missed-workspace")).textContent).toBe("NVDA");
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByTestId("scalp-workspace")).toBeNull();
   });
 });
