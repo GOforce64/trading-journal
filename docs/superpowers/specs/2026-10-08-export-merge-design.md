@@ -21,7 +21,7 @@ The user trades from a Fedora machine and a Windows one. Each runs its own journ
 - **Two journals merged into each other both ways** end up with the same trades, legs, fills, levels, tags and setups.
 
 ### Out of scope
-- **Attachments.** Screenshots (parent spec §8.5) aren't built, so a bundle has no `attachments/`. The format has a version, so they can come later.
+- **Attachments.** Screenshots (parent spec §8.5) aren't built, so a bundle has no `attachments/`. The format has a version, so they can come later. *(Since built: the [screenshots spec](2026-10-08-screenshots-design.md) §2 and §4 add them, and make the bundle a tar archive.)*
 - **Automatic or live sync** between machines. Moving the file is up to the user (USB stick, cloud folder, e-mail).
 - **Partial exports** (a date range, a strategy).
 - **Secrets, bars and fetched prices.** Secrets never leave a machine (parent spec §5). Bars and a scalp's fetched prices are caches the other machine fetches again.
@@ -32,7 +32,7 @@ The user trades from a Fedora machine and a Windows one. Each runs its own journ
 
 | Question | Decision |
 |---|---|
-| File format | **gzip-compressed JSON**, not zip: one document, `{ manifest, tables }`. Zip only paid off for attachments, which don't exist yet. Node's zlib does it with no new dependency. |
+| File format | **gzip-compressed JSON**, not zip: one document, `{ manifest, tables }`. Zip only paid off for attachments, which don't exist yet. Node's zlib does it with no new dependency. *(Superseded by screenshots: a `.tjbundle` is now a ustar archive, holding this gzipped JSON as `bundle.json.gz` and then the files. A gzipped JSON bundle still merges; screenshots spec §4.)* |
 | Machine name | The computer's hostname, slugged (`fedora`, `desktop-4k2l`), used in the file name and the manifest. No machine id is stored: the merge doesn't need one. |
 | Which tables | `accounts`, `setups`, `tags`, `trades`, `legs`, `iron_fly_details`, `scalp_details`, `scalp_targets`, `trade_tags`, `fills`. Left out: `scalp_prices` (refetched), `bars`, `bar_days` (cache), `sync_state` (this machine's sync). |
 | A trade's winner | **The whole aggregate** (the trade row, its legs, details, levels, targets and tag links) comes from one side. That side is the one with the larger **version**: `max(edited_at, deleted_at)`, then `updated_at`, then the canonical JSON as a tie-breaker. So a sync-only trade (both stamps null) never beats an edited one, a tombstone beats only older edits, and both directions pick the same winner. |
@@ -115,10 +115,10 @@ Everything runs in one transaction, in this order:
 
 ## 5. Server
 
-- **`GET /api/bundle`** answers the gzipped bundle with:
+- **`GET /api/bundle`** answers the gzipped bundle with *(since screenshots, a streamed ustar archive, `application/x-tar`; screenshots spec §4)*:
   - `Content-Type: application/gzip`;
   - `Content-Disposition: attachment; filename="journal-fedora-2026-10-08-0912.tjbundle"`.
-- **`POST /api/bundle/merge`** takes the file's bytes as the body (`application/octet-stream`, at most 100 MB).
+- **`POST /api/bundle/merge`** takes the file's bytes as the body (`application/octet-stream`, at most 100 MB; *since screenshots, the 100 MB applies to the tables alone, and the archive is read as a stream*).
   - It gunzips, parses and validates (§4.1), backs up the database, merges, and answers the summary.
   - A bad file answers 400 with the reason. A newer schema answers 409 with the message from §2.
 - **The backup** uses the existing `backupDatabase(dbFile, backupDir, 10, "merge")`, so merge backups are kept apart from import and migration backups.
@@ -186,7 +186,7 @@ Under the data directory line:
 - **`setupsAdded` and `tagsAdded` count names new to the journal,** not rows new under their final id. The live check's first merge read "1 setup added, 3 tags added" for names both journals had seeded (§4.6).
 - **The summary line names trades on its first trade count,** so a merge with nothing added reads "3 trades updated from the bundle".
 - **`Db` carries drizzle's raw `$client`,** which `openDatabase` already returned, so the bundle reads and writes plain rows.
-- **The 100 MB limit (413) has no test.** `hono/body-limit` enforces it.
+- **The 100 MB limit (413) has no test.** `hono/body-limit` enforces it. *(Since screenshots, the route enforces it on the tables alone, still untested.)*
 - **The final review's fixes:**
   - **A changed tag is deleted and re-inserted,** not updated in place. Otherwise a tag renamed into a name another tag just freed, or two tags swapping names, failed on the (kind, name) index.
   - **A bundle's child rows keep the local columns they lack,** as the trade row already did. An older bundle then settles to "Nothing to merge".
