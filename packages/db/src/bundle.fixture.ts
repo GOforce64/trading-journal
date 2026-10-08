@@ -1,36 +1,57 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NewTrade } from "@tj/core";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import { BUNDLE_KEYS, BUNDLE_TABLES, canonical, exportBundle, readTable } from "./bundle.js";
 import type { Db } from "./client.js";
-import { openDatabase } from "./client.js";
 import { runMigrations } from "./migrate.js";
 import { createTaxonomyRepo } from "./repositories/taxonomy.js";
 import { createTradesRepo } from "./repositories/trades.js";
+import * as schema from "./schema.js";
 
 /** Test fixtures for the bundle (export-merge spec §8). */
 export const MIGRATIONS = fileURLToPath(new URL("../migrations", import.meta.url));
 
-/** A journal on a fresh, migrated file, with its own clock. */
-export function journal(start = 1_000) {
-  const file = join(mkdtempSync(join(tmpdir(), "tj-bundle-")), "journal.db");
-  runMigrations(file, { migrationsFolder: MIGRATIONS });
-  const db = openDatabase(file);
+/**
+ * A migrated, empty journal, made once. Each test journal starts as an in-memory copy of it: migrating a file per
+ * journal made the property test take 28 s on Windows, long enough to slow its neighbours past their timeouts.
+ */
+let template: Buffer | null = null;
+function migrated(): Buffer {
+  if (!template) {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-bundle-")), "template.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const raw = new Database(file, { readonly: true });
+    template = raw.serialize();
+    raw.close();
+    // A WAL database's image can't be opened in memory: its header's file-format bytes go back to rollback (1).
+    template[18] = 1;
+    template[19] = 1;
+  }
+  return template;
+}
+
+/** A journal in memory from a database image, with the app's own pragma and its own clock. */
+function fromImage(image: Buffer, start: number) {
+  const sqlite = new Database(image);
+  sqlite.pragma("foreign_keys = ON");
+  const db: Db = drizzle(sqlite, { schema });
   const clock = { now: start };
   const tick = () => clock.now;
-  return { file, db, clock, trades: createTradesRepo(db, tick), taxonomy: createTaxonomyRepo(db, tick) };
+  return { db, clock, trades: createTradesRepo(db, tick), taxonomy: createTaxonomyRepo(db, tick) };
+}
+
+/** A fresh, migrated journal, with its own clock. */
+export function journal(start = 1_000) {
+  return fromImage(migrated(), start);
 }
 
 /** Another machine's journal that started as a copy of `source`'s, with its own clock from `start`. */
 export function copyOf(source: ReturnType<typeof journal>, start: number) {
-  const file = join(mkdtempSync(join(tmpdir(), "tj-bundle-")), "journal.db");
-  writeFileSync(file, source.db.$client.serialize());
-  const db = openDatabase(file);
-  const clock = { now: start };
-  const tick = () => clock.now;
-  return { file, db, clock, trades: createTradesRepo(db, tick), taxonomy: createTaxonomyRepo(db, tick) };
+  return fromImage(source.db.$client.serialize(), start);
 }
 
 /** The Sep 28 NVDA 232.5C scalp. */
