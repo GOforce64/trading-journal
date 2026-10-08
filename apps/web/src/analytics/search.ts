@@ -4,7 +4,7 @@ import { firstDay, lastDay, monthOf, shiftMonth } from "./dates.js";
 
 /** The Analytics page's URL state. Defaults are left out, so the URL stays short (spec §7.1). */
 export interface AnalyticsSearch {
-  tab?: "scalps" | "flies";
+  tab?: "scalps" | "flies" | "missed";
   from?: string;
   to?: string;
   /** One book; absent means both. */
@@ -43,7 +43,7 @@ function isDate(value: string | undefined): value is string {
 /** Keeps what's valid and drops the rest, so an old or hand-edited link still opens. */
 export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSearch {
   const search: AnalyticsSearch = {};
-  if (raw.tab === "scalps" || raw.tab === "flies") search.tab = raw.tab;
+  if (raw.tab === "scalps" || raw.tab === "flies" || raw.tab === "missed") search.tab = raw.tab;
   const from = text(raw.from);
   if (isDate(from)) search.from = from;
   const to = text(raw.to);

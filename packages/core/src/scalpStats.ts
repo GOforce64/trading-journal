@@ -394,29 +394,80 @@ export interface SetupCard extends GroupStats {
   /** Cumulative R for a scalp setup, cumulative net $ for a fly setup. */
   points: CumulativePoint[];
   lastClosedAt: number;
+  /** The setup's missed trades (missed-trades spec §6.7), in stock R, beside the taken ones; null without any. */
+  missed: { trades: number; winRate: number | null; avgR: number | null } | null;
+}
+
+/** What a setup card reads of a missed trade. */
+export interface SetupMissed {
+  setupId: string | null;
+  openedAt: number;
+  missedRisk: { r: number | null } | null;
+}
+
+function missedOnCard(members: readonly SetupMissed[]): SetupCard["missed"] {
+  if (members.length === 0) return null;
+  const rs = members.flatMap((trade) => (trade.missedRisk?.r == null ? [] : [trade.missedRisk.r]));
+  return {
+    trades: members.length,
+    winRate: rs.length ? rs.filter((r) => r > 0).length / rs.length : null,
+    avgR: mean(rs),
+  };
 }
 
 /**
  * One card per setup its closed trades name, most trades first, then by name. `names` holds setup names by id, for
  * the order only.
  */
-export function setupCards(trades: readonly ClosedScalp[], names: ReadonlyMap<string, string>): SetupCard[] {
+export function setupCards(
+  trades: readonly ClosedScalp[],
+  names: ReadonlyMap<string, string>,
+  missed: readonly SetupMissed[] = [],
+): SetupCard[] {
   const bySetup = groupTrades(
     trades.filter((trade) => trade.setupId != null),
     (trade) => trade.setupId ?? "",
   );
+  const missedBySetup = new Map(
+    groupTrades(
+      missed.filter((trade) => trade.setupId != null),
+      (trade) => trade.setupId ?? "",
+    ),
+  );
   const nameOf = (card: SetupCard) => names.get(card.setupId) ?? "";
-  return bySetup
-    .map(([setupId, members]): SetupCard => {
-      const fly = members.every((trade) => trade.strategy === "iron_fly");
-      return {
+  const lastEntry = (setupId: string) =>
+    Math.max(...(missedBySetup.get(setupId) ?? []).map((trade) => trade.openedAt));
+  const taken = bySetup.map(([setupId, members]): SetupCard => {
+    const fly = members.every((trade) => trade.strategy === "iron_fly");
+    return {
+      setupId,
+      kind: fly ? "fly" : "scalp",
+      ...groupStats(members),
+      kept: fly ? keptStats(members).keptOverall : null,
+      points: fly ? cumulative(members, (trade) => trade.netPnl) : cumulativeR(members),
+      lastClosedAt: Math.max(...members.map((trade) => trade.closedAt), lastEntry(setupId)),
+      missed: missedOnCard(missedBySetup.get(setupId) ?? []),
+    };
+  });
+  // A setup only missed trades name still gets its card (missed-trades spec §6.7).
+  const known = new Set(bySetup.map(([setupId]) => setupId));
+  const missedOnly = [...missedBySetup]
+    .filter(([setupId]) => !known.has(setupId))
+    .map(
+      ([setupId, members]): SetupCard => ({
         setupId,
-        kind: fly ? "fly" : "scalp",
-        ...groupStats(members),
-        kept: fly ? keptStats(members).keptOverall : null,
-        points: fly ? cumulative(members, (trade) => trade.netPnl) : cumulativeR(members),
-        lastClosedAt: Math.max(...members.map((trade) => trade.closedAt)),
-      };
-    })
-    .sort((a, b) => b.trades - a.trades || nameOf(a).localeCompare(nameOf(b)));
+        kind: "scalp",
+        ...groupStats([]),
+        kept: null,
+        points: [],
+        lastClosedAt: lastEntry(setupId),
+        missed: missedOnCard(members),
+      }),
+    );
+  return [...taken, ...missedOnly].sort(
+    (a, b) =>
+      b.trades - a.trades ||
+      (b.missed?.trades ?? 0) - (a.missed?.trades ?? 0) ||
+      nameOf(a).localeCompare(nameOf(b)),
+  );
 }

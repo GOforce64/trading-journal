@@ -59,10 +59,11 @@ function Card({
   card: SetupCard;
   setup: Setup;
   today: string;
-  onOpen?: (setupId: string, tab: "scalps" | "flies") => void;
+  onOpen?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
 }) {
   const fly = card.kind === "fly";
   const hero = fly ? card.kept : card.avgR;
+  const missedOnly = card.trades === 0;
   return (
     <article aria-label={setup.name} className="flex flex-col rounded-sm border border-line bg-panel p-2.5">
       <div className="flex items-center gap-2">
@@ -70,7 +71,8 @@ function Card({
         <Chip tone={setup.strategy ?? "default"}>{strategyLabel(setup.strategy)}</Chip>
       </div>
       <p className="mt-0.5 h-4 truncate text-[10px] text-muted">{setup.description ?? ""}</p>
-      <div className="mt-1 flex items-end justify-between gap-2">
+      {missedOnly && <p className="mt-2 text-muted">No taken trades yet</p>}
+      <div className={`mt-1 flex items-end justify-between gap-2 ${missedOnly ? "hidden" : ""}`}>
         <div>
           <div className="text-[9px] text-muted uppercase tracking-wider">{fly ? "Kept" : "Avg R"}</div>
           <div data-testid="card-hero" className={`num text-[20px] ${tone(hero)}`}>
@@ -87,7 +89,7 @@ function Card({
         />
       </div>
       {/* Spread by content rather than four equal columns, which wrapped "Avg return" on a narrow card. */}
-      <div className="mt-2 flex justify-between gap-2">
+      <div className={`mt-2 flex justify-between gap-2 ${missedOnly ? "hidden" : ""}`}>
         <Stat label="Trades">{card.trades}</Stat>
         <Stat label="Win %">{winRateText(card.winRate)}</Stat>
         <Stat label="Net" className={tone(card.net)}>
@@ -101,15 +103,38 @@ function Card({
           </Stat>
         )}
       </div>
+      {card.missed && (
+        // Its missed trades in stock R, set apart from the taken trades' stats (missed-trades spec §6.7).
+        <div
+          data-testid="card-missed"
+          className="mt-2 flex justify-between gap-2 border-line border-t border-dashed pt-1.5"
+        >
+          <Stat label="Missed">{card.missed.trades}</Stat>
+          <Stat label="Would win %">{winRateText(card.missed.winRate)}</Stat>
+          <Stat label="Missed avg R" className={tone(card.missed.avgR)}>
+            {card.missed.avgR == null ? "—" : rText(card.missed.avgR)}
+          </Stat>
+        </div>
+      )}
       <div className="mt-2 flex items-center justify-between border-line border-t pt-1.5 text-[10px] text-muted">
         <span>last {lastText(card.lastClosedAt, today)}</span>
-        <button
-          type="button"
-          onClick={() => onOpen?.(card.setupId, fly ? "flies" : "scalps")}
-          className="text-accent hover:underline"
-        >
-          {card.trades} {card.trades === 1 ? "trade" : "trades"} →
-        </button>
+        {missedOnly ? (
+          <button
+            type="button"
+            onClick={() => onOpen?.(card.setupId, "missed")}
+            className="text-accent hover:underline"
+          >
+            {card.missed?.trades ?? 0} missed →
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onOpen?.(card.setupId, fly ? "flies" : "scalps")}
+            className="text-accent hover:underline"
+          >
+            {card.trades} {card.trades === 1 ? "trade" : "trades"} →
+          </button>
+        )}
       </div>
     </article>
   );
@@ -129,7 +154,7 @@ export function SetupCards({
   trades: readonly TradeView[] | undefined;
   setups: readonly Setup[];
   showArchived: boolean;
-  onOpenSetup?: (setupId: string, tab: "scalps" | "flies") => void;
+  onOpenSetup?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
   /** New York's date, YYYY-MM-DD; the year decides whether a date shows its own. */
   today?: string;
   /** The trades or the setups couldn't load. */
@@ -142,9 +167,11 @@ export function SetupCards({
   );
   const names = new Map(setups.map((setup) => [setup.id, setup.name]));
   const cards = trades
-    ? setupCards(closedTrades(trades.filter((trade) => !trade.excluded)), names).filter((card) =>
-        shown.has(card.setupId),
-      )
+    ? setupCards(
+        closedTrades(trades.filter((trade) => !trade.excluded)),
+        names,
+        trades.filter((trade) => trade.book === "missed" && !trade.excluded),
+      ).filter((card) => shown.has(card.setupId))
     : [];
   let body: ReactNode;
   if (failed) body = <p className="text-down">Couldn't load the setups' trades: reload to try again.</p>;

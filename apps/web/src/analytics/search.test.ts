@@ -41,10 +41,10 @@ describe("parseAnalyticsSearch", () => {
   it("drops hand-edited or stale values instead of failing", () => {
     expect(
       parseAnalyticsSearch({
-        tab: "missed",
+        tab: "setups",
         from: "2026-02-30",
         to: "yesterday",
-        books: "missed",
+        books: "missing",
         ticker: "SPX INDEX",
         excluded: "no",
         creditEdges: "abc",
