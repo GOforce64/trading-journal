@@ -1,6 +1,7 @@
 import {
   addDays,
   bsPrice,
+  expiryMoment,
   intrinsic,
   isTradingDay,
   nyWallClock,
@@ -8,7 +9,6 @@ import {
   type PriceBar,
   REGULAR_OPEN,
   regularClose,
-  yearsToExpiry,
 } from "@tj/core";
 import { normal, type Rng, uniform } from "./random.js";
 import { symbolInfo } from "./symbols.js";
@@ -17,6 +17,8 @@ const TRADING_DAYS_A_YEAR = 252;
 /** The walk's drift: markets that end a little higher than they started. */
 const DRIFT = 0.07;
 const MINUTE_MS = 60_000;
+/** As core's pricing counts a year. */
+const YEAR_MS = 365 * 86_400_000;
 
 export const cents = (value: number): number => Math.round(value * 100) / 100;
 
@@ -84,6 +86,8 @@ export function minuteBars(
   prices[0] = open;
   prices[count] = close;
 
+  // A session never spans a clock change, so its minutes follow from its open; New York time is slow to work out.
+  const openAt = nyWallClock(date, REGULAR_OPEN);
   const bars: PriceBar[] = [];
   for (let index = 0; index < count; index++) {
     const o = prices[index] ?? open;
@@ -99,7 +103,7 @@ export function minuteBars(
     }
     const middle = (index - count / 2) / (count / 2);
     const v = Math.round(volume * (0.6 + 1.6 * middle * middle) * uniform(rng, 0.6, 1.4));
-    bars.push({ t: nyWallClock(date, REGULAR_OPEN + index), o, h, l, c, v });
+    bars.push({ t: openAt + index * MINUTE_MS, o, h, l, c, v });
   }
   return bars;
 }
@@ -157,12 +161,13 @@ export function optionBars(
   rng: Rng,
 ): PriceBar[] {
   const { right, strike, expiry } = contract;
+  const expiresAt = expiryMoment(expiry);
   return stock.map((bar) => {
     const sigma = iv * (1 + uniform(rng, -0.02, 0.02));
     const price = (S: number, at: number) =>
       cents(
         Math.max(
-          bsPrice(right, S, strike, yearsToExpiry(at, expiry), sigma),
+          bsPrice(right, S, strike, (expiresAt - at) / YEAR_MS, sigma),
           intrinsic(right, S, strike) + 0.01,
         ),
       );
