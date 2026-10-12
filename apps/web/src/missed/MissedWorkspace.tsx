@@ -297,6 +297,7 @@ export function MissedWorkspace({
   const place = (what: Exclude<Placing, null>, name: string) => (
     <button
       type="button"
+      data-key-target={`place-${what}`}
       onClick={() => setPlacing(what)}
       className={`${SMALL_BUTTON} ${placing === what ? "border-accent text-fg" : ""}`}
     >
@@ -512,6 +513,7 @@ export function MissedWorkspace({
               <textarea
                 key={trade.id}
                 aria-label="Notes"
+                data-key-target="notes"
                 placeholder="Notes…"
                 defaultValue={trade.notes ?? ""}
                 onBlur={(event) => {
@@ -527,6 +529,7 @@ export function MissedWorkspace({
                 />
                 Exclude from stats
               </label>
+              <span className="text-[10px] text-muted">Press ? for shortcuts</span>
             </div>
             {save.error && !refused && <p className="text-down">Couldn't save: {save.error.message}</p>}
             {deletion.error && <p className="text-down">Couldn't delete: {deletion.error.message}</p>}

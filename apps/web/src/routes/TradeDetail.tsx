@@ -12,6 +12,7 @@ import { useTradeNav } from "../nav/useTradeNav.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
+import { useTradeKeys } from "../review/useTradeKeys.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
@@ -70,12 +71,18 @@ export function TradeDetail({
   const { data: optionQuotes } = useOptionQuotes(trade && isOpen(trade) ? openContracts(trade, today) : []);
 
   const nav = useTradeNav(tradeId, trade, list);
+  const keys = useTradeKeys({
+    trade,
+    nav,
+    onOpenTrade,
+    chart: trade != null && (trade.strategy === "scalp" || trade.book === "missed"),
+  });
   if (!trade) {
     if (isLoading) return <p className="text-muted">Loading…</p>;
     // A trade deleted since its list was opened (spec §9): J and K still go on.
     return (
       <div className="flex flex-col gap-3">
-        <TradeNavLine nav={nav} />
+        <TradeNavLine nav={nav} error={keys.error} />
         <p className="text-muted">This trade isn't in the journal any more.</p>
       </div>
     );
@@ -84,7 +91,7 @@ export function TradeDetail({
   if (trade.book === "missed" && trade.missed) {
     return (
       <div className="flex flex-col gap-3">
-        <TradeNavLine nav={nav} />
+        <TradeNavLine nav={nav} error={keys.error} />
         <MissedWorkspace trade={trade} onOpenTrade={onOpenTrade} onDeleted={onDeleted} />
       </div>
     );
@@ -105,7 +112,7 @@ export function TradeDetail({
 
   return (
     <div className="flex flex-col gap-3">
-      <TradeNavLine nav={nav} />
+      <TradeNavLine nav={nav} error={keys.error} />
       <header className="flex flex-wrap items-center gap-2">
         <h1 className="num font-semibold text-[16px]">{trade.underlying}</h1>
         <span className="text-muted">{trade.underlyingName}</span>
