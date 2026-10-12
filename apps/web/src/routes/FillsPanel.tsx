@@ -1,20 +1,7 @@
+import { dayTimeText } from "@tj/core";
 import type { TradeFill } from "../api.js";
 import { Panel, premiumText, usd } from "../components/ui.js";
 
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-});
-/** "Sep 28 09:31:05" in New York time. */
-function fillTime(at: number): string {
-  const parts = Object.fromEntries(ET.formatToParts(new Date(at)).map((part) => [part.type, part.value]));
-  return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
-}
 const KIND_LABEL: Record<string, string> = {
   expiration: "expired",
   exercise: "exercised",
@@ -45,7 +32,7 @@ export function FillsPanel({ fills }: { fills: TradeFill[] }) {
               data-testid={`fill-row-${fill.id}`}
               className={`border-line border-t ${fill.canceled ? "text-muted line-through" : ""}`}
             >
-              <td>{fillTime(fill.executedAt)}</td>
+              <td>{dayTimeText(fill.executedAt, { seconds: true })}</td>
               <td className={fill.quantity > 0 ? "text-up" : "text-down"}>
                 {fill.quantity > 0 ? "BUY" : "SELL"}
               </td>

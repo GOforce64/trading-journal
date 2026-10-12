@@ -2,6 +2,7 @@ import {
   type ClosedTrade,
   closedTrades,
   contractsSplit,
+  dayText,
   dteSplit,
   equityCurve,
   holdSplit,
@@ -27,12 +28,6 @@ import { SplitGrid } from "../analytics/SplitGrid.js";
 import type { AnalyticsSearch } from "../analytics/search.js";
 import type { TradeView } from "../api.js";
 import { Money } from "../components/ui.js";
-
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
 
 export interface TabProps {
   trades: readonly TradeView[];
@@ -207,7 +202,7 @@ function MoneyPanel({
                 const kept = pctKept(trade);
                 return (
                   <tr key={trade.id} className="border-line border-t">
-                    <td className="num py-0.5 text-muted">{ET_DAY.format(new Date(trade.closedAt))}</td>
+                    <td className="num py-0.5 text-muted">{dayText(trade.closedAt)}</td>
                     <td>
                       <button
                         type="button"

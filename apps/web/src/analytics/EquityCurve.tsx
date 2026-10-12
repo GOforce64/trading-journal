@@ -1,4 +1,5 @@
 import type { EquityPoint } from "@tj/core";
+import { dayTimeText } from "@tj/core";
 import {
   BaselineSeries,
   ColorType,
@@ -13,18 +14,6 @@ import {
 import { useEffect, useMemo, useRef } from "react";
 import { type ChartPoint, equityChartData, nyTickLabel } from "./equityData.js";
 
-const NY_TIME = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** Lightweight Charts has no timezone option; formatting each time in New York is the documented way. */
-const nyText = (format: Intl.DateTimeFormat) => (time: Time) =>
-  typeof time === "number" ? format.format(new Date(time * 1000)) : String(time);
 const usd = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const series = (points: ChartPoint[]) =>
@@ -67,7 +56,12 @@ export function EquityCurve({ points, height = 220 }: { points: readonly EquityP
         tickMarkFormatter: (time: Time, type: TickMarkType) =>
           typeof time === "number" ? nyTickLabel(time, type) : String(time),
       },
-      localization: { timeFormatter: nyText(NY_TIME), priceFormatter: usd },
+      localization: {
+        // Lightweight Charts has no timezone option; each time is written in New York.
+        timeFormatter: (time: Time) =>
+          typeof time === "number" ? dayTimeText(time * 1000, { year: true }) : String(time),
+        priceFormatter: usd,
+      },
     });
     const equity = chart.addSeries(LineSeries, { color: "#2962ff", lineWidth: 2, priceLineVisible: false });
     const drawdown = chart.addSeries(

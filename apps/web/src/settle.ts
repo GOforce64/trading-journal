@@ -1,4 +1,5 @@
 import {
+  dayText,
   expiryMoment,
   type PricedLeg,
   positionCash,
@@ -8,14 +9,6 @@ import {
   settleExpiry,
 } from "@tj/core";
 import type { TradeView } from "./api.js";
-
-/** A date as the settle panel and notes write it: "Sep 25". */
-export const dayText = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
 
 /** Why no exits could be proposed at expiry, with `then` saying what to do: ", so type the exits in Edit". */
 export function noCloseReason(

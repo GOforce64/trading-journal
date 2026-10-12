@@ -3,7 +3,10 @@ import {
   closedTrades,
   closeEstimate,
   dailyPnl,
+  dayText,
+  dayTimeText,
   equityCurve,
+  monthText,
   type OptionQuote,
   summarize,
 } from "@tj/core";
@@ -37,20 +40,6 @@ const PERIODS: { id: Period; label: string }[] = [
 ];
 const BOTH_BOOKS = ["live", "paper"] as const;
 const NO_QUOTES = new Map<string, OptionQuote>();
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
-const ET_TIME = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const MONTH_TITLE = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export interface DashboardProps {
   search: DashboardSearch;
@@ -166,7 +155,7 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
 
       <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
         <Section
-          title={`Calendar · ${MONTH_TITLE.format(new Date(`${month}-01T00:00:00Z`))}`}
+          title={`Calendar · ${monthText(month)}`}
           right={
             <span className="flex gap-2">
               <button
@@ -213,7 +202,7 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
                     >
                       {trade.underlying}
                     </button>
-                    <span className="text-muted">opened {ET_DAY.format(new Date(trade.openedAt))}</span>
+                    <span className="text-muted">opened {dayText(trade.openedAt)}</span>
                     <EstimatedPnl
                       estimate={closeEstimate(trade, optionQuotes?.quotes ?? NO_QUOTES, today)}
                       explain={optionQuotes?.available === true}
@@ -249,7 +238,7 @@ function TradeList({
     <ul aria-label={label} className="flex flex-col">
       {trades.map((trade) => (
         <li key={trade.id} className="flex items-center justify-between border-line border-t py-1">
-          <span className="num text-muted">{ET_DAY.format(new Date(trade.closedAt))}</span>
+          <span className="num text-muted">{dayText(trade.closedAt)}</span>
           <button type="button" onClick={() => onOpenTrade?.(trade.id)} className="text-fg hover:text-accent">
             {trade.underlying}
           </button>
@@ -297,7 +286,7 @@ function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
       <ul aria-label="Scalps to review" className="flex flex-col">
         {pending.slice(0, 5).map((trade) => (
           <li key={trade.id} className="flex items-center gap-3 border-line border-t py-1">
-            <span className="num text-muted">{ET_TIME.format(new Date(trade.openedAt))}</span>
+            <span className="num text-muted">{dayTimeText(trade.openedAt)}</span>
             <button
               type="button"
               onClick={() => onOpenTrade?.(trade.id)}

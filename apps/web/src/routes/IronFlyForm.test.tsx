@@ -264,7 +264,7 @@ describe("IronFlyForm with an option chain", () => {
     setup(undefined, { chain: M_CHAIN });
     fill("Underlying", "M");
     await waitFor(() => expect(isSelect("Expiry")).toBe(true));
-    expect(options("Expiry")[1]).toMatch(/^Oct 2 · Fri · \d+d$/);
+    expect(options("Expiry")[1]).toMatch(/^2 Oct · Fri · \d+d$/);
     fill("Expiry", "2099-10-02");
     expect(options("Short call strike")).toEqual(["—", "20", "21", "22", "22.5", "23", "26"]);
   });
@@ -360,7 +360,7 @@ describe("IronFlyForm with an option chain", () => {
     await waitFor(() =>
       expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/chains/NVDA"))).toBe(true),
     );
-    expect(screen.queryByRole("option", { name: /^Oct 2/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: /^2 Oct/ })).toBeNull();
   });
 
   it("asks for Opened before Expiry, since the listed expiries start from the open date", async () => {

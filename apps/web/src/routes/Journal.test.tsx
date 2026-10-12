@@ -274,7 +274,7 @@ describe("Journal", () => {
     });
     renderJournal();
     const price = await within(await screen.findByTestId("row-t1")).findByText("22.68");
-    expect(price.getAttribute("title")).toContain("Sep 24, 03:58 PM ET");
+    expect(price.getAttribute("title")).toContain("24 Sep 15:58 ET");
     expect(within(screen.getByTestId("row-t2")).queryByTestId("price-t2")).toBeNull();
   });
 
@@ -316,7 +316,7 @@ describe("Journal", () => {
     const estimate = await screen.findByText("est -$46.80");
     expect(estimate.className).toContain("italic");
     expect(estimate.className).not.toMatch(/text-(up|down)/);
-    expect(estimate.getAttribute("title")).toContain("Sep 25, 03:59 PM ET");
+    expect(estimate.getAttribute("title")).toContain("25 Sep 15:59 ET");
     expect(estimate.getAttribute("title")).toContain("Not saved");
     // The closed trade keeps its real P&L.
     expect(screen.getByText("+$512.00")).toBeTruthy();

@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type LegInput, settleExpiry } from "@tj/core";
+import { dayText, type LegInput, settleExpiry } from "@tj/core";
 import { api, type TradeView } from "../api.js";
 import { Money, Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
-import { dayText, netWorking, noCloseReason, settleProposal } from "../settle.js";
+import { netWorking, noCloseReason, settleProposal } from "../settle.js";
 
 const legName = (leg: { quantity: number; right: string }) =>
   `${leg.quantity < 0 ? "Short" : "Long"} ${leg.right === "C" ? "call" : "put"}`;

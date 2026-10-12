@@ -2,8 +2,10 @@ import {
   addDays,
   BREAKDOWNS,
   type Breakdown,
+  dayText,
   MISSED_BREAKDOWNS,
   type MissedBreakdown,
+  monthText,
   parseEdges,
   WEEKDAYS,
   weekdayOfDate,
@@ -206,17 +208,13 @@ export function stepPeriod(period: Period, at: string, step: 1 | -1): string {
   }
 }
 
-const MONTH_YEAR = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-const MONTH_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const utc = (date: string) => new Date(`${date}T00:00:00Z`);
-
 export function periodLabel(period: Period, at: string): string {
   const { from = at, to = at } = periodRange(period, at);
   switch (period) {
     case "week":
-      return `${MONTH_DAY.format(utc(from))} – ${MONTH_DAY.format(utc(to))}, ${to.slice(0, 4)}`;
+      return `${dayText(from)} – ${dayText(to)} ${to.slice(0, 4)}`;
     case "month":
-      return MONTH_YEAR.format(utc(at));
+      return monthText(at.slice(0, 7), { long: true });
     case "year":
       return at.slice(0, 4);
     default:

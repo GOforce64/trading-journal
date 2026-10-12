@@ -1,5 +1,6 @@
 import {
   contractsHeld,
+  dayText,
   type MissedLevels,
   type NewTrade,
   nyDate,
@@ -222,12 +223,6 @@ type DbLike = Db | Tx;
 /** A patch the review rules refuse (scalp-review spec §6.2). The route answers 400 with the message. */
 export class ReviewRuleError extends Error {}
 
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
-
 /**
  * A missed trade's levels after a patch, checked against what's stored (missed-trades spec §5): the exit's time and
  * price come together, after the entry, on its New York date. Null when the trade isn't missed and the patch leaves
@@ -251,7 +246,7 @@ export function mergeMissed(
   if (closedAt != null && closedAt <= openedAt)
     throw new ReviewRuleError("The exit must come after the entry");
   if (closedAt != null && nyDate(closedAt) !== nyDate(openedAt)) {
-    throw new ReviewRuleError(`The exit must be on the entry's day, ${ET_DAY.format(new Date(openedAt))}`);
+    throw new ReviewRuleError(`The exit must be on the entry's day, ${dayText(openedAt)}`);
   }
   return levels;
 }

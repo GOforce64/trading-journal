@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type MoveValue, settleExpiry, tradeMoves } from "@tj/core";
+import { dayText, type MoveValue, settleExpiry, tradeMoves } from "@tj/core";
 import { api, type TradeView } from "../api.js";
 import { Panel, usd } from "../components/ui.js";
 import { useClose } from "../market.js";
 import { useFillMoves } from "../moves.js";
-import { dayText, noCloseReason, settleProposal } from "../settle.js";
+import { noCloseReason, settleProposal } from "../settle.js";
 import { IronFlyForm, type IronFlyFormValues, type LegFields, type OverrideKey } from "./IronFlyForm.js";
 import { ScalpForm, type ScalpFormValues } from "./ScalpForm.js";
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, pctKept, returnOnCost, round2 } from "@tj/core";
+import { closeEstimate, dayTimeText, type OptionQuote, pctKept, returnOnCost, round2 } from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
@@ -28,14 +28,6 @@ const legPnl = (leg: {
   closePrice: number | null;
 }) =>
   leg.closePrice == null ? null : round2(leg.quantity * leg.multiplier * (leg.closePrice - leg.openPrice));
-
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 const NO_QUOTES = new Map<string, OptionQuote>();
 
@@ -97,8 +89,8 @@ export function TradeDetail({
         <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>
         {trade.excluded && <Chip tone="excluded">EXCLUDED</Chip>}
         <span className="num text-muted">
-          {ET.format(new Date(trade.openedAt))}
-          {trade.closedAt ? ` → ${ET.format(new Date(trade.closedAt))}` : ""}
+          {dayTimeText(trade.openedAt)}
+          {trade.closedAt ? ` → ${dayTimeText(trade.closedAt)}` : ""}
         </span>
         <span className="ml-auto text-[18px]">
           {estimate ? (

@@ -1,13 +1,6 @@
 import type { CloseEstimate } from "@tj/core";
+import { dayTimeText } from "@tj/core";
 import { Chip, usd } from "./ui.js";
-
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 /** Muted italics and no colour: an estimate must never look like a result. */
 export const ESTIMATE_STYLE = "num italic text-[#8a91a3]";
@@ -15,7 +8,7 @@ export const ESTIMATE_STYLE = "num italic text-[#8a91a3]";
 /** "+$12.00" / "-$46.80". The sign is spelled out because estimates carry no colour. */
 export const signedUsd = (value: number) => (value > 0 ? `+${usd(value)}` : usd(value));
 
-export const quotedAtText = (at: number) => `${ET.format(new Date(at))} ET`;
+export const quotedAtText = (at: number) => `${dayTimeText(at)} ET`;
 
 export function estimateTitle(estimate: Extract<CloseEstimate, { kind: "estimate" }>): string {
   return `Estimated cost to close, from quotes at ${quotedAtText(estimate.quotedAt)} (indicative feed), after the fees entered so far. Not saved.`;

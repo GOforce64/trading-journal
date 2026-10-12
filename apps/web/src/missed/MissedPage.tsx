@@ -1,6 +1,7 @@
 import {
   addDays,
   closedTrades,
+  dayTimeText,
   isTradingDay,
   missedSummary,
   nyDate,
@@ -16,15 +17,6 @@ import { Chip, Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
 import { useSetups, useTags } from "../review/data.js";
 import { lastSession, useMissedTrades } from "./data.js";
-
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
 
 /** The page's periods, by the entry's New York date (missed-trades spec §6.1). */
 const PERIODS = [
@@ -199,9 +191,7 @@ export function MissedPage({
                     }}
                     className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"
                   >
-                    <td className="num whitespace-nowrap py-1 text-muted">
-                      {ET.format(new Date(trade.openedAt))}
-                    </td>
+                    <td className="num whitespace-nowrap py-1 text-muted">{dayTimeText(trade.openedAt)}</td>
                     <td className="text-fg">{trade.underlying}</td>
                     <td>
                       <span

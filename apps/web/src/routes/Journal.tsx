@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, pctKept, returnOnCost } from "@tj/core";
+import { closeEstimate, dayTimeText, type OptionQuote, pctKept, returnOnCost } from "@tj/core";
 import { useState } from "react";
 import { rText } from "../analytics/format.js";
 import { api, type TradeView } from "../api.js";
@@ -39,14 +39,6 @@ export function useTrades(filter: JournalFilter) {
   });
 }
 
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
 const PRICE = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const NO_QUOTES = new Map<string, OptionQuote>();
@@ -59,7 +51,7 @@ function LivePrice({ tradeId, quote }: { tradeId: string; quote?: { price: numbe
   return (
     <span
       data-testid={`price-${tradeId}`}
-      title={`Last trade ${ET.format(new Date(quote.at))} ET, IEX. For reference only.`}
+      title={`Last trade ${dayTimeText(quote.at)} ET, IEX. For reference only.`}
       className="num ml-1.5 text-muted"
     >
       {PRICE.format(quote.price)}
@@ -165,9 +157,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
                 }}
                 className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"
               >
-                <td className="num whitespace-nowrap py-1 pr-3 text-muted">
-                  {ET.format(new Date(trade.openedAt))}
-                </td>
+                <td className="num whitespace-nowrap py-1 pr-3 text-muted">{dayTimeText(trade.openedAt)}</td>
                 <td className="whitespace-nowrap text-fg">
                   {trade.review?.status === "pending" && (
                     <>

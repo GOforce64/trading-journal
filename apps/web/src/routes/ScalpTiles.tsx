@@ -1,16 +1,9 @@
-import { returnOnCost } from "@tj/core";
+import { dayText, returnOnCost } from "@tj/core";
 import type { TradeView } from "../api.js";
 import { Pct, Tile, usd } from "../components/ui.js";
 
 /** Up to 4 decimals, trailing zeros dropped: 1.06, 1.295. */
 const price = (value: number) => String(Number(value.toFixed(4)));
-const expiryText = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-
 /** How long a trade was held: "15 min", "3 h 20 min", "2 d 4 h". */
 export function heldText(ms: number): string {
   const minutes = Math.round(ms / 60_000);
@@ -32,7 +25,7 @@ export function ScalpTiles({ trade }: { trade: TradeView }) {
         {leg ? (
           <>
             <span className="whitespace-nowrap">{`${trade.underlying} ${leg.strike}${leg.right}`}</span>{" "}
-            <span className="whitespace-nowrap">{`· exp ${expiryText(leg.expiry)}`}</span>
+            <span className="whitespace-nowrap">{`· exp ${dayText(leg.expiry)}`}</span>
           </>
         ) : (
           trade.underlying

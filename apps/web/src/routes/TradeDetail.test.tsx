@@ -260,7 +260,7 @@ describe("TradeDetail", () => {
     const note = screen.getByTestId("estimate-note").textContent;
     expect(note).toContain("+$420.00 before fees");
     expect(note).toContain("+$415.00 after the $5.00 fees entered so far");
-    expect(note).toContain("Sep 25, 03:59 PM ET");
+    expect(note).toContain("25 Sep 15:59 ET");
     expect(note).toContain("never saved");
   });
 
@@ -462,7 +462,7 @@ describe("TradeDetail move tiles", () => {
     expect(iv).toContain("crush 46 pts · from your fills");
     const stock = screen.getByTestId("tile-stock").textContent;
     expect(stock).toContain("$21.66 / $20.51");
-    expect(stock).toContain("Alpaca, Sep 9 15:54 → Sep 10 15:44 ET");
+    expect(stock).toContain("Alpaca, 9 Sep 15:54 → 10 Sep 15:44 ET");
   });
 
   it("shows a typed value as typed, beside the computed one", async () => {
@@ -498,7 +498,7 @@ describe("TradeDetail move tiles", () => {
   });
 
   it("offers no Fill in missing for a price dated on a weekend, which can never fill", async () => {
-    // Opened on Saturday Sep 26 2026 (typed in by hand): there's no session to read a price from.
+    // Opened on Saturday 26 Sep 2026 (typed in by hand): there's no session to read a price from.
     const saturday = {
       ...noPrices,
       openedAt: Date.UTC(2026, 8, 26, 16, 0),
@@ -695,7 +695,7 @@ describe("TradeDetail for a scalp", () => {
   it("shows the scalp's own tiles", async () => {
     stubSynced(nvda);
     renderDetail();
-    expect((await screen.findByTestId("tile-contract")).textContent).toContain("NVDA 232.5C · exp Sep 28");
+    expect((await screen.findByTestId("tile-contract")).textContent).toContain("NVDA 232.5C · exp 28 Sep");
     expect(screen.getByTestId("tile-size").textContent).toContain("2 contracts");
     expect(screen.getByTestId("tile-entry-exit").textContent).toContain("1.06 → 1.295");
     expect(screen.getByTestId("tile-held").textContent).toContain("15 min");
@@ -716,7 +716,7 @@ describe("TradeDetail for a scalp", () => {
     renderDetail();
     const rows = await screen.findAllByTestId(/^fill-row-/);
     expect(rows).toHaveLength(4);
-    expect(rows[0]?.textContent).toContain("Sep 28 09:31:05");
+    expect(rows[0]?.textContent).toContain("28 Sep 09:31:05");
     expect(rows[0]?.textContent).toContain("BUY");
     expect(rows[3]?.textContent).toContain("SELL");
     expect(rows[3]?.textContent).toContain("1.15");

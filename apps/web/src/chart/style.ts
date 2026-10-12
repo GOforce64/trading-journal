@@ -1,8 +1,9 @@
+import { dayText, dayTimeText, dayYearText, monthName, nyDate } from "@tj/core";
 import {
   type ChartOptions,
   ColorType,
   type DeepPartial,
-  type TickMarkType,
+  TickMarkType,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -29,16 +30,15 @@ export const EMA_COLORS = ["#f7c948", "#26c6da", "#ab47bc", "#ff7043"] as const;
 /** Epoch ms as the chart's UTC seconds. */
 export const seconds = (t: number) => Math.floor(t / 1000) as UTCTimestamp;
 
-const NY_TIME = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-/** A candle's time in New York, e.g. "Sep 28, 09:30". */
-export const nyTimeText = (t: number) => NY_TIME.format(new Date(t));
+/** A candle's time in New York, e.g. "28 Sep 09:30". */
+export const nyTimeText = (t: number) => dayTimeText(t);
+
+/** A chart time as a New York date: an intraday time read in New York, a daily bar's business day as is. */
+export function chartTimeIso(time: Time): string | null {
+  if (typeof time === "number") return nyDate(time * 1000);
+  if (typeof time === "string") return time;
+  return `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}`;
+}
 
 /** The app's chart look (the Terminal theme). Lightweight Charts has no timezone option, so times are formatted in New York. */
 export function chartOptions(intraday: boolean): DeepPartial<ChartOptions> {
@@ -55,12 +55,18 @@ export function chartOptions(intraday: boolean): DeepPartial<ChartOptions> {
     timeScale: {
       borderColor: "#1f2430",
       timeVisible: intraday,
-      // A daily chart's business days are left to the library (null), which labels months and years.
-      tickMarkFormatter: (time: Time, type: TickMarkType) =>
-        typeof time === "number" ? nyTickLabel(time, type) : null,
+      // Daily bars' business days too, so no label follows the browser's language.
+      tickMarkFormatter: (time: Time, type: TickMarkType) => {
+        if (typeof time === "number") return nyTickLabel(time, type);
+        const iso = chartTimeIso(time);
+        if (iso == null) return null;
+        if (type === TickMarkType.Year) return iso.slice(0, 4);
+        return type === TickMarkType.Month ? monthName(iso) : dayText(iso);
+      },
     },
     localization: {
-      timeFormatter: (time: Time) => (typeof time === "number" ? nyTimeText(time * 1000) : String(time)),
+      timeFormatter: (time: Time) =>
+        typeof time === "number" ? nyTimeText(time * 1000) : dayYearText(chartTimeIso(time) ?? ""),
     },
   };
 }

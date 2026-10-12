@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ALPACA_DELAY_MS, isTradingDay, nyDate, sessionMoment } from "@tj/core";
+import { ALPACA_DELAY_MS, dayTimeText, isTradingDay, nyDate, sessionMoment } from "@tj/core";
 import { api, type FillResult } from "./api.js";
 
 export type PriceSide = FillResult["missing"][number]["side"];
@@ -167,19 +167,5 @@ export function movePct(value: number, signed = false): string {
 /** IV as a whole percentage: 1.2346 → "123%". */
 export const ivPct = (value: number) => `${Math.round(value * 100)}%`;
 
-const ET_MINUTE = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-/** "Sep 9 15:54": the New York minute a price was read at. */
-export function etMinute(at: number): string {
-  const parts = Object.fromEntries(
-    ET_MINUTE.formatToParts(new Date(at)).map((part) => [part.type, part.value]),
-  );
-  return `${parts.month} ${parts.day} ${parts.hour}:${parts.minute}`;
-}
+/** "9 Sep 15:54": the New York minute a price was read at. */
+export const etMinute = (at: number) => dayTimeText(at);

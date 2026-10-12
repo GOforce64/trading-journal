@@ -1,4 +1,5 @@
 import { HOLD_BUCKETS, holdBucket, nyWeekday, WEEKDAYS } from "./calendar.js";
+import { monthText } from "./dateText.js";
 import { nyDate } from "./marks.js";
 import { round2 } from "./money.js";
 import { type ClosedTrade, type StatFly, type StatTrade, summarize } from "./stats.js";
@@ -139,10 +140,8 @@ export function flyCredit(trade: StatTrade): number | null {
   return credit != null && contracts != null ? round2(credit * contracts * 100) : null;
 }
 
-const MONTH = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-
 /** "2026-09" → "Sep 2026". */
-export const monthLabel = (month: string) => MONTH.format(new Date(`${month}-01T00:00:00Z`));
+export const monthLabel = (month: string) => monthText(month);
 
 const DTE_BUCKETS = ["0–1", "2–7", "8–14", "15+"];
 

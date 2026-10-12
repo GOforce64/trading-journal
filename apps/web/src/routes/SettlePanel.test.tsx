@@ -74,7 +74,7 @@ describe("SettlePanel", () => {
     const fetchMock = stub(CLOSED_AT_821);
     renderPanel();
     expect(
-      await screen.findByText("BB closed at $8.21 on Sep 25. Proposed exits at intrinsic value:"),
+      await screen.findByText("BB closed at $8.21 on 25 Sep. Proposed exits at intrinsic value:"),
     ).toBeTruthy();
     const shortPut = screen.getByTestId("settle-row-b2").textContent;
     expect(shortPut).toContain("0.29");
@@ -116,7 +116,7 @@ describe("SettlePanel", () => {
     stub({ symbol: "BB", date: "2026-09-25", close: null, unavailable: null });
     const { onEdit } = renderPanel();
     expect(
-      await screen.findByText("Alpaca has no close for BB on Sep 25, so type the exits in Edit."),
+      await screen.findByText("Alpaca has no close for BB on 25 Sep, so type the exits in Edit."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save these exits" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));

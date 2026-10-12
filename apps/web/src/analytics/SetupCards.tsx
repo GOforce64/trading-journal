@@ -1,4 +1,4 @@
-import { closedTrades, nyDate, type SetupCard, setupCards } from "@tj/core";
+import { closedTrades, dayText, dayYearText, nyDate, type SetupCard, setupCards } from "@tj/core";
 import type { ReactNode } from "react";
 import type { TradeView } from "../api.js";
 import { Chip } from "../components/ui.js";
@@ -10,27 +10,14 @@ import { Section } from "./Section.js";
 import { Sparkline } from "./Sparkline.js";
 import { returnText } from "./scalpText.js";
 
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
-const ET_DAY_YEAR = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
 const tone = (value: number | null) => {
   if (value == null || value === 0) return "";
   return value > 0 ? "text-up" : "text-down";
 };
 
-/** "Sep 28", with the year when it isn't this one: "Sep 17, 2025". */
+/** "28 Sep", with the year when it isn't this one: "17 Sep 2025". */
 function lastText(closedAt: number, today: string): string {
-  const format = nyDate(closedAt).slice(0, 4) === today.slice(0, 4) ? ET_DAY : ET_DAY_YEAR;
-  return format.format(new Date(closedAt));
+  return nyDate(closedAt).slice(0, 4) === today.slice(0, 4) ? dayText(closedAt) : dayYearText(closedAt);
 }
 
 function Stat({

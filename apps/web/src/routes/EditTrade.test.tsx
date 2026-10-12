@@ -257,7 +257,7 @@ describe("EditTrade", () => {
       expect((screen.getByLabelText("Short put exit") as HTMLInputElement).value).toBe("0.29"),
     );
     // The date as the Settle panel writes it.
-    expect(screen.getByText(/close on Sep 25\. Check them and the fees, then save\./)).toBeTruthy();
+    expect(screen.getByText(/close on 25 Sep\. Check them and the fees, then save\./)).toBeTruthy();
     expect((screen.getByLabelText("Short call exit") as HTMLInputElement).value).toBe("0");
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
@@ -291,7 +291,7 @@ describe("EditTrade", () => {
       </QueryClientProvider>,
     );
     expect(
-      await screen.findByText("Alpaca has no close for BB on Sep 25: type the exits below."),
+      await screen.findByText("Alpaca has no close for BB on 25 Sep: type the exits below."),
     ).toBeTruthy();
   });
 

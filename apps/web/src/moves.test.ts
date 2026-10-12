@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FillResult } from "./api.js";
 import { etMinute, fillSummary, ivPct, lastReason, MOVE_COPY, movePct, priceNote } from "./moves.js";
 
-const THURSDAY_CLOSE = Date.UTC(2026, 8, 10, 19, 44); // Thu Sep 10, 15:44 ET
+const THURSDAY_CLOSE = Date.UTC(2026, 8, 10, 19, 44); // Thu 10 Sep, 15:44 ET
 const LATER = Date.UTC(2026, 8, 28, 16, 0);
 const note = (overrides: Partial<Parameters<typeof priceNote>[0]> = {}) =>
   priceNote({
@@ -96,6 +96,6 @@ describe("formatting", () => {
   });
 
   it("names the minute a price was read, in New York time", () => {
-    expect(etMinute(Date.UTC(2026, 8, 9, 19, 54))).toBe("Sep 9 15:54");
+    expect(etMinute(Date.UTC(2026, 8, 9, 19, 54))).toBe("9 Sep 15:54");
   });
 });

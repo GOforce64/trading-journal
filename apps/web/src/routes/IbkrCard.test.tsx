@@ -79,12 +79,12 @@ describe("IbkrCard", () => {
     renderCard();
     await waitFor(() =>
       expect(screen.getByTestId("ibkr-status").textContent).toBe(
-        "Paper DU1234567 · last synced Sep 29, 10:32 ET · 2 added, 1 updated, 5 unchanged",
+        "Paper DU1234567 · last synced 29 Sep 10:32 ET · 2 added, 1 updated, 5 unchanged",
       ),
     );
-    expect(screen.getByText(/AA · Sep 28, 13:52 — already in the journal/)).toBeTruthy();
+    expect(screen.getByText(/AA · 28 Sep 13:52 — already in the journal/)).toBeTruthy();
     expect(
-      screen.getByText(/SPY · Sep 28, 10:00 — not an iron fly or a single option: enter it by hand/),
+      screen.getByText(/SPY · 28 Sep 10:00 — not an iron fly or a single option: enter it by hand/),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "NVDA" }).getAttribute("href")).toBe("/trades/t9");
     expect(screen.getByText("917 fills before the start date, 3 stock rows ignored.")).toBeTruthy();
@@ -95,7 +95,7 @@ describe("IbkrCard", () => {
     const twice = { reason: "duplicate", ticker: "AA", openedAt: Date.UTC(2026, 8, 28, 17, 52) };
     stub(status({ lastSummary: summary({ skipped: [twice, twice] }) }));
     renderCard();
-    expect(await screen.findByText(/AA · Sep 28, 13:52 — already in the journal ×2/)).toBeTruthy();
+    expect(await screen.findByText(/AA · 28 Sep 13:52 — already in the journal ×2/)).toBeTruthy();
     expect(errors.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(false);
     errors.mockRestore();
   });

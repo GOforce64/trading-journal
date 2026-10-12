@@ -98,11 +98,11 @@ describe("SetupCards", () => {
     expect(orb.getByText("Win %").nextSibling?.textContent).toBe("33.3%");
     expect(orb.getByText("Net").nextSibling?.textContent).toBe("+$50");
     expect(orb.getByText("Avg return").nextSibling?.textContent).toBe("+8.3%");
-    expect(orb.getByText("last Sep 29")).toBeTruthy();
+    expect(orb.getByText("last 29 Sep")).toBeTruthy();
     expect(titles("ORB breakout")).toEqual([
-      "Sep 28 · NVDA · +1.00R · total +1.00R",
-      "Sep 28 · NVDA · −0.50R · total +0.50R",
-      "Sep 29 · SPY · 0.00R · total +0.50R",
+      "28 Sep · NVDA · +1.00R · total +1.00R",
+      "28 Sep · NVDA · −0.50R · total +0.50R",
+      "29 Sep · SPY · 0.00R · total +0.50R",
     ]);
     expect(orb.getByTestId("sparkline").getAttribute("class")).toBe("stroke-up");
     fireEvent.click(orb.getByRole("button", { name: "3 trades →" }));
@@ -132,10 +132,10 @@ describe("SetupCards", () => {
     expect(crush.getByTestId("card-hero").textContent).toBe("13%");
     expect(crush.getByText("of max profit")).toBeTruthy();
     expect(crush.getByText("PF").nextSibling?.textContent).toBe("2.00");
-    expect(crush.getByText("last Sep 17, 2025")).toBeTruthy();
+    expect(crush.getByText("last 17 Sep 2025")).toBeTruthy();
     expect(titles("Earnings IV crush")).toEqual([
-      "Sep 10 · BB · +$100 · total +$100",
-      "Sep 17 · CC · −$50 · total +$50",
+      "10 Sep · BB · +$100 · total +$100",
+      "17 Sep · CC · −$50 · total +$50",
     ]);
     fireEvent.click(crush.getByRole("button", { name: "2 trades →" }));
     expect(onOpenSetup).toHaveBeenCalledWith("crush", "flies");
