@@ -1,5 +1,6 @@
 export * from "./calendar.js";
 export * from "./chart.js";
+export * from "./dateText.js";
 export * from "./ironFly.js";
 export * from "./kept.js";
 export * from "./marks.js";
