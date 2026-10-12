@@ -72,7 +72,7 @@ All made by the user in the brainstorm, except the rows marked *(follows)*, whic
 ### 3.2 A click
 1. **A lock.** `<data dir>/launch.lock`, created exclusively. If it's held, by a click still starting the journal, the second click exits; the first opens the browser. A lock older than 60 s, or whose process is gone, is stale and taken over.
 2. **Is the journal up?** `GET http://127.0.0.1:<port>/api/health`, with a 1 s timeout.
-   - **The journal answers** (`app: "trading-journal"`):
+   - **The journal answers** (`app: "trading-journal"`, or the bare `{ ok: true }` of a journal from before this change, which has no process id and so is never restarted):
      - If `<data dir>/launcher.json` names that process (the launcher started it) **and** its commit differs from `git rev-parse HEAD`, it stops it (`POST /api/shutdown`), waits up to 10 s for the port to free, and goes on to step 3.
      - Otherwise, including a server started with `pnpm start`, it opens the browser and exits.
    - **Something else answers on the port:** the error page (§3.5).
@@ -159,7 +159,8 @@ If even the error page can't open, the launcher exits non-zero with the reason o
 - **Order:** J goes to the next row down, K up. A list is a snapshot from when the trade was opened: editing a trade so it would leave the filter doesn't drop it. **Lists don't wrap:** at the end J does nothing.
 - **The queue is live:** J/K are the queue bar's Next/Prev (`queueNav`), which wrap.
 - **With no list,** a scalp uses the queue when any scalp waits. An iron fly or missed trade has no J/K, and they're absent from its help.
-- **Where am I:** beside the queue bar, or in its place when the trade isn't queued, a small muted "4 of 41 · Journal · Paper". Nothing shows with no list.
+- **Where am I:** at the top of the trade's page, a small muted "4 of 41 · Journal · Paper · J next · K previous". Nothing shows for the queue (its bar says) or with no list.
+- **A trade deleted since its list was opened** says "This trade isn't in the journal any more." J and K still go on from its place.
 
 ---
 
@@ -191,7 +192,7 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 - Where `showPicker()` is missing, S only focuses the select.
 
 ### 6.3 Chip groups (M, E) and notes (N)
-- **A chip group is one tab stop with a roving focus.** ←/→ move between chips, Space or Enter toggles the focused chip (a mistake toggles; an emotion or skip reason replaces the trade's one), and Esc gives focus back to the page so the keys work again.
+- **In a chip group** (a `<fieldset>`), ←/→ move between chips, Space or Enter toggles the focused chip (a mistake toggles; an emotion or skip reason replaces the trade's one), and Esc gives focus back to the page so the keys work again. Tab still steps through each chip, as before: the plan kept the Tab order rather than make the group one tab stop.
 - **N focuses the notes.** Esc blurs, and blurring saves, as now.
 - **Esc in any of these returns the keys.** That's the one key the layer acts on inside a field.
 
@@ -231,12 +232,13 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 | Setup | `orb`, `orb breakout`, `vwap rec` | setups whose name starts with the words, read greedily left to right |
 
 - **The reading order:**
-  1. day;
-  2. month;
-  3. strategy or book;
-  4. a word that is exactly a ticker in the journal, so `spy` stays SPY even with a setup called "Spy fade";
-  5. setup;
-  6. a ticker prefix.
+  1. a run of two or more words that starts a setup's name, so `spy fade` finds the setup "Spy fade";
+  2. day;
+  3. month;
+  4. strategy or book;
+  5. a word that is exactly a ticker in the journal, so `spy` alone stays SPY;
+  6. a one-word setup;
+  7. a ticker prefix.
   
   A word that fits none is **unknown**.
 - **All words must match** (AND). Results are newest first. The first 50 show, then "+N more · keep typing to narrow".
@@ -258,14 +260,15 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 
 | Helper | Example | Replaces |
 |---|---|---|
-| `dayText` | 28 Sep | "Sep 28" in lists, the dashboard, analytics, Playbook cards, the missed trade's page, the server's own messages |
+| `dayText` | 28 Sep | "Sep 28" in lists, contract names ("NVDA 232.5C 26 Sep") and the chain picker ("2 Oct · Fri · 6d"), the dashboard, analytics, Playbook cards, the missed trade's page, the server's own messages |
 | `dayYearText` | 28 Sep 2026 | "Sep 28, 2026": the equity curve's crosshair, Playbook cards, the daily chart's crosshair (now "2026-09-28") |
 | `dayTimeText` | 28 Sep 09:35 (and 09:35:12 with seconds) | "Sep 28, 09:35": trade pages, fills, the intraday crosshair, the IBKR card, import history, estimates |
 | `monthText` | Sep 2026, or September 2026 long | "Sep 2026" and "September 2026": the dashboard's month, period labels, the month breakdown (unchanged in order) |
-| `expiryText` | 26 Sep | contract names: "NVDA 232.5C 26 Sep"; the chain picker's "2 Oct · Fri · 6d" |
 | `fieldDate` | 09/12/2026 | what a date field shows (§8.2) |
 
-- **How it's built:** `formatToParts` in `en-US`, put together day first. The month names come out as "Sep" (`en-GB` would give "Sept"). Times stay 24-hour, as they are now.
+- **How it's built:** from `nyDate` and `nyMinuteOfDay`, with no `Intl` at all, so the browser's language can't change it. The month names are a fixed table ("Sep", never `en-GB`'s "Sept"). `monthName` and `clockText` ("09:35") are exported too.
+- **Times are 24-hour.** The Journal, the trade page, estimates and the equity curve's crosshair were 12-hour ("09:35 AM"), and change.
+- **Literals too:** "Alpaca's option bars start on 18 Jan 2024" was a US date written into the code; the guard can't see literals, so it was changed by hand.
 - Days are **New York dates** wherever they are now. A plain date (`2026-09-28`) is formatted as that date, never shifted by a time zone.
 - **Chart axes:**
   - the intraday and equity charts' tick labels and crosshairs, day first;

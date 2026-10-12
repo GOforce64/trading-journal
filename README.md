@@ -46,24 +46,41 @@ Estimates are shown, never stored. Without a key everything else works as before
 
 ## Run it yourself
 
-Requires Node 22 or newer and pnpm (`corepack enable` sets pnpm up). Then, on Linux,
-macOS or Windows:
+Requires Node 22 or newer and pnpm (`corepack enable` sets pnpm up). Then, on Linux or
+Windows:
 
 ```
 pnpm install
-pnpm dev:server     # API on http://127.0.0.1:4178
-pnpm dev:web        # UI on http://127.0.0.1:5173
+pnpm launcher:install   # once per machine: adds a Trading Journal icon
 ```
 
-To run it the way you'd use it day to day, with UI and API served together:
+Then open the journal from its icon (the app menu and dock on Linux, the Start menu and
+taskbar on Windows): it starts in the background, rebuilding the UI after an update, and
+opens your browser. **Settings → Stop the journal** stops it; logging out does too.
+`pnpm launcher:remove` takes the icon away.
+
+To run it in a terminal instead (macOS too), with UI and API served together:
 
 ```
 pnpm start          # http://127.0.0.1:4178
 ```
 
+For development, with the UI hot-reloading:
+
+```
+pnpm dev:server     # API on http://127.0.0.1:4178
+pnpm dev:web        # UI on http://127.0.0.1:5173
+```
+
 Or use the start scripts: `./scripts/start.sh` on Linux and macOS, `scripts\start.cmd` on
 Windows. The server binds to loopback only and refuses requests that don't come from
 `localhost`.
+
+### Keyboard
+
+**Ctrl+K** finds any page or trade: `nvda 28/9`, `sep missed`, `orb`. Dates are typed day
+first. On a trade, **J/K** move through the list you opened it from, **1–5** set the grade,
+**Enter** marks a scalp done and opens the next, and **?** lists every key.
 
 ## What it tracks
 
@@ -148,12 +165,14 @@ the React code unchanged.
   loss at the stop somewhat larger.
 - **Alpaca's free data runs 15 minutes behind**, so a scalp's stock prices and today's
   chart fill in 16 minutes after the fact. Index symbols such as SPX have no bars.
-- **Option bars** come from Alpaca's free plan: regular hours only, from Jan 18, 2024, and
+- **Option bars** come from Alpaca's free plan: regular hours only, from 18 Jan 2024, and
   sparse on thin strikes. Today's run 16 minutes behind after hours, and possibly up to 80
   during the session, when Alpaca refuses the shorter delay.
 - **Merging goes by each machine's clock**: the later edit wins, so keep both clocks set
   right. A synced trade takes the winning side's numbers until the next IBKR sync
   regroups its fills.
+- **Clicking the icon while the journal is open opens a second tab**: nothing outside the
+  browser can switch to the tab that's already open.
 - **Charts use raw prices**, not split-adjusted ones, to match your fills. A split inside
   the daily chart's three years steps its candles, and bends the daily EMAs for months.
 

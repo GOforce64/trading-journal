@@ -74,7 +74,7 @@ Terminology in the UI: **Paper** means the IBKR paper-trading account. **Demo** 
 | Parsing | **fast-xml-parser** (IBKR Flex XML), **papaparse** (CSV / pasted tables), **fflate** (bundle zip) | Pure JS, cross-platform. |
 | Quality | **Vitest**, **fast-check** (property tests), **Playwright** (e2e), **Biome** (lint and format) | |
 | CI | **GitHub Actions**: typecheck, lint, test and build on `ubuntu-latest` **and** `windows-latest` | Proves the Windows requirement on every push. |
-| PWA | **vite-plugin-pwa** | "Install app" in Chrome/Edge gives its own window and icon. |
+| PWA | Deferred to the public demo (§11), where it would work offline. | For the local app, a **launcher icon** (`pnpm launcher:install`) gives it its icon in every browser: see [the launcher, keyboard and palette spec](2026-10-12-launcher-keyboard-palette-design.md). |
 | License | **MIT** | |
 
 ### Alternatives considered
@@ -113,7 +113,7 @@ trading-journal/
 
 This one seam enables the local app, the in-browser demo (§11), and fast server tests against in-memory SQLite.
 
-**Runtime.** `pnpm start` (or `start.sh` / `start.cmd`) runs one Node process on `127.0.0.1:4178`, serves API and UI, and opens the browser. The server:
+**Runtime.** One Node process on `127.0.0.1:4178` serves API and UI. The **Trading Journal icon** (`pnpm launcher:install`, once per machine) starts it in the background, rebuilding the UI first, and opens the browser; **Settings → Stop the journal** stops it. `pnpm start` (or `start.sh` / `start.cmd`) still runs it in the foreground. The server:
 
 - binds to loopback only;
 - rejects requests whose `Host` header isn't `localhost`/`127.0.0.1` (DNS-rebinding protection);
@@ -372,7 +372,8 @@ Scalps are detailed in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-a
 - The Dashboard: KPIs, then a full-width equity curve with a drawdown pane, then the P&L calendar beside the open and recent trades.
 - On a trade page, secondary detail (the leg breakdown, the raw imported row) sits behind an expander rather than on screen by default, so the page opens on the numbers that matter.
 - Dark by default. A light theme exists (tokens defined once in CSS variables), but it is not the design focus.
-- Command palette (Ctrl+K) to jump to trades, pages and actions. Keyboard review flow: J/K for next/previous trade, and 1–5 to set the grade.
+- Command palette (Ctrl+K) to jump to pages, tabs and trades. Keyboard review flow: J/K through the list a trade was opened from, 1–5 for the grade, and the rest in [the launcher, keyboard and palette spec](2026-10-12-launcher-keyboard-palette-design.md) §6.
+- **Dates read day first** ("28 Sep 2026", 24-hour times); typed dates are day/month/year.
 
 ---
 
@@ -441,7 +442,7 @@ Each phase ends usable, and each gets its own implementation plan.
 1. Spike: in-browser `createApp()` on sql.js. Go, or fall back to a Node host.
 2. Deterministic fake-data and synthetic-bar generator. *(Built: `pnpm demo`; see [the demo data spec](2026-10-08-demo-data-design.md).)*
 3. Demo build and GitHub Pages deploy workflow.
-4. PWA install, keyboard review flow, full command palette.
+4. Launcher icon, keyboard review flow, full command palette, and European dates *(built: [the launcher, keyboard and palette spec](2026-10-12-launcher-keyboard-palette-design.md))*. PWA install deferred to the demo.
 5. README with screenshots/GIF, an architecture diagram, "run it yourself" instructions for Linux and Windows, and CONTRIBUTING. *(Built with the demo data: screenshots, not a GIF.)*
 
 ---
