@@ -6,6 +6,7 @@ import {
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
+import { useState } from "react";
 import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
 import { Stopped } from "./components/Stopped.js";
@@ -15,6 +16,7 @@ import { ShortcutsProvider } from "./keys/Shortcuts.js";
 import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
 import { NewMissed } from "./missed/NewMissed.js";
 import { type OpenTrade, readTradeList, type TradeList } from "./nav/tradeList.js";
+import { Palette, usePaletteKey } from "./palette/Palette.js";
 import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { Dashboard } from "./routes/Dashboard.js";
@@ -41,11 +43,19 @@ function Running() {
   useAutoSync();
   const syncing = useIbkrSyncing();
   const toReview = usePendingReviews().data?.length ?? 0;
+  const [palette, setPalette] = useState(false);
+  usePaletteKey(() => setPalette((open) => !open));
   return (
     <ShortcutsProvider>
-      <Shell activePath={pathname} syncing={syncing} toReview={toReview}>
+      <Shell activePath={pathname} syncing={syncing} toReview={toReview} onSearch={() => setPalette(true)}>
         <Outlet />
       </Shell>
+      <Palette
+        open={palette}
+        onOpenChange={setPalette}
+        onOpenTrade={openTrade}
+        onGo={(href) => router.navigate({ href })}
+      />
     </ShortcutsProvider>
   );
 }

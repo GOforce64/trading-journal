@@ -22,9 +22,10 @@ export interface JournalFilter {
 const BOOKS = ["live", "paper", "missed"] as const;
 const BOOK_LABEL = { live: "Live", paper: "Paper", missed: "Missed" } as const;
 
-export function useTrades(filter: JournalFilter) {
+export function useTrades(filter: JournalFilter, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["trades", filter],
+    enabled: options.enabled ?? true,
     queryFn: async (): Promise<TradeView[]> => {
       const res = await api.api.trades.$get({
         query: {

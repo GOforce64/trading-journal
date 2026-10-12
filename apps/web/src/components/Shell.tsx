@@ -16,12 +16,15 @@ export function Shell({
   activePath,
   syncing = false,
   toReview = 0,
+  onSearch,
   children,
 }: {
   activePath: string;
   syncing?: boolean;
   /** Scalps waiting in the To review queue (scalp-review spec §9.2). */
   toReview?: number;
+  /** Opens the command palette (launcher-keys-palette spec §7.1). */
+  onSearch?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -31,6 +34,16 @@ export function Shell({
           <span className="inline-block h-4 w-4 rounded-[2px] bg-accent" />
           TRADEJRNL
         </div>
+        {onSearch && (
+          <button
+            type="button"
+            onClick={onSearch}
+            className="mb-3 flex w-full items-center justify-between rounded-sm border border-line px-2 py-1 text-muted hover:text-fg"
+          >
+            <span>Search · </span>
+            <kbd className="num text-[10px]">Ctrl K</kbd>
+          </button>
+        )}
         <nav className="flex flex-col gap-0.5">
           {NAV.map((item) => {
             const active = item.path === activePath;
