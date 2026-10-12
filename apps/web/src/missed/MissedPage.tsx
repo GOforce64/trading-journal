@@ -13,6 +13,7 @@ import { useAllTrades } from "../analytics/data.js";
 import { rText } from "../analytics/format.js";
 import { type Kpi, KpiStrip } from "../analytics/KpiStrip.js";
 import type { TradeView } from "../api.js";
+import { DateField } from "../components/DateField.js";
 import { Chip, Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
 import { useSetups, useTags } from "../review/data.js";
@@ -282,16 +283,15 @@ function NewMissedPopover({
             className="num w-24 rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent"
           />
         </label>
-        <label className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="w-12 text-[10px] text-muted uppercase tracking-wider">Date</span>
-          <input
-            aria-label="Date"
-            type="date"
+          <DateField
+            label="Date"
             value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="num rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent"
+            onChange={setDate}
+            className="rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent"
           />
-        </label>
+        </div>
         {!trading && date !== "" && <p className="text-[11px] text-down">Not a trading day</p>}
         <div className="mt-1 flex justify-end gap-2">
           <button

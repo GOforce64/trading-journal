@@ -143,7 +143,7 @@ describe("Analytics filters", () => {
     rerender(<Analytics search={{ from: "2026-09-04", to: "2026-09-08" }} onSearch={onSearch} />);
     await waitFor(() => expect(kpi("net")).toContain("-$20.00"));
     expect((screen.getByLabelText("Dates") as HTMLSelectElement).value).toBe("custom");
-    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("2026-09-04");
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("04/09/2026");
   });
 
   it("filters to one ticker", async () => {

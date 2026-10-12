@@ -64,7 +64,8 @@ describe("IBKR Flex settings", () => {
     fill("Flex token", "1234567890123456789012");
     fill("Activity query ID", "1653145");
     fill("Today query ID", "1653147");
-    fill("Start date", "2026-09-28");
+    fill("Start date", "28/09/2026");
+    fireEvent.blur(screen.getByLabelText("Start date"));
     fireEvent.click(screen.getByRole("button", { name: "Save IBKR" }));
     await waitFor(() => expect(screen.getByText(/Set up · token 12…9012/)).toBeTruthy());
     const put = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PUT");

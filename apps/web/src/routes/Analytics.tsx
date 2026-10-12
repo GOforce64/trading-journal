@@ -11,6 +11,7 @@ import {
   toFilter,
   toggledBooks,
 } from "../analytics/search.js";
+import { DateField } from "../components/DateField.js";
 import { TabButton } from "../components/ui.js";
 import { todayNy } from "../market.js";
 import { type Setup, useSetups } from "../review/data.js";
@@ -144,18 +145,16 @@ function FilterRow({
       </label>
       {showCustom && (
         <>
-          <input
-            type="date"
-            aria-label="From"
+          <DateField
+            label="From"
             value={search.from ?? ""}
-            onChange={(event) => onSearch({ from: event.target.value || undefined })}
+            onChange={(date) => onSearch({ from: date || undefined })}
             className={INPUT}
           />
-          <input
-            type="date"
-            aria-label="To"
+          <DateField
+            label="To"
             value={search.to ?? ""}
-            onChange={(event) => onSearch({ to: event.target.value || undefined })}
+            onChange={(date) => onSearch({ to: date || undefined })}
             className={INPUT}
           />
         </>

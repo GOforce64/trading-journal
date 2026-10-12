@@ -152,7 +152,8 @@ describe("MissedPage", () => {
   it("asks for a ticker and the last session, then opens that day's chart", async () => {
     const { onNewMissed } = setup();
     fireEvent.click(screen.getByRole("button", { name: "+ Missed trade" }));
-    expect(screen.getByLabelText("Date")).toHaveProperty("value", "2026-10-08");
+    // The last session, shown day first.
+    expect(screen.getByLabelText("Date")).toHaveProperty("value", "08/10/2026");
     fireEvent.change(screen.getByLabelText("Ticker"), { target: { value: "nvda" } });
     fireEvent.click(screen.getByRole("button", { name: "Open chart →" }));
     expect(onNewMissed).toHaveBeenCalledWith("NVDA", "2026-10-08");
@@ -162,7 +163,8 @@ describe("MissedPage", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: "+ Missed trade" }));
     fireEvent.change(screen.getByLabelText("Ticker"), { target: { value: "NVDA" } });
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-03" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "3/10/2026" } });
+    fireEvent.blur(screen.getByLabelText("Date"));
     expect(screen.getByText("Not a trading day")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Open chart →" }) as HTMLButtonElement).disabled).toBe(true);
   });
