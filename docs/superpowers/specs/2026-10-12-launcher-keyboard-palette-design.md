@@ -1,7 +1,7 @@
 # Launcher, Keyboard Review and Command Palette — Design Spec
 
 - **Date:** 2026-10-12
-- **Status:** Draft, awaiting the user's review. The user made the decisions in §2 in the brainstorm and approved the three design sections (launcher, keyboard, palette). Reviewing the first draft, they added European dates everywhere (§8).
+- **Status:** Approved 2026-10-12 ("write the plan"). The user made the decisions in §2 in the brainstorm and approved the three design sections (launcher, keyboard, palette). Reviewing the first draft, they added European dates everywhere (§8).
 - **Scope:** parent spec §13, Phase 3 item 4, reshaped: the keyboard review flow and the full command palette. The PWA install is replaced by a launcher icon (§2). Plus European dates across the app (§8).
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §3 (PWA, cmdk), §4 (runtime), §10 (palette and keys) and §13.
 
