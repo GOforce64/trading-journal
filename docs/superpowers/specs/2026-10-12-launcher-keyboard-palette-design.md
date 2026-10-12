@@ -1,8 +1,8 @@
 # Launcher, Keyboard Review and Command Palette — Design Spec
 
 - **Date:** 2026-10-12
-- **Status:** Draft, awaiting the user's review. The user made the decisions in §2 in the brainstorm and approved the three design sections (launcher, keyboard, palette).
-- **Scope:** parent spec §13, Phase 3 item 4, reshaped: the keyboard review flow and the full command palette. The PWA install is replaced by a launcher icon (§2).
+- **Status:** Draft, awaiting the user's review. The user made the decisions in §2 in the brainstorm and approved the three design sections (launcher, keyboard, palette). Reviewing the first draft, they added European dates everywhere (§8).
+- **Scope:** parent spec §13, Phase 3 item 4, reshaped: the keyboard review flow and the full command palette. The PWA install is replaced by a launcher icon (§2). Plus European dates across the app (§8).
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md), §3 (PWA, cmdk), §4 (runtime), §10 (palette and keys) and §13.
 
 ---
@@ -14,11 +14,13 @@ Three everyday frictions, removed:
 - **Starting the journal** takes a terminal, `pnpm start` and typing `127.0.0.1:4178` into a browser.
 - **Reviewing a morning's scalps** takes a mouse for every grade, setup, tag and Next.
 - **Finding a trade** means opening the right list and scrolling.
+- **Dates read the US way** ("Sep 28", and mm/dd/yyyy in the browser's date fields). The user uses European dates only.
 
 **Success:**
 - **Launcher:** after a one-time `pnpm launcher:install` on each machine, a **Trading Journal** icon (Fedora app menu and dock, Windows Start menu and taskbar) opens the journal in the default browser, Firefox included, in about 3–4 s from cold and at once when it's already running. A failure opens a page that says why.
 - **Keyboard review:** a whole review queue can be worked through with no mouse, except to place a stop or target by dragging when that's quicker: J/K to move, 1–5 to grade, S/M/E/N to the fields, P/T/X, Enter for done-and-next, ? for help.
 - **Palette:** Ctrl+K finds any page or tab, and any trade by ticker, day, month, setup, strategy or book. Opening a trade from it lets J/K step through all its matches.
+- **Dates:** every date the app shows reads day first ("28 Sep", "28 Sep 2026"), and every date typed is day/month/year: `9/12/26` is 9 December 2026.
 
 ### Out of scope
 - **Installing the app (PWA).** For a local app it only gives a browserless window and an icon; the launcher gives the icon in every browser. Installing is worth revisiting with the GitHub Pages demo, where it would work offline.
@@ -49,7 +51,9 @@ All made by the user in the brainstorm, except the rows marked *(follows)*, whic
 | The list's storage | **The browser history's state**, not the URL. |
 | Rebuild on start *(follows)* | **Every cold start runs `pnpm install --frozen-lockfile` and `pnpm build`.** Measured 2026-10-12 on Fedora: 0.6 s and 1.1 s, and the server answers 1.6 s after it starts. No "did the code change" check is needed for a cold start. |
 | After a `git pull` *(follows)* | A click finding **a server the launcher started on an older commit** restarts it. |
-| Typed dates *(follows)* | **Month/day, as the app shows dates** (`9/28`). A first number over 12 is read as day/month (`28/9`). `9/10` is September 10. |
+| Dates | **European, everywhere** (the user, reviewing the first draft): "go everywhere and change 9/12/26 to be 9th of December 2026, I only use European date standards". |
+| How dates show | **Day first, short month name:** "28 Sep", "28 Sep 2026", "28 Sep 09:35". Date fields show `09/12/2026`. Chosen over all-numeric "28/09". |
+| Typed dates *(follows)* | **Day/month/year only.** `9/12/26` is 9 December 2026, and `9/28` isn't a date. ISO `2026-12-09` is also accepted, since it can't be misread. |
 
 ---
 
@@ -147,7 +151,7 @@ If even the error page can't open, the launcher exits non-zero with the reason o
 | Journal, Scalps › All, Iron Flies (the shared `Journal` table) | the rows in the order shown, with the book filter applied. Label: the page, plus the book when filtered, e.g. "Journal · Paper" |
 | Scalps › To review, the dashboard's To review, the queue bar | `{ queue: true }` |
 | The Missed page | its rows, in order. Label "Missed" |
-| The dashboard's day and recent lists | those rows. Labels "Sep 28" and "Recent" |
+| The dashboard's day and recent lists | those rows. Labels "28 Sep" and "Recent" |
 | Analytics Overview's largest wins and losses | those rows. Labels "Largest wins" and "Largest losses" |
 | The palette's trade results | **every match**, not only the 50 shown. Label: the query, e.g. "nvda sep" |
 | A chart marker, a link, a typed address | no list |
@@ -220,7 +224,7 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 
 | Kind | Examples | Matches |
 |---|---|---|
-| Day | `9/28`, `09/28`, `9/28/26`, `2026-09-28`, `28/9`, `today`, `yesterday`, `mon`/`monday` … `sun` | trades opened that New York day. A date with no year is its latest occurrence on or before today. A weekday is the latest such day on or before today. |
+| Day | `28/9`, `28/09`, `28/9/26`, `28.9.26`, `28-9-2026`, `2026-09-28`, `today`, `yesterday`, `mon`/`monday` … `sun` | trades opened that New York day, read day/month/year (§8.2). A date with no year is its latest occurrence on or before today. A weekday is the latest such day on or before today. |
 | Month | `sep`, `september`, `2026-09` | trades opened that month. A month with no year is its latest. |
 | Strategy or book | `scalp`, `fly`/`iron`, `missed`, `live`, `paper` | that strategy or book |
 | Ticker | `nv`, `NVDA` | underlyings starting with it |
@@ -247,8 +251,52 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 
 ---
 
-## 8. Errors and edge states
+## 8. European dates everywhere
+
+### 8.1 Showing dates
+- **One module, `packages/core/src/dateText.ts`,** replaces the about 30 US date formatters spread over the web app, core and the db package. Every date the app shows goes through it:
+
+| Helper | Example | Replaces |
+|---|---|---|
+| `dayText` | 28 Sep | "Sep 28" in lists, the dashboard, analytics, Playbook cards, the missed trade's page, the server's own messages |
+| `dayYearText` | 28 Sep 2026 | "Sep 28, 2026": the equity curve's crosshair, Playbook cards, the daily chart's crosshair (now "2026-09-28") |
+| `dayTimeText` | 28 Sep 09:35 (and 09:35:12 with seconds) | "Sep 28, 09:35": trade pages, fills, the intraday crosshair, the IBKR card, import history, estimates |
+| `monthText` | Sep 2026, or September 2026 long | "Sep 2026" and "September 2026": the dashboard's month, period labels, the month breakdown (unchanged in order) |
+| `expiryText` | 26 Sep | contract names: "NVDA 232.5C 26 Sep"; the chain picker's "2 Oct · Fri · 6d" |
+| `fieldDate` | 09/12/2026 | what a date field shows (§8.2) |
+
+- **How it's built:** `formatToParts` in `en-US`, put together day first. The month names come out as "Sep" (`en-GB` would give "Sept"). Times stay 24-hour, as they are now.
+- Days are **New York dates** wherever they are now. A plain date (`2026-09-28`) is formatted as that date, never shifted by a time zone.
+- **Chart axes:**
+  - the intraday and equity charts' tick labels and crosshairs, day first;
+  - the daily chart's month and year ticks set explicitly, not left to the browser's language.
+- **Unchanged internal clocks:** `core/calendar.ts` and `core/marks.ts` read New York's clock in `en-US` to compute dates, and `importers/oquants` parses oQuants' US text. These never show a date, so they stay, listed in the guard test (§10) as allowed.
+
+### 8.2 Typing dates
+- **`DateField`** (`apps/web/src/components/DateField.tsx`) replaces the four `<input type="date">`:
+  - the IBKR start date in Settings;
+  - Analytics' custom from and to;
+  - the date in + Missed trade.
+  
+  The browser's own date field takes its order from the browser's language, so an English (US) Firefox shows mm/dd/yyyy, and a page can't change that.
+- **It shows `DD/MM/YYYY`** (`09/12/2026`), and **`parseDayMonthYear`** (in `dateText.ts`) reads what's typed:
+  - day, month, year with `/`, `.` or `-`: `9/12/26`, `09/12/2026`, `9.12.26`, `9-12-2026`. Two-digit years are 20YY.
+  - ISO `2026-12-09`.
+  - Day and month without a year only where a field says so (the palette's day words, §7.3).
+- **It commits on Enter or blur.** Something that isn't a date (`31/02/2026`, `9/28/2026`) shows "Not a date: day/month/year" beside it and keeps the text; the value doesn't change. A min or max the old field had stays.
+- **A 📅 button** opens the browser's picker, through a hidden native date field and `showPicker()`. A pick fills the field. The popup follows the browser's language, but a click can't be misread.
+
+### 8.3 Not changed
+- **Stored data and the API:** ISO dates and epoch times.
+- **URLs:** `?from=2026-12-09` stays ISO.
+- **What the app reads from others:** oQuants' and IBKR's dates are parsed as those services write them.
+- **Earlier spec documents** keep their examples. The README and its screenshots change (§11).
+
+---
+
+## 9. Errors and edge states
 - **The launcher:** §3.5. The lock (§3.2) covers double clicks.
+- **A date typed wrong:** §8.2.
 - **A stopped server, while the page is open:**
   - after Stop, the stopped screen (§3.4);
   - if the server dies another way, the existing "Could not load…" errors show, as now.
@@ -260,7 +308,7 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 
 ---
 
-## 9. Testing
+## 10. Testing
 - **Launcher (server package, Vitest):**
   - the click's decisions as a table, with health, HEAD, `launcher.json`, the lock, spawn and open faked: up, up and stale, up but not ours, another program, down; lock held, stale and free; build failing; a timeout;
   - the `.desktop` text, and the PowerShell that makes the `.lnk`. On the Windows CI runner, that PowerShell runs for real into a temp folder and the shortcut is read back;
@@ -278,8 +326,14 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
   - the help listing what's registered.
 - **Lists:** each list passes its ids and label; J/K follow them and stop at the ends; the queue stays live and wraps; no list falls back to the queue for a scalp and gives nothing on an iron fly.
 - **Trade-page keys:** each key on each page kind, against the patch it sends or the placing it starts; Enter's done-then-next and its failure.
+- **Dates:**
+  - every helper in `dateText.ts`: New York day boundaries, "Sep" never "Sept", 24-hour times, two-digit years;
+  - `parseDayMonthYear`: each separator, `9/12/26` as 9 December 2026, `31/02/2026` and `9/28/2026` refused, ISO accepted;
+  - `DateField`: shows `09/12/2026`, commits on Enter and blur, keeps a bad entry with its message, and the picker's pick fills it;
+  - **a guard test** that fails if a date formatter (`Intl.DateTimeFormat`, `toLocaleDateString`, `toLocaleTimeString`, or `toLocaleString` on a Date) appears anywhere in `apps/` or `packages/` outside `dateText.ts`, except the internal clocks it lists (§8.1). Number formatting (`toLocaleString` on a number) isn't touched;
+  - the ~36 existing test files that expect "Sep 28"-style text, updated.
 - **The palette:**
-  - `parseTradeQuery` with a fixed today: NY dates, year rollover (`12/15` in January), weekdays, `28/9`, months, multi-word setups, unknown words;
+  - `parseTradeQuery` with a fixed today: NY dates, year rollover (`15/12` in January), weekdays, `9/12/26` as 9 December and `9/28` as unknown, months, multi-word setups, unknown words;
   - the component: Ctrl+K from a field, pages first, the 50 cap, Enter on a page and on a trade (with its list), the loading and failed states.
 - **Live check** (the plan's last task), on both machines:
   - install the icon, start from cold, click again while running;
@@ -290,20 +344,22 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 
 ---
 
-## 10. Changes to the parent spec
+## 11. Changes to the parent spec
 Applied in the plan's docs task:
 - **§3:** the PWA row becomes "PWA: deferred to the public demo (§11). A launcher icon (`pnpm launcher:install`) gives the local app its icon."
 - **§4 Runtime:** "and opens the browser" moves to the launcher: `pnpm start` runs in the foreground, the icon starts the server in the background and opens the browser.
 - **§10:** the palette and keys line points here, with the full key list in §6.
 - **§13 Phase 3 item 4:** "Launcher icon, keyboard review flow, full command palette (built: this spec). PWA install deferred to the demo."
-- **README:** "Run it" leads with `pnpm launcher:install` and the icon, keeping `pnpm start`.
+- **README:** "Run it" leads with `pnpm launcher:install` and the icon, keeping `pnpm start`. Its screenshots are taken again, so they show the European dates.
+- **§10 Visual design** gains: "Dates read day first ('28 Sep 2026'); typed dates are day/month/year."
 
 ---
 
-## 11. Order of work
+## 12. Order of work
 One branch (`feat/launcher-keys-palette`) and one PR:
+0. **European dates** (§8): the shared module, every display, the date field. First, since it stands alone and the palette's day words build on its parser.
 1. **The launcher:** the server's health and shutdown, then the launcher, the icon, setup and removal, and the Settings panel.
 2. **The shortcut layer and the list you came from.**
 3. **The trade-page keys,** the chip groups, the setup picker and the help.
 4. **The palette.**
-5. **Docs** (§10) and the **live check** (§9).
+5. **Docs** (§11) and the **live check** (§10).
