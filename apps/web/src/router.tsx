@@ -11,6 +11,7 @@ import { Shell } from "./components/Shell.js";
 import { Stopped } from "./components/Stopped.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
+import { ShortcutsProvider } from "./keys/Shortcuts.js";
 import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
 import { NewMissed } from "./missed/NewMissed.js";
 import { usePendingReviews } from "./review/data.js";
@@ -40,9 +41,11 @@ function Running() {
   const syncing = useIbkrSyncing();
   const toReview = usePendingReviews().data?.length ?? 0;
   return (
-    <Shell activePath={pathname} syncing={syncing} toReview={toReview}>
-      <Outlet />
-    </Shell>
+    <ShortcutsProvider>
+      <Shell activePath={pathname} syncing={syncing} toReview={toReview}>
+        <Outlet />
+      </Shell>
+    </ShortcutsProvider>
   );
 }
 
