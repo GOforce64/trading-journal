@@ -272,7 +272,7 @@ describe("Analytics Overview", () => {
     expect(money.getByText("Before fees").nextSibling?.nextSibling?.textContent).toBe("+$92.00");
     expect(money.getByText("Fees").nextSibling?.nextSibling?.textContent).toBe("-$12.00");
     fireEvent.click(money.getByRole("button", { name: "BB" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("b");
+    expect(onOpenTrade).toHaveBeenCalledWith("b", { kind: "ids", ids: ["b"], label: "Largest losses" });
     expect(money.getByText("kept −100%")).toBeTruthy();
   });
 

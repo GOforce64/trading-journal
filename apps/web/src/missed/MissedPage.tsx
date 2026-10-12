@@ -16,6 +16,7 @@ import type { TradeView } from "../api.js";
 import { DateField } from "../components/DateField.js";
 import { Chip, Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
+import { listOf, type OpenTrade } from "../nav/tradeList.js";
 import { useSetups, useTags } from "../review/data.js";
 import { lastSession, useMissedTrades } from "./data.js";
 
@@ -59,7 +60,7 @@ export function MissedPage({
   /** The URL's period; without `onPeriod` the page keeps its own. */
   period?: PeriodId;
   onPeriod?: (period: PeriodId) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
   onNewMissed?: (symbol: string, date: string) => void;
 }) {
   const [own, setOwn] = useState<PeriodId>(chosen ?? "30");
@@ -186,9 +187,9 @@ export function MissedPage({
                   <tr
                     key={trade.id}
                     tabIndex={0}
-                    onClick={() => onOpenTrade?.(trade.id)}
+                    onClick={() => onOpenTrade?.(trade.id, listOf(shown, "Missed"))}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") onOpenTrade?.(trade.id);
+                      if (event.key === "Enter") onOpenTrade?.(trade.id, listOf(shown, "Missed"));
                     }}
                     className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"
                   >

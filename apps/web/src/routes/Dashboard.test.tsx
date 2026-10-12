@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithClient, stubTrades, tradeRow } from "../analytics/testing.js";
+import { QUEUE } from "../nav/tradeList.js";
 import { Dashboard } from "./Dashboard.js";
 
 // The canvas chart can't draw in jsdom; this stand-in shows the data the page hands it.
@@ -97,7 +98,7 @@ describe("Dashboard", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^2026-09-03:/ }));
     const list = within(screen.getByRole("list", { name: "Trades closed 2026-09-03" }));
     fireEvent.click(list.getByRole("button", { name: "AA" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("a");
+    expect(onOpenTrade).toHaveBeenCalledWith("a", { kind: "ids", ids: ["a"], label: "3 Sep" });
   });
 
   it("steps the calendar a month at a time with its own arrows, leaving the period alone", async () => {
@@ -168,7 +169,7 @@ describe("Dashboard", () => {
     expect(rows[0]?.textContent).toContain("NVDA 10C");
     expect(rows[0]?.textContent).toContain("setup, stop");
     fireEvent.click(within(section).getByRole("button", { name: "Start reviewing →" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("s0");
+    expect(onOpenTrade).toHaveBeenCalledWith("s0", QUEUE);
   });
 
   it("shows no To review section when nothing waits", async () => {

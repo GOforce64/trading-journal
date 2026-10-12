@@ -6,6 +6,9 @@ import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../compon
 import { Chip, Money, Panel, Pct, premiumText, Tile, usd } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { MissedWorkspace } from "../missed/MissedWorkspace.js";
+import { TradeNavLine } from "../nav/TradeNavLine.js";
+import type { OpenTrade, TradeList } from "../nav/tradeList.js";
+import { useTradeNav } from "../nav/useTradeNav.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
@@ -38,12 +41,15 @@ export function TradeDetail({
   onOpenTrade,
   onDeleted,
   onNewMissed,
+  list = null,
 }: {
   tradeId: string;
   onEdit?: (id: string) => void;
   onSettle?: (id: string) => void;
-  /** Opens another trade: the queue bar's Next and Prev. */
-  onOpenTrade?: (id: string) => void;
+  /** Opens another trade: the queue bar's Next and Prev, and J and K. */
+  onOpenTrade?: OpenTrade;
+  /** The list the trade was opened from (spec §5); J and K step through it. */
+  list?: TradeList | null;
   /** A missed trade was deleted from its page (missed-trades spec §6.3). */
   onDeleted?: () => void;
   /** + Missed on a scalp's chart (missed-trades spec §6.4). */
@@ -56,15 +62,32 @@ export function TradeDetail({
       if (!res.ok) throw new Error(`load failed: ${res.status}`);
       return res.json();
     },
+    // A trade that's gone stays gone: no retries before saying so (spec §9).
+    retry: (failures, error) => !error.message.endsWith(": 404") && failures < 3,
   });
 
   const today = todayNy();
   const { data: optionQuotes } = useOptionQuotes(trade && isOpen(trade) ? openContracts(trade, today) : []);
 
-  if (isLoading || !trade) return <p className="text-muted">Loading…</p>;
+  const nav = useTradeNav(tradeId, trade, list);
+  if (!trade) {
+    if (isLoading) return <p className="text-muted">Loading…</p>;
+    // A trade deleted since its list was opened (spec §9): J and K still go on.
+    return (
+      <div className="flex flex-col gap-3">
+        <TradeNavLine nav={nav} />
+        <p className="text-muted">This trade isn't in the journal any more.</p>
+      </div>
+    );
+  }
   // A missed trade has its own page: the chart and its levels, and no fills or P&L (missed-trades spec §6.3).
   if (trade.book === "missed" && trade.missed) {
-    return <MissedWorkspace trade={trade} onOpenTrade={onOpenTrade} onDeleted={onDeleted} />;
+    return (
+      <div className="flex flex-col gap-3">
+        <TradeNavLine nav={nav} />
+        <MissedWorkspace trade={trade} onOpenTrade={onOpenTrade} onDeleted={onDeleted} />
+      </div>
+    );
   }
   const metrics = trade.metrics;
   const detail = trade.ironFly;
@@ -82,6 +105,7 @@ export function TradeDetail({
 
   return (
     <div className="flex flex-col gap-3">
+      <TradeNavLine nav={nav} />
       <header className="flex flex-wrap items-center gap-2">
         <h1 className="num font-semibold text-[16px]">{trade.underlying}</h1>
         <span className="text-muted">{trade.underlyingName}</span>

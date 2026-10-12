@@ -14,6 +14,7 @@ import {
 import { DateField } from "../components/DateField.js";
 import { TabButton } from "../components/ui.js";
 import { todayNy } from "../market.js";
+import type { OpenTrade } from "../nav/tradeList.js";
 import { type Setup, useSetups } from "../review/data.js";
 import { FliesTab } from "./FliesTab.js";
 import { MissedTab } from "./MissedTab.js";
@@ -23,7 +24,7 @@ import { ScalpsTab } from "./ScalpsTab.js";
 export interface AnalyticsProps {
   search: AnalyticsSearch;
   onSearch: (patch: Partial<AnalyticsSearch>) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }
 
 const INPUT =

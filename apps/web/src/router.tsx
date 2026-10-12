@@ -14,6 +14,7 @@ import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
 import { ShortcutsProvider } from "./keys/Shortcuts.js";
 import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
 import { NewMissed } from "./missed/NewMissed.js";
+import { type OpenTrade, readTradeList, type TradeList } from "./nav/tradeList.js";
 import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { Dashboard } from "./routes/Dashboard.js";
@@ -58,7 +59,15 @@ const rootRoute = createRootRoute({
   ),
 });
 
-const openTrade = (id: string) => router.navigate({ to: "/trades/$id", params: { id } });
+// The list a trade was opened from rides in the history entry (spec §5): it survives a reload and Back.
+declare module "@tanstack/react-router" {
+  interface HistoryState {
+    tradeList?: TradeList;
+  }
+}
+
+const openTrade: OpenTrade = (id, list) =>
+  router.navigate({ to: "/trades/$id", params: { id }, state: { tradeList: list } });
 const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id }, search: {} });
 /** The missed trade's page replaces the new-trade page, so Back skips the empty chart. */
 const openCreatedMissed = (id: string) =>
@@ -148,11 +157,13 @@ const tradeDetailRoute = createRoute({
   path: "/trades/$id",
   component: function TradeDetailRoute() {
     const { id } = tradeDetailRoute.useParams();
+    const list = readTradeList(useRouterState({ select: (state) => state.location.state }));
     // Keyed by id: Next opens the next scalp with fresh fields, not the last one's typing.
     return (
       <TradeDetail
         key={id}
         tradeId={id}
+        list={list}
         onEdit={editTrade}
         onSettle={settleTrade}
         onOpenTrade={openTrade}

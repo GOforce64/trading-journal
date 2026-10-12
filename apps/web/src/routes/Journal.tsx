@@ -6,6 +6,7 @@ import { api, type TradeView } from "../api.js";
 import { EstimatedPnl } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes, useQuotes } from "../market.js";
+import { listOf, type OpenTrade, QUEUE } from "../nav/tradeList.js";
 import { useSetups } from "../review/data.js";
 
 export interface JournalFilter {
@@ -19,6 +20,7 @@ export interface JournalFilter {
 }
 
 const BOOKS = ["live", "paper", "missed"] as const;
+const BOOK_LABEL = { live: "Live", paper: "Paper", missed: "Missed" } as const;
 
 export function useTrades(filter: JournalFilter) {
   return useQuery({
@@ -74,7 +76,7 @@ export interface JournalProps {
   lockedFilter?: JournalFilter;
   title?: string;
   actions?: React.ReactNode;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
   /** What an empty list says. */
   emptyText?: string;
 }
@@ -93,6 +95,12 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
   const { data: optionQuotes } = useOptionQuotes(
     data?.filter(isOpen).flatMap((trade) => openContracts(trade, today)) ?? [],
   );
+
+  // What J and K step through from the trade (spec §5): the rows as shown, or the live queue.
+  const list =
+    lockedFilter?.review === "pending"
+      ? QUEUE
+      : listOf(data ?? [], book ? `${title} · ${BOOK_LABEL[book]}` : title);
 
   return (
     <Panel
@@ -148,11 +156,11 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
                 key={trade.id}
                 data-testid={`row-${trade.id}`}
                 tabIndex={0}
-                onClick={() => onOpenTrade?.(trade.id)}
+                onClick={() => onOpenTrade?.(trade.id, list)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    onOpenTrade?.(trade.id);
+                    onOpenTrade?.(trade.id, list);
                   }
                 }}
                 className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"

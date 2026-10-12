@@ -29,6 +29,7 @@ import {
 import { EstimatedPnl } from "../components/Estimate.js";
 import { Money } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { listOf, type OpenTrade, QUEUE, type TradeList } from "../nav/tradeList.js";
 import { usePendingReviews } from "../review/data.js";
 import { contractText, missingList } from "../review/text.js";
 
@@ -44,7 +45,7 @@ const NO_QUOTES = new Map<string, OptionQuote>();
 export interface DashboardProps {
   search: DashboardSearch;
   onSearch: (next: DashboardSearch) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }
 
 /** The current period at a glance (spec §6). Excluded trades never count here. */
@@ -197,7 +198,7 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
                   <li key={trade.id} className="flex items-center justify-between border-line border-t py-1">
                     <button
                       type="button"
-                      onClick={() => onOpenTrade?.(trade.id)}
+                      onClick={() => onOpenTrade?.(trade.id, listOf(open, "Open"))}
                       className="text-fg hover:text-accent"
                     >
                       {trade.underlying}
@@ -216,7 +217,11 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
             {none ? (
               <p className="text-muted">No closed trades in this range.</p>
             ) : (
-              <TradeList trades={inPeriod.slice(-5).reverse()} onOpenTrade={onOpenTrade} />
+              <TradeRows
+                trades={inPeriod.slice(-5).reverse()}
+                list={listOf(inPeriod.slice(-5).reverse(), "Recent")}
+                onOpenTrade={onOpenTrade}
+              />
             )}
           </Section>
         </div>
@@ -225,21 +230,28 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
   );
 }
 
-function TradeList({
+function TradeRows({
   trades,
+  list,
   label,
   onOpenTrade,
 }: {
   trades: readonly ClosedTrade[];
+  /** What J and K step through from the trade opened (spec §5). */
+  list: TradeList;
   label?: string;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }) {
   return (
     <ul aria-label={label} className="flex flex-col">
       {trades.map((trade) => (
         <li key={trade.id} className="flex items-center justify-between border-line border-t py-1">
           <span className="num text-muted">{dayText(trade.closedAt)}</span>
-          <button type="button" onClick={() => onOpenTrade?.(trade.id)} className="text-fg hover:text-accent">
+          <button
+            type="button"
+            onClick={() => onOpenTrade?.(trade.id, list)}
+            className="text-fg hover:text-accent"
+          >
             {trade.underlying}
           </button>
           <Money value={trade.netPnl} />
@@ -256,17 +268,22 @@ function DayTrades({
 }: {
   date: string;
   trades: readonly ClosedTrade[];
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }) {
   return (
     <div className="mt-2">
-      <TradeList trades={trades} label={`Trades closed ${date}`} onOpenTrade={onOpenTrade} />
+      <TradeRows
+        trades={trades}
+        list={listOf(trades, dayText(date))}
+        label={`Trades closed ${date}`}
+        onOpenTrade={onOpenTrade}
+      />
     </div>
   );
 }
 
 /** The scalps waiting for review, oldest first (scalp-review spec §9.4). Hidden when none wait. */
-function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
+function ToReview({ onOpenTrade }: { onOpenTrade?: OpenTrade }) {
   const { data: pending = [] } = usePendingReviews();
   const first = pending[0];
   if (!first) return null;
@@ -276,7 +293,7 @@ function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
       right={
         <button
           type="button"
-          onClick={() => onOpenTrade?.(first.id)}
+          onClick={() => onOpenTrade?.(first.id, QUEUE)}
           className="text-accent normal-case tracking-normal hover:underline"
         >
           Start reviewing →
@@ -289,7 +306,7 @@ function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
             <span className="num text-muted">{dayTimeText(trade.openedAt)}</span>
             <button
               type="button"
-              onClick={() => onOpenTrade?.(trade.id)}
+              onClick={() => onOpenTrade?.(trade.id, QUEUE)}
               className="text-fg hover:text-accent"
             >
               {contractText(trade)}

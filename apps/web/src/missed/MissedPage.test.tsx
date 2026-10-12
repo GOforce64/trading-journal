@@ -139,7 +139,11 @@ describe("MissedPage", () => {
     expect(within(rows[0] as HTMLElement).getByText("Hesitated")).toBeTruthy();
     expect(within(rows[0] as HTMLElement).getByText("ORB pullback")).toBeTruthy();
     fireEvent.click(rows[2] as HTMLElement);
-    expect(onOpenTrade).toHaveBeenCalledWith("b");
+    expect(onOpenTrade).toHaveBeenCalledWith("b", {
+      kind: "ids",
+      ids: ["a", "d", "b", "c"],
+      label: "Missed",
+    });
   });
 
   it("widens to every missed trade on All time", async () => {

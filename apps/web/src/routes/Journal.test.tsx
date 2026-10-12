@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { QUEUE } from "../nav/tradeList.js";
 import { Journal } from "./Journal.js";
 
 const trade = {
@@ -254,7 +255,49 @@ describe("Journal", () => {
     renderJournal(onOpenTrade);
     const row = await screen.findByTestId("row-t1");
     fireEvent.click(row);
-    expect(onOpenTrade).toHaveBeenCalledWith("t1");
+    expect(onOpenTrade).toHaveBeenCalledWith("t1", { kind: "ids", ids: ["t1"], label: "Journal" });
+  });
+
+  it("passes every row, in order, as the list J and K step through", async () => {
+    stubApi({ trades: [trade, { ...trade, id: "t2" }, { ...trade, id: "t3" }] });
+    const onOpenTrade = vi.fn();
+    renderJournal(onOpenTrade);
+    fireEvent.click(await screen.findByTestId("row-t2"));
+    expect(onOpenTrade).toHaveBeenCalledWith("t2", {
+      kind: "ids",
+      ids: ["t1", "t2", "t3"],
+      label: "Journal",
+    });
+  });
+
+  it("names the list by its book when one is pressed", async () => {
+    stubApi();
+    const onOpenTrade = vi.fn();
+    renderJournal(onOpenTrade);
+    await screen.findByTestId("row-t1");
+    fireEvent.click(screen.getByRole("button", { name: /^paper$/i }));
+    fireEvent.click(await screen.findByTestId("row-t1"));
+    expect(onOpenTrade).toHaveBeenLastCalledWith("t1", {
+      kind: "ids",
+      ids: ["t1"],
+      label: "Journal · Paper",
+    });
+  });
+
+  it("passes the live queue from the To review table", async () => {
+    stubApi();
+    const onOpenTrade = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Journal
+          title="To review"
+          lockedFilter={{ strategy: "scalp", review: "pending" }}
+          onOpenTrade={onOpenTrade}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByTestId("row-t1"));
+    expect(onOpenTrade).toHaveBeenCalledWith("t1", QUEUE);
   });
 
   it("opens the trade from the keyboard", async () => {
@@ -264,7 +307,7 @@ describe("Journal", () => {
     const row = await screen.findByTestId("row-t1");
     expect(row.getAttribute("tabindex")).toBe("0");
     fireEvent.keyDown(row, { key: "Enter" });
-    expect(onOpenTrade).toHaveBeenCalledWith("t1");
+    expect(onOpenTrade).toHaveBeenCalledWith("t1", { kind: "ids", ids: ["t1"], label: "Journal" });
   });
 
   it("shows each symbol's live price beside it, with the trade time on hover", async () => {

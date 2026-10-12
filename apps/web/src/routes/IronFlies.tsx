@@ -1,12 +1,7 @@
+import type { OpenTrade } from "../nav/tradeList.js";
 import { Journal } from "./Journal.js";
 
-export function IronFlies({
-  onOpenTrade,
-  onNewTrade,
-}: {
-  onOpenTrade?: (id: string) => void;
-  onNewTrade?: () => void;
-}) {
+export function IronFlies({ onOpenTrade, onNewTrade }: { onOpenTrade?: OpenTrade; onNewTrade?: () => void }) {
   return (
     <Journal
       title="Iron Flies"

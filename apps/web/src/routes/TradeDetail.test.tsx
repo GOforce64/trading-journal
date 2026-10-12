@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { scalpRisk } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { listOf } from "../nav/tradeList.js";
 import { TradeDetail } from "./TradeDetail.js";
 
 // The charts have their own tests; here they're a placeholder that shows where they go.
@@ -154,6 +155,9 @@ vi.mock("../missed/MissedWorkspace.js", () => ({
 
 function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes, available = true) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    // The review queue is a list, as the server sends it.
+    if (String(input).includes("review=pending"))
+      return new Response("[]", { headers: { "content-type": "application/json" } });
     const payload = String(input).includes("/api/option-quotes") ? { quotes, available } : body;
     return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
   });
@@ -175,6 +179,36 @@ function renderDetail(onOpenTrade?: (id: string) => void) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("TradeDetail", () => {
+  const renderInList = () =>
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TradeDetail tradeId="t1" list={listOf([{ id: "p" }, { id: "t1" }, { id: "n" }], "Journal")} />
+      </QueryClientProvider>,
+    );
+
+  it("says where the trade sits in the list it was opened from", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderInList();
+    expect((await screen.findByTestId("trade-nav")).textContent).toContain("2 of 3 · Journal");
+  });
+
+  it("says a trade deleted since its list was opened is gone, and keeps the list's place", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/api/trades/t1")
+          ? new Response(JSON.stringify({ error: "not found" }), { status: 404 })
+          : new Response("[]", { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    renderInList();
+    expect(await screen.findByText("This trade isn't in the journal any more.")).toBeTruthy();
+    expect(screen.getByTestId("trade-nav").textContent).toContain("2 of 3 · Journal");
+  });
+
   it("puts the review beside a fly's legs", async () => {
     vi.stubGlobal(
       "fetch",
@@ -653,6 +687,9 @@ function stubSynced(
         headers: { "content-type": "application/json" },
       });
     }
+    // The review queue is a list, as the server sends it.
+    if (url.includes("review=pending"))
+      return new Response("[]", { headers: { "content-type": "application/json" } });
     const payload = url.includes("/api/ibkr/status")
       ? {
           configured: true,

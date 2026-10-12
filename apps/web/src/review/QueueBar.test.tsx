@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TradeView } from "../api.js";
+import { QUEUE } from "../nav/tradeList.js";
 import { QueueBar } from "./QueueBar.js";
 
 const at = (minute: number) => Date.UTC(2026, 8, 28, 13, 30 + minute);
@@ -38,7 +39,10 @@ describe("QueueBar", () => {
     expect(bar.textContent).toContain("needs a setup and a stop");
     fireEvent.click(screen.getByRole("button", { name: "Next →" }));
     fireEvent.click(screen.getByRole("button", { name: "← Prev" }));
-    expect(onOpenTrade.mock.calls).toEqual([["c"], ["a"]]);
+    expect(onOpenTrade.mock.calls).toEqual([
+      ["c", QUEUE],
+      ["a", QUEUE],
+    ]);
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain("strategy=scalp");
     expect(url).toContain("review=pending");
@@ -47,7 +51,7 @@ describe("QueueBar", () => {
   it("wraps from the newest scalp to the oldest", async () => {
     const { onOpenTrade } = renderBar(scalp("c", 9));
     fireEvent.click(await screen.findByRole("button", { name: "Next →" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("a");
+    expect(onOpenTrade).toHaveBeenCalledWith("a", QUEUE);
   });
 
   it("says a reviewed scalp is done and how many are left, even before the list has caught up", async () => {
@@ -58,7 +62,7 @@ describe("QueueBar", () => {
     expect(bar.textContent).not.toContain(" of ");
     expect(screen.queryByRole("button", { name: "← Prev" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Next →" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("c");
+    expect(onOpenTrade).toHaveBeenCalledWith("c", QUEUE);
   });
 
   it("counts the scalps waiting from one the queue doesn't apply to", async () => {
@@ -66,7 +70,7 @@ describe("QueueBar", () => {
     const bar = await screen.findByTestId("queue-bar");
     expect(bar.textContent).toContain("3 to review");
     fireEvent.click(screen.getByRole("button", { name: "Next →" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("b");
+    expect(onOpenTrade).toHaveBeenCalledWith("b", QUEUE);
   });
 
   it("shows a lone pending scalp as 1 of 1, with no way on", async () => {

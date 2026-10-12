@@ -28,12 +28,13 @@ import { SplitGrid } from "../analytics/SplitGrid.js";
 import type { AnalyticsSearch } from "../analytics/search.js";
 import type { TradeView } from "../api.js";
 import { Money } from "../components/ui.js";
+import { listOf, type OpenTrade } from "../nav/tradeList.js";
 
 export interface TabProps {
   trades: readonly TradeView[];
   search: AnalyticsSearch;
   onSearch: (patch: Partial<AnalyticsSearch>) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }
 
 /** Where the money goes, how it's trending, and what works (spec §7.2). */
@@ -172,7 +173,7 @@ function MoneyPanel({
 }: {
   summary: Summary;
   closed: readonly ClosedTrade[];
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }) {
   const losers = largestLosses(closed);
   const lost = round2(losers.reduce((sum, trade) => sum + trade.netPnl, 0));
@@ -206,7 +207,7 @@ function MoneyPanel({
                     <td>
                       <button
                         type="button"
-                        onClick={() => onOpenTrade?.(trade.id)}
+                        onClick={() => onOpenTrade?.(trade.id, listOf(losers, "Largest losses"))}
                         className="text-fg hover:text-accent"
                       >
                         {trade.underlying}

@@ -12,7 +12,7 @@ export function AnalyticsRoute() {
     <Analytics
       search={search}
       onSearch={(patch) => navigate({ search: (prev) => applyPatch(prev, patch) })}
-      onOpenTrade={(id) => navigate({ to: "/trades/$id", params: { id } })}
+      onOpenTrade={(id, list) => navigate({ to: "/trades/$id", params: { id }, state: { tradeList: list } })}
     />
   );
 }
