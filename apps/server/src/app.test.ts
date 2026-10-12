@@ -63,6 +63,7 @@ describe("createApp", () => {
   it("answers health checks", async () => {
     const res = await app.request("/api/health", { headers: LOCAL });
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, app: "trading-journal", pid: null });
   });
 
   it("creates a trade and returns it with computed metrics", async () => {
