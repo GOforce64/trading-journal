@@ -5,6 +5,7 @@ import { ChartSettings } from "../chart/ChartSettings.js";
 import { Panel } from "../components/ui.js";
 import { DataSettings } from "./DataSettings.js";
 import { IbkrSettings, type IbkrView } from "./IbkrSettings.js";
+import { JournalPanel } from "./JournalPanel.js";
 
 /** Everything that shows market data, refetched once a key changes. */
 const MARKET_QUERIES = ["settings", "quotes", "option-quotes", "chain", "company", "close"];
@@ -149,6 +150,7 @@ export function Settings({
       )}
       <ChartSettings />
       <DataSettings dataDir={data?.dataDir} />
+      <JournalPanel />
     </div>
   );
 }

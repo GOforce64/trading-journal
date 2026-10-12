@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
+import { Stopped } from "./components/Stopped.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
 import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
@@ -25,8 +26,15 @@ import { Playbook } from "./routes/Playbook.js";
 import { Scalps } from "./routes/Scalps.js";
 import { Settings } from "./routes/Settings.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
+import { useStopped } from "./stopped.js";
 
+/** Once Stop the journal has stopped the server, only that shows (launcher spec §3.4). */
 function RootLayout() {
+  return useStopped() ? <Stopped /> : <Running />;
+}
+
+/** The app while its server runs. Its hooks unmount with it, so a stopped app makes no requests. */
+function Running() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   useAutoSync();
   const syncing = useIbkrSyncing();
