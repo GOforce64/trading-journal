@@ -1,7 +1,9 @@
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { browserCommand, journalUrl, pollUntil, probe } from "./effects.js";
+import { browserCommand, journalUrl, pollUntil, probe, realEffects } from "./effects.js";
+import { isAlive } from "./lock.js";
 
 async function serving(body: string | null) {
   const server = createServer((_req, res) => {
@@ -77,5 +79,37 @@ describe("the rest", () => {
       args: ["/c", `start "" "${url}"`],
       verbatim: true,
     });
+  });
+});
+
+/** A journal that stops listening as soon as it's asked to stop, but takes `exitMs` to finish and exit. */
+const SLOW_TO_EXIT = `
+const http = require("node:http");
+const server = http.createServer((req, res) => {
+  res.setHeader("connection", "close");
+  res.setHeader("content-type", "application/json");
+  if (req.url === "/api/shutdown") {
+    res.end("{}");
+    server.close();
+    setTimeout(() => process.exit(0), Number(process.argv[1]));
+    return;
+  }
+  res.end(JSON.stringify({ ok: true, app: "trading-journal", pid: process.pid }));
+});
+server.listen(0, "127.0.0.1", () => console.log(server.address().port));
+`;
+
+describe("stopping the old server", () => {
+  it("waits for its process to exit, not just for the port to close", async () => {
+    const child = spawn(process.execPath, ["-e", SLOW_TO_EXIT, "1500"], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const port = await new Promise<number>((resolve) =>
+      child.stdout.once("data", (out) => resolve(Number(out))),
+    );
+    const pid = child.pid as number;
+    const fx = realEffects({ repo: "", dataDir: "", port, node: "", pnpm: "" });
+    expect(await fx.stop(pid)).toBe(true);
+    expect(isAlive(pid)).toBe(false);
   });
 });

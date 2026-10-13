@@ -23,8 +23,8 @@ export interface ClickEffects {
   head(): Promise<string | null>;
   readState(): LaunchState | null;
   writeState(state: LaunchState): void;
-  /** Asks the server to stop and waits up to 10 s for the port to free; false if it's still busy. */
-  stop(): Promise<boolean>;
+  /** Asks the server to stop and waits up to 10 s for the port to free and its process to exit; false if it's still busy. */
+  stop(pid: number): Promise<boolean>;
   /** `pnpm install --frozen-lockfile`, then `pnpm build`. */
   update(): Promise<UpdateResult>;
   /** Starts the server in the background; its process id. */
@@ -57,7 +57,7 @@ export async function click(fx: ClickEffects, port: number): Promise<ClickOutcom
       fx.openBrowser();
       return { kind: "opened", started: false, restarted: false };
     }
-    if (!(await fx.stop())) return failed({ kind: "still-busy" });
+    if (!(await fx.stop(state.pid))) return failed({ kind: "still-busy" });
     restarted = true;
   }
   const update = await fx.update();

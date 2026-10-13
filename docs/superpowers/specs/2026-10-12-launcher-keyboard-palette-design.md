@@ -73,7 +73,7 @@ All made by the user in the brainstorm, except the rows marked *(follows)*, whic
 1. **A lock.** `<data dir>/launch.lock`, created exclusively. If it's held, by a click still starting the journal, the second click exits; the first opens the browser. A lock older than 60 s, or whose process is gone, is stale and taken over.
 2. **Is the journal up?** `GET http://127.0.0.1:<port>/api/health`, with a 1 s timeout.
    - **The journal answers** (`app: "trading-journal"`, or the bare `{ ok: true }` of a journal from before this change, which has no process id and so is never restarted):
-     - If `<data dir>/launcher.json` names that process (the launcher started it) **and** its commit differs from `git rev-parse HEAD`, it stops it (`POST /api/shutdown`), waits up to 10 s for the port to free, and goes on to step 3.
+     - If `<data dir>/launcher.json` names that process (the launcher started it) **and** its commit differs from `git rev-parse HEAD`, it stops it (`POST /api/shutdown`), waits up to 10 s for the port to free and the old process to exit (its requests in flight finish first), and goes on to step 3.
      - Otherwise, including a server started with `pnpm start`, it opens the browser and exits.
    - **Something else answers on the port:** the error page (§3.5).
    - **Nothing answers:** step 3.

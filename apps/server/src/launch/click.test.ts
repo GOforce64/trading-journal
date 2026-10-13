@@ -10,8 +10,8 @@ function fakes(overrides: Partial<ClickEffects> = {}) {
     writeState: (state) => {
       calls.push(`write ${state.pid} ${state.head}`);
     },
-    stop: async () => {
-      calls.push("stop");
+    stop: async (pid) => {
+      calls.push(`stop ${pid}`);
       return true;
     },
     update: async () => {
@@ -53,7 +53,7 @@ describe("a click", () => {
   it("restarts a server it started on an older commit", async () => {
     const { fx, calls } = fakes({ probe: up, readState: () => ours("old") });
     expect(await click(fx, 4178)).toEqual({ kind: "opened", started: true, restarted: true });
-    expect(calls).toEqual(["stop", "update", "start", "write 777 abc", "wait 777", "open"]);
+    expect(calls).toEqual(["stop 55", "update", "start", "write 777 abc", "wait 777", "open"]);
   });
 
   const cases: [string, () => LaunchState | null, () => Promise<string | null>][] = [

@@ -129,12 +129,13 @@ export function realEffects(paths: LaunchPaths): ClickEffects {
       }
     },
     writeState: (state) => writeFileSync(stateFile(paths.dataDir), JSON.stringify(state)),
-    stop: async () => {
+    stop: async (pid) => {
       await fetch(`http://127.0.0.1:${paths.port}/api/shutdown`, {
         method: "POST",
         signal: AbortSignal.timeout(1000),
       }).catch(() => undefined);
-      return pollUntil(async () => (await probe(paths.port)).kind === "down", 10_000);
+      // The port frees at once, but the process lives on until its requests in flight (a sync) are done.
+      return pollUntil(async () => !isAlive(pid) && (await probe(paths.port)).kind === "down", 10_000);
     },
     update: async () => {
       const install = await run(paths.pnpm, ["install", "--frozen-lockfile"], paths.repo);
