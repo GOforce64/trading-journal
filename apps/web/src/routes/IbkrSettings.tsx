@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, refusal } from "../api.js";
+import { DateField } from "../components/DateField.js";
 import { Panel } from "../components/ui.js";
 import { todayNy } from "../market.js";
 
@@ -100,16 +101,10 @@ export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text
               className={INPUT}
             />
           </label>
-          <label className={FIELD}>
+          <div className={FIELD}>
             Start date
-            <input
-              aria-label="Start date"
-              type="date"
-              value={since}
-              onChange={(event) => setSince(event.target.value)}
-              className={INPUT}
-            />
-          </label>
+            <DateField label="Start date" value={since} onChange={setSince} className={INPUT} />
+          </div>
         </div>
         <p className="text-[10px] text-muted">
           In Client Portal, Performance &amp; Reports → Flex Queries shows each query's ID, and Settings →

@@ -15,7 +15,7 @@ const MIGRATIONS = fileURLToPath(new URL("../../migrations", import.meta.url));
 const ENTRY = nyWallClock("2026-09-30", 9 * 60 + 41);
 const EXIT = nyWallClock("2026-09-30", 9 * 60 + 58);
 
-/** A missed NVDA long, marked at 09:41 on Sep 30 with only its entry. */
+/** A missed NVDA long, marked at 09:41 on 30 Sep with only its entry. */
 const missedLong: NewTrade = {
   strategy: "scalp",
   book: "missed",
@@ -113,7 +113,7 @@ describe("missed trades in the trades repository", () => {
     const { id } = repo().create(missedLong);
     expect(() =>
       repo().update(id, { missed: { exitPrice: 179.9 }, closedAt: nyWallClock("2026-10-01", 9 * 60 + 35) }),
-    ).toThrow("The exit must be on the entry's day, Sep 30");
+    ).toThrow("The exit must be on the entry's day, 30 Sep");
   });
 
   it("refuses missed details on a taken trade", () => {

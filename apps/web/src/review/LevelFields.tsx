@@ -64,7 +64,12 @@ export function LevelFields({
       {levels.draft == null ? (
         <div className="flex items-center gap-1">
           <span className={`${LABEL} text-up`}>{levels.targets.shown.length === 0 ? "Targets" : ""}</span>
-          <button type="button" onClick={() => levels.startTarget()} className={ADD}>
+          <button
+            type="button"
+            data-key-target="place-target"
+            onClick={() => levels.startTarget()}
+            className={ADD}
+          >
             + Target
           </button>
         </div>
@@ -101,6 +106,7 @@ function StopRow({ levels }: { levels: Levels }) {
         {label}
         <button
           type="button"
+          data-key-target="place-stop"
           onClick={() => {
             setOpened(true);
             if (levels.drawable) levels.setPlacing("stop");

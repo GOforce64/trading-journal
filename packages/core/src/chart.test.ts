@@ -9,6 +9,7 @@ import {
   optionClose,
   PREMARKET_OPEN,
   type PriceBar,
+  sessionBands,
   sessionLevels,
   sessionSlots,
   vwap,
@@ -65,9 +66,9 @@ describe("aggregate", () => {
       3,
     );
     expect(candles).toEqual([
-      { t: at(DAY, "09:27"), o: 1, h: 1.1, l: 0.9, c: 1, v: 100, extended: true },
-      { t: at(DAY, "09:30"), o: 1, h: 1.3, l: 0.95, c: 1.02, v: 900, extended: false },
-      { t: at(DAY, "09:33"), o: 1.02, h: 1.1, l: 1, c: 1.05, v: 500, extended: false },
+      { t: at(DAY, "09:27"), o: 1, h: 1.1, l: 0.9, c: 1, v: 100, session: "pre" },
+      { t: at(DAY, "09:30"), o: 1, h: 1.3, l: 0.95, c: 1.02, v: 900, session: "regular" },
+      { t: at(DAY, "09:33"), o: 1.02, h: 1.1, l: 1, c: 1.05, v: 500, session: "regular" },
     ]);
   });
 
@@ -76,14 +77,14 @@ describe("aggregate", () => {
     expect(candles.map((candle) => candle.t)).toEqual([at(DAY, "19:00"), at("2026-09-29", "04:00")]);
   });
 
-  it("starts hourly candles at 04:00, 05:00 and so on, marking those that start before 09:30 as extended", () => {
+  it("starts hourly candles at 04:00, 05:00 and so on, marking those that start before 09:30 as pre-market", () => {
     const [candle] = aggregate([bar(DAY, "09:45", 1, 1, 1, 1)], 60);
-    expect(candle).toMatchObject({ t: at(DAY, "09:00"), extended: true });
+    expect(candle).toMatchObject({ t: at(DAY, "09:00"), session: "pre" });
   });
 
   it("keeps 1-minute bars as they are, marking the regular session", () => {
     const candles = aggregate([bar(DAY, "15:59", 1, 1, 1, 1), bar(DAY, "16:00", 1, 1, 1, 1)], 1);
-    expect(candles.map((candle) => candle.extended)).toEqual([false, true]);
+    expect(candles.map((candle) => candle.session)).toEqual(["regular", "post"]);
   });
 
   it("keeps every share and the day's extremes, whatever the timeframe (property)", () => {
@@ -180,7 +181,7 @@ describe("half days", () => {
   const bars = [bar(FRIDAY, "12:59", 10, 11, 9, 10, 100), bar(FRIDAY, "13:00", 20, 21, 19, 20, 100)];
 
   it("tints candles from 13:00 as extended hours, and leaves them out of VWAP and the daily candle", () => {
-    expect(aggregate(bars, 1).map((candle) => candle.extended)).toEqual([false, true]);
+    expect(aggregate(bars, 1).map((candle) => candle.session)).toEqual(["regular", "post"]);
     expect(vwap(bars, aggregate(bars, 1))).toEqual([10, null]);
     expect(dailyFromMinutes(bars, FRIDAY)).toMatchObject({ o: 10, h: 11, l: 9, c: 10 });
   });
@@ -279,5 +280,54 @@ describe("sessionSlots", () => {
     const slots = sessionSlots([at("2026-10-05", 600), at("2026-10-06", 600)], 30);
     expect(new Set(slots.map((t) => nyClock(t).date))).toEqual(new Set(["2026-10-05", "2026-10-06"]));
     expect(sessionSlots([], 3)).toEqual([]);
+  });
+});
+
+describe("sessionBands", () => {
+  const minute = (date: string, hhmm: string) => bar(date, hhmm, 1, 1, 1, 1);
+
+  it("makes one band of each run of pre-market and after-hours candles, by index", () => {
+    const candles = aggregate(
+      ["09:28", "09:29", "09:30", "15:59", "16:00", "16:01"].map((hhmm) => minute(DAY, hhmm)),
+      1,
+    );
+    expect(sessionBands(candles)).toEqual([
+      { from: 0, to: 1, session: "pre" },
+      { from: 4, to: 5, session: "post" },
+    ]);
+  });
+
+  it("has none on a day of regular hours only", () => {
+    expect(sessionBands(aggregate([minute(DAY, "09:30"), minute(DAY, "15:59")], 1))).toEqual([]);
+  });
+
+  it("splits one day's after-hours from the next day's pre-market", () => {
+    const candles = aggregate(
+      [
+        minute(DAY, "19:58"),
+        minute(DAY, "19:59"),
+        minute("2026-09-29", "04:00"),
+        minute("2026-09-29", "04:01"),
+      ],
+      1,
+    );
+    expect(sessionBands(candles)).toEqual([
+      { from: 0, to: 1, session: "post" },
+      { from: 2, to: 3, session: "pre" },
+    ]);
+  });
+
+  it("gives each day its own band, even with no regular candle between", () => {
+    const candles = aggregate([minute(DAY, "08:00"), minute("2026-09-29", "08:00")], 1);
+    expect(sessionBands(candles)).toEqual([
+      { from: 0, to: 0, session: "pre" },
+      { from: 1, to: 1, session: "pre" },
+    ]);
+  });
+
+  it("starts a half day's after-hours band at 13:00", () => {
+    const FRIDAY = "2026-11-27";
+    const candles = aggregate([minute(FRIDAY, "12:59"), minute(FRIDAY, "13:00"), minute(FRIDAY, "13:01")], 1);
+    expect(sessionBands(candles)).toEqual([{ from: 1, to: 2, session: "post" }]);
   });
 });

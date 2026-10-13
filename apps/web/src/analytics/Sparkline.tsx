@@ -1,13 +1,9 @@
 import type { CumulativePoint } from "@tj/core";
+import { dayText } from "@tj/core";
 
 const WIDTH = 130;
 const HEIGHT = 40;
 const PAD = 4;
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
 
 /**
  * A running total, trade by trade, on a zero line (scalp-analytics spec §7.2): green when it ends at or above 0, red
@@ -51,7 +47,7 @@ export function Sparkline({
       {points.map((point, index) => (
         <circle key={point.id} cx={x(index)} cy={y(point.total)} r={6} fill="transparent">
           <title>
-            {`${ET_DAY.format(new Date(point.closedAt))} · ${point.underlying} · ${format(point.value)} · total ${format(point.total)}`}
+            {`${dayText(point.closedAt)} · ${point.underlying} · ${format(point.value)} · total ${format(point.total)}`}
           </title>
         </circle>
       ))}

@@ -41,11 +41,11 @@ describe("nyTickLabel", () => {
     const close = seconds("2026-09-03T09:50:00-04:00");
     expect(nyTickLabel(close, TickMarkType.Year)).toBe("2026");
     expect(nyTickLabel(close, TickMarkType.Month)).toBe("Sep");
-    expect(nyTickLabel(close, TickMarkType.DayOfMonth)).toBe("Sep 3");
+    expect(nyTickLabel(close, TickMarkType.DayOfMonth)).toBe("3 Sep");
     expect(nyTickLabel(close, TickMarkType.Time)).toBe("09:50");
   });
 
   it("uses New York's date for a late-evening close", () => {
-    expect(nyTickLabel(seconds("2026-09-30T23:30:00-04:00"), TickMarkType.DayOfMonth)).toBe("Sep 30");
+    expect(nyTickLabel(seconds("2026-09-30T23:30:00-04:00"), TickMarkType.DayOfMonth)).toBe("30 Sep");
   });
 });

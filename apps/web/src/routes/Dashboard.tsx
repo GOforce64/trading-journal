@@ -3,7 +3,10 @@ import {
   closedTrades,
   closeEstimate,
   dailyPnl,
+  dayText,
+  dayTimeText,
   equityCurve,
+  monthText,
   type OptionQuote,
   summarize,
 } from "@tj/core";
@@ -26,6 +29,7 @@ import {
 import { EstimatedPnl } from "../components/Estimate.js";
 import { Money } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
+import { listOf, type OpenTrade, QUEUE, type TradeList } from "../nav/tradeList.js";
 import { usePendingReviews } from "../review/data.js";
 import { contractText, missingList } from "../review/text.js";
 
@@ -37,25 +41,11 @@ const PERIODS: { id: Period; label: string }[] = [
 ];
 const BOTH_BOOKS = ["live", "paper"] as const;
 const NO_QUOTES = new Map<string, OptionQuote>();
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
-const ET_TIME = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const MONTH_TITLE = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export interface DashboardProps {
   search: DashboardSearch;
   onSearch: (next: DashboardSearch) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }
 
 /** The current period at a glance (spec §6). Excluded trades never count here. */
@@ -166,7 +156,7 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
 
       <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
         <Section
-          title={`Calendar · ${MONTH_TITLE.format(new Date(`${month}-01T00:00:00Z`))}`}
+          title={`Calendar · ${monthText(month)}`}
           right={
             <span className="flex gap-2">
               <button
@@ -208,12 +198,12 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
                   <li key={trade.id} className="flex items-center justify-between border-line border-t py-1">
                     <button
                       type="button"
-                      onClick={() => onOpenTrade?.(trade.id)}
+                      onClick={() => onOpenTrade?.(trade.id, listOf(open, "Open"))}
                       className="text-fg hover:text-accent"
                     >
                       {trade.underlying}
                     </button>
-                    <span className="text-muted">opened {ET_DAY.format(new Date(trade.openedAt))}</span>
+                    <span className="text-muted">opened {dayText(trade.openedAt)}</span>
                     <EstimatedPnl
                       estimate={closeEstimate(trade, optionQuotes?.quotes ?? NO_QUOTES, today)}
                       explain={optionQuotes?.available === true}
@@ -227,7 +217,11 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
             {none ? (
               <p className="text-muted">No closed trades in this range.</p>
             ) : (
-              <TradeList trades={inPeriod.slice(-5).reverse()} onOpenTrade={onOpenTrade} />
+              <TradeRows
+                trades={inPeriod.slice(-5).reverse()}
+                list={listOf(inPeriod.slice(-5).reverse(), "Recent")}
+                onOpenTrade={onOpenTrade}
+              />
             )}
           </Section>
         </div>
@@ -236,21 +230,28 @@ export function Dashboard({ search, onSearch, onOpenTrade }: DashboardProps) {
   );
 }
 
-function TradeList({
+function TradeRows({
   trades,
+  list,
   label,
   onOpenTrade,
 }: {
   trades: readonly ClosedTrade[];
+  /** What J and K step through from the trade opened (spec §5). */
+  list: TradeList;
   label?: string;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }) {
   return (
     <ul aria-label={label} className="flex flex-col">
       {trades.map((trade) => (
         <li key={trade.id} className="flex items-center justify-between border-line border-t py-1">
-          <span className="num text-muted">{ET_DAY.format(new Date(trade.closedAt))}</span>
-          <button type="button" onClick={() => onOpenTrade?.(trade.id)} className="text-fg hover:text-accent">
+          <span className="num text-muted">{dayText(trade.closedAt)}</span>
+          <button
+            type="button"
+            onClick={() => onOpenTrade?.(trade.id, list)}
+            className="text-fg hover:text-accent"
+          >
             {trade.underlying}
           </button>
           <Money value={trade.netPnl} />
@@ -267,17 +268,22 @@ function DayTrades({
 }: {
   date: string;
   trades: readonly ClosedTrade[];
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }) {
   return (
     <div className="mt-2">
-      <TradeList trades={trades} label={`Trades closed ${date}`} onOpenTrade={onOpenTrade} />
+      <TradeRows
+        trades={trades}
+        list={listOf(trades, dayText(date))}
+        label={`Trades closed ${date}`}
+        onOpenTrade={onOpenTrade}
+      />
     </div>
   );
 }
 
 /** The scalps waiting for review, oldest first (scalp-review spec §9.4). Hidden when none wait. */
-function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
+function ToReview({ onOpenTrade }: { onOpenTrade?: OpenTrade }) {
   const { data: pending = [] } = usePendingReviews();
   const first = pending[0];
   if (!first) return null;
@@ -287,7 +293,7 @@ function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
       right={
         <button
           type="button"
-          onClick={() => onOpenTrade?.(first.id)}
+          onClick={() => onOpenTrade?.(first.id, QUEUE)}
           className="text-accent normal-case tracking-normal hover:underline"
         >
           Start reviewing →
@@ -297,10 +303,10 @@ function ToReview({ onOpenTrade }: { onOpenTrade?: (id: string) => void }) {
       <ul aria-label="Scalps to review" className="flex flex-col">
         {pending.slice(0, 5).map((trade) => (
           <li key={trade.id} className="flex items-center gap-3 border-line border-t py-1">
-            <span className="num text-muted">{ET_TIME.format(new Date(trade.openedAt))}</span>
+            <span className="num text-muted">{dayTimeText(trade.openedAt)}</span>
             <button
               type="button"
-              onClick={() => onOpenTrade?.(trade.id)}
+              onClick={() => onOpenTrade?.(trade.id, QUEUE)}
               className="text-fg hover:text-accent"
             >
               {contractText(trade)}

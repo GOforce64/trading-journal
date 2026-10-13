@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { TabButton } from "../components/ui.js";
+import type { OpenTrade } from "../nav/tradeList.js";
 import { usePendingReviews } from "../review/data.js";
 import { Journal } from "./Journal.js";
 
@@ -10,7 +11,7 @@ export function Scalps({
   tab: urlTab,
   onTab,
 }: {
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
   onNewScalp?: () => void;
   /** The tab from the URL (`?tab=review`); absent means All. */
   tab?: "review";

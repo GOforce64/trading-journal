@@ -185,7 +185,7 @@ export const OPTION_RANGE_COPY = {
   too_recent: "waits for Alpaca's option delay",
   no_bars: "Alpaca has no option bars for the hold",
   unavailable: "needs the option's range",
-  too_old: "Alpaca's option bars start on Jan 18, 2024",
+  too_old: "Alpaca's option bars start on 18 Jan 2024",
 } as const;
 
 /** The option range's word for this scalp: fetching, held back by Alpaca's delay, or missing. */

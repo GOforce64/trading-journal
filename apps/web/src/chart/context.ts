@@ -1,6 +1,6 @@
+import { clockText } from "@tj/core";
 import { rText } from "../analytics/format.js";
 import { usd } from "../components/ui.js";
-import { clockText } from "./option.js";
 
 /** What a day's-trades marker needs of a trade (missed-trades spec §6.4). */
 export interface ContextTrade {

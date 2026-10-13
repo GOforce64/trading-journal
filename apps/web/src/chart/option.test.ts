@@ -1,6 +1,6 @@
-import { nyWallClock } from "@tj/core";
+import { clockText, nyWallClock } from "@tj/core";
 import { describe, expect, it } from "vitest";
-import { arriveBy, clockText, contractName, contractOf, viewOf } from "./option.js";
+import { arriveBy, contractName, contractOf, viewOf } from "./option.js";
 
 const SCALP = {
   underlying: "NVDA",
@@ -10,7 +10,7 @@ const SCALP = {
 describe("the option view's helpers", () => {
   it("names a scalp's contract as Alpaca does, and as a trader reads it", () => {
     expect(contractOf(SCALP)).toBe("NVDA260926C00232500");
-    expect(contractName(SCALP)).toBe("NVDA 232.5C Sep 26");
+    expect(contractName(SCALP)).toBe("NVDA 232.5C 26 Sep");
     expect(contractOf({ underlying: "AA", legs: [...SCALP.legs, ...SCALP.legs] })).toBeNull();
     expect(contractOf({ underlying: "AA", legs: [] })).toBeNull();
   });

@@ -3,8 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IronFlyForm, type IronFlyFormValues } from "./IronFlyForm.js";
 
-const fill = (label: string, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+/** Types into a field and leaves it, as a person does: the date fields commit on blur. */
+const fill = (label: string, value: string) => {
+  const field = screen.getByLabelText(label);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+};
 
 /** The sample fly, priced leg by leg: short 50 straddle, wings 45 / 58, 4 lots. */
 function priceTheSampleFly() {
@@ -196,6 +200,15 @@ describe("IronFlyForm", () => {
     expect(screen.getByText(/every leg needs a strike, a size and an entry price/i)).toBeTruthy();
   });
 
+  it("refuses to save while Closed doesn't read", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    fill("Closed", "9/10");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("Fix Closed first.")).toBeTruthy();
+  });
+
   it("starts from an existing trade when editing", () => {
     setup({
       underlying: "ACME",
@@ -264,7 +277,7 @@ describe("IronFlyForm with an option chain", () => {
     setup(undefined, { chain: M_CHAIN });
     fill("Underlying", "M");
     await waitFor(() => expect(isSelect("Expiry")).toBe(true));
-    expect(options("Expiry")[1]).toMatch(/^Oct 2 · Fri · \d+d$/);
+    expect(options("Expiry")[1]).toMatch(/^2 Oct · Fri · \d+d$/);
     fill("Expiry", "2099-10-02");
     expect(options("Short call strike")).toEqual(["—", "20", "21", "22", "22.5", "23", "26"]);
   });
@@ -360,7 +373,7 @@ describe("IronFlyForm with an option chain", () => {
     await waitFor(() =>
       expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/chains/NVDA"))).toBe(true),
     );
-    expect(screen.queryByRole("option", { name: /^Oct 2/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: /^2 Oct/ })).toBeNull();
   });
 
   it("asks for Opened before Expiry, since the listed expiries start from the open date", async () => {

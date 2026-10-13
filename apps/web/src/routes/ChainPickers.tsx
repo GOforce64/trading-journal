@@ -1,3 +1,4 @@
+import { dayText, weekdayOfDate } from "@tj/core";
 export interface Expiration {
   date: string;
   expired: boolean;
@@ -5,15 +6,12 @@ export interface Expiration {
 }
 
 const DAY = 86_400_000;
-const MONTH_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
 const midnight = (date: string) => Date.parse(`${date}T00:00:00Z`);
 
-/** "Oct 2 · Fri · 6d", counting days from `from` (the open date); "… · expired" once it has passed. */
+/** "2 Oct · Fri · 6d", counting days from `from` (the open date); "… · expired" once it has passed. */
 export function expiryLabel(expiration: Expiration, from: string): string {
-  const at = new Date(midnight(expiration.date));
   const days = Math.round((midnight(expiration.date) - midnight(from)) / DAY);
-  return `${MONTH_DAY.format(at)} · ${WEEKDAY.format(at)} · ${expiration.expired ? "expired" : `${days}d`}`;
+  return `${dayText(expiration.date)} · ${weekdayOfDate(expiration.date)} · ${expiration.expired ? "expired" : `${days}d`}`;
 }
 
 /** The listed strike closest to the stock's price, for the (ATM) hint. */

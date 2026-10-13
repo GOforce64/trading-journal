@@ -143,7 +143,7 @@ describe("Analytics filters", () => {
     rerender(<Analytics search={{ from: "2026-09-04", to: "2026-09-08" }} onSearch={onSearch} />);
     await waitFor(() => expect(kpi("net")).toContain("-$20.00"));
     expect((screen.getByLabelText("Dates") as HTMLSelectElement).value).toBe("custom");
-    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("2026-09-04");
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("04/09/2026");
   });
 
   it("filters to one ticker", async () => {
@@ -272,7 +272,7 @@ describe("Analytics Overview", () => {
     expect(money.getByText("Before fees").nextSibling?.nextSibling?.textContent).toBe("+$92.00");
     expect(money.getByText("Fees").nextSibling?.nextSibling?.textContent).toBe("-$12.00");
     fireEvent.click(money.getByRole("button", { name: "BB" }));
-    expect(onOpenTrade).toHaveBeenCalledWith("b");
+    expect(onOpenTrade).toHaveBeenCalledWith("b", { kind: "ids", ids: ["b"], label: "Largest losses" });
     expect(money.getByText("kept −100%")).toBeTruthy();
   });
 

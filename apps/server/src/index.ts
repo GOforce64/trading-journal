@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
+import type { Server } from "node:http";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -8,6 +9,7 @@ import { type AlpacaKeys, checkAlpacaKeys } from "@tj/market-data";
 import { createApp } from "./app.js";
 import { dataPaths, readSecrets, resolveDataDir } from "./config.js";
 import { createMarketData } from "./marketData.js";
+import { stopWhenIdle } from "./stop.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../packages/db/migrations", import.meta.url));
 const WEB_DIST = fileURLToPath(new URL("../../web/dist", import.meta.url));
@@ -31,6 +33,8 @@ try {
 }
 const market = createMarketData(keys);
 
+let server: Server | undefined;
+
 const app = createApp({
   db: openDatabase(paths.dbFile),
   webDir,
@@ -46,9 +50,14 @@ const app = createApp({
   },
   // Read on every sync, so saving in Settings applies at once; a broken file means not set up.
   ibkrConfig: () => readSecrets(paths.secretsFile, "ibkr").ibkr ?? null,
+  pid: process.pid,
+  shutdown: () => {
+    console.log("Stopping: the requests in flight finish first.");
+    if (server) stopWhenIdle(server, () => process.exit(0));
+  },
 });
 
-serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {
+server = serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {
   console.log(`Trading journal on http://127.0.0.1:${PORT}`);
   console.log(`Data directory: ${paths.dataDir}`);
   console.log(
@@ -57,4 +66,4 @@ serve({ fetch: app.fetch, port: PORT, hostname: "127.0.0.1" }, () => {
       : "Market data: off (add an Alpaca key in Settings)",
   );
   if (!webDir) console.log("UI not built yet — run `pnpm build`, or use `pnpm dev:web`.");
-});
+}) as Server;

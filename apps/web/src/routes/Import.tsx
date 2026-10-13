@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { dayTimeText } from "@tj/core";
 import { useState } from "react";
 import { api } from "../api.js";
 import { Money, Panel } from "../components/ui.js";
@@ -31,17 +32,7 @@ interface CommitResult {
 const NOT_AN_EXPORT =
   "That isn't the snippet's output. Run the snippet on oQuants again and paste what it copied.";
 
-const when = (epochMs: number | null) =>
-  epochMs == null
-    ? "—"
-    : new Date(epochMs).toLocaleString("en-US", {
-        timeZone: "America/New_York",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
+const when = (epochMs: number | null) => (epochMs == null ? "—" : dayTimeText(epochMs));
 
 const STATUS_LABEL = { new: "NEW", existing: "HAVE", skipped: "SKIP" } as const;
 

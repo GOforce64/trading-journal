@@ -1,4 +1,5 @@
 import type * as Charts from "lightweight-charts";
+import type { ISeriesPrimitive, Time } from "lightweight-charts";
 
 /** What a chart asked of one series. */
 export interface FakeSeries {
@@ -32,6 +33,8 @@ export const library = {
   crosshair: null as ((param: { time?: unknown }) => void) | null,
   /** Every chart.applyOptions call, in order. */
   chartOptions: [] as Record<string, unknown>[],
+  /** The primitives attached to a series, such as the session backgrounds. */
+  primitives: [] as { type: string; primitive: ISeriesPrimitive<Time> }[],
 };
 
 export function resetLibrary(): void {
@@ -44,13 +47,14 @@ export function resetLibrary(): void {
   library.markers = [];
   library.crosshair = null;
   library.chartOptions = [];
+  library.primitives = [];
 }
 
 /** The real module with `createChart` and `createSeriesMarkers` replaced by recorders. */
 export function fakeLibrary(real: typeof Charts): typeof Charts {
   const createChart = () => {
     library.charts++;
-    return {
+    const chart = {
       addSeries: (definition: { type?: string }, options: Record<string, unknown> = {}) => {
         const series: FakeSeries = {
           type: definition.type ?? "?",
@@ -82,6 +86,10 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
           removePriceLine: (handle: { record: Record<string, unknown> }) => {
             series.priceLines = series.priceLines.filter((each) => each !== handle.record);
           },
+          attachPrimitive: (primitive: ISeriesPrimitive<Time>) => {
+            library.primitives.push({ type: series.type, primitive });
+            primitive.attached?.({ chart, requestUpdate: () => {} } as never);
+          },
         };
       },
       applyOptions: (options: Record<string, unknown>) => {
@@ -91,7 +99,8 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
       priceScale: () => ({ applyOptions: () => {} }),
       timeScale: () => ({
         coordinateToLogical: (x: number) => x / BAR_PX,
-        logicalToCoordinate: (logical: number) => logical * BAR_PX,
+        // As Lightweight Charts does, a fractional logical index gives 0 (its indexToCoordinate wants an integer).
+        logicalToCoordinate: (logical: number) => (Number.isInteger(logical) ? logical * BAR_PX : 0),
         setVisibleLogicalRange: (range: unknown) => {
           library.ranges.push(range);
         },
@@ -109,6 +118,7 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
         library.removed++;
       },
     };
+    return chart;
   };
   const createSeriesMarkers = () => ({
     setMarkers: (markers: unknown[]) => {
@@ -125,3 +135,35 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
 /** The series of one kind, in the order the chart added them. */
 export const seriesOf = (type: string): FakeSeries[] =>
   library.series.filter((series) => series.type === type);
+
+/** One fillRect a primitive's background made, in bitmap pixels. */
+export interface Fill {
+  color: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** What a primitive paints in the background layer of the fake's pane, at a pixel ratio. */
+export function paintedBackground(primitive: ISeriesPrimitive<Time>, pixelRatio = 1): Fill[] {
+  const fills: Fill[] = [];
+  const context = {
+    fillStyle: "",
+    fillRect(x: number, y: number, width: number, height: number) {
+      fills.push({ color: String(context.fillStyle), x, y, width, height });
+    },
+  };
+  const target = {
+    useBitmapCoordinateSpace: (draw: (scope: unknown) => void) =>
+      draw({
+        context,
+        mediaSize: { width: PANE.width, height: PANE.height },
+        bitmapSize: { width: PANE.width * pixelRatio, height: PANE.height * pixelRatio },
+        horizontalPixelRatio: pixelRatio,
+        verticalPixelRatio: pixelRatio,
+      }),
+  };
+  for (const view of primitive.paneViews?.() ?? []) view.renderer()?.drawBackground?.(target as never);
+  return fills;
+}

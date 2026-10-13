@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { scalpRisk } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { listOf } from "../nav/tradeList.js";
 import { TradeDetail } from "./TradeDetail.js";
 
 // The charts have their own tests; here they're a placeholder that shows where they go.
@@ -154,6 +155,9 @@ vi.mock("../missed/MissedWorkspace.js", () => ({
 
 function stubTrade(body: unknown, quotes: Record<string, unknown> = openQuotes, available = true) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    // The review queue is a list, as the server sends it.
+    if (String(input).includes("review=pending"))
+      return new Response("[]", { headers: { "content-type": "application/json" } });
     const payload = String(input).includes("/api/option-quotes") ? { quotes, available } : body;
     return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
   });
@@ -175,6 +179,57 @@ function renderDetail(onOpenTrade?: (id: string) => void) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("TradeDetail", () => {
+  const renderInList = () =>
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TradeDetail tradeId="t1" list={listOf([{ id: "p" }, { id: "t1" }, { id: "n" }], "Journal")} />
+      </QueryClientProvider>,
+    );
+
+  it("says where the trade sits in the list it was opened from", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderInList();
+    expect((await screen.findByTestId("trade-nav")).textContent).toContain("2 of 3 · Journal");
+  });
+
+  it("says a trade deleted since its list was opened is gone, and keeps the list's place", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/api/trades/t1")
+          ? new Response(JSON.stringify({ error: "not found" }), { status: 404 })
+          : new Response("[]", { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    renderInList();
+    expect(await screen.findByText("This trade isn't in the journal any more.")).toBeTruthy();
+    expect(screen.getByTestId("trade-nav").textContent).toContain("2 of 3 · Journal");
+  });
+
+  it("says a trade that fails to load for another reason couldn't load, not that it's gone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/api/trades/t1")
+          ? new Response(JSON.stringify({ error: "boom" }), { status: 500 })
+          : new Response("[]", { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    // The page retries a failure other than 404; retrying at once keeps the test quick.
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } })}>
+        <TradeDetail tradeId="t1" />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Could not load this trade: load failed: 500",
+    );
+    expect(screen.queryByText("This trade isn't in the journal any more.")).toBeNull();
+  });
+
   it("puts the review beside a fly's legs", async () => {
     vi.stubGlobal(
       "fetch",
@@ -182,6 +237,17 @@ describe("TradeDetail", () => {
     );
     renderDetail();
     expect((await screen.findByTestId("review-panel")).textContent).toBe("side");
+  });
+
+  it("writes each leg's expiry day first", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    const row = await screen.findByTestId(`leg-row-${trade.legs[0]?.id}`);
+    expect(row.textContent).toContain("16 Oct");
+    expect(row.textContent).not.toContain("10-16");
   });
 
   it("shows the headline metrics and marks the broken wing", async () => {
@@ -260,7 +326,7 @@ describe("TradeDetail", () => {
     const note = screen.getByTestId("estimate-note").textContent;
     expect(note).toContain("+$420.00 before fees");
     expect(note).toContain("+$415.00 after the $5.00 fees entered so far");
-    expect(note).toContain("Sep 25, 03:59 PM ET");
+    expect(note).toContain("25 Sep 15:59 ET");
     expect(note).toContain("never saved");
   });
 
@@ -462,7 +528,7 @@ describe("TradeDetail move tiles", () => {
     expect(iv).toContain("crush 46 pts · from your fills");
     const stock = screen.getByTestId("tile-stock").textContent;
     expect(stock).toContain("$21.66 / $20.51");
-    expect(stock).toContain("Alpaca, Sep 9 15:54 → Sep 10 15:44 ET");
+    expect(stock).toContain("Alpaca, 9 Sep 15:54 → 10 Sep 15:44 ET");
   });
 
   it("shows a typed value as typed, beside the computed one", async () => {
@@ -498,7 +564,7 @@ describe("TradeDetail move tiles", () => {
   });
 
   it("offers no Fill in missing for a price dated on a weekend, which can never fill", async () => {
-    // Opened on Saturday Sep 26 2026 (typed in by hand): there's no session to read a price from.
+    // Opened on Saturday 26 Sep 2026 (typed in by hand): there's no session to read a price from.
     const saturday = {
       ...noPrices,
       openedAt: Date.UTC(2026, 8, 26, 16, 0),
@@ -653,6 +719,9 @@ function stubSynced(
         headers: { "content-type": "application/json" },
       });
     }
+    // The review queue is a list, as the server sends it.
+    if (url.includes("review=pending"))
+      return new Response("[]", { headers: { "content-type": "application/json" } });
     const payload = url.includes("/api/ibkr/status")
       ? {
           configured: true,
@@ -695,7 +764,7 @@ describe("TradeDetail for a scalp", () => {
   it("shows the scalp's own tiles", async () => {
     stubSynced(nvda);
     renderDetail();
-    expect((await screen.findByTestId("tile-contract")).textContent).toContain("NVDA 232.5C · exp Sep 28");
+    expect((await screen.findByTestId("tile-contract")).textContent).toContain("NVDA 232.5C · exp 28 Sep");
     expect(screen.getByTestId("tile-size").textContent).toContain("2 contracts");
     expect(screen.getByTestId("tile-entry-exit").textContent).toContain("1.06 → 1.295");
     expect(screen.getByTestId("tile-held").textContent).toContain("15 min");
@@ -716,7 +785,7 @@ describe("TradeDetail for a scalp", () => {
     renderDetail();
     const rows = await screen.findAllByTestId(/^fill-row-/);
     expect(rows).toHaveLength(4);
-    expect(rows[0]?.textContent).toContain("Sep 28 09:31:05");
+    expect(rows[0]?.textContent).toContain("28 Sep 09:31:05");
     expect(rows[0]?.textContent).toContain("BUY");
     expect(rows[3]?.textContent).toContain("SELL");
     expect(rows[3]?.textContent).toContain("1.15");

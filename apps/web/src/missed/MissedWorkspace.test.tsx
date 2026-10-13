@@ -298,7 +298,7 @@ describe("MissedWorkspace", () => {
     const { patches } = setup(missedTrade({}, { exitPrice: null }));
     act(() => editing().onDropPoint?.("entry", nyWallClock("2026-09-29", 15 * 60), 177.1));
     const time = screen.getByLabelText("Entry time");
-    await waitFor(() => expect(time.parentElement?.textContent).toContain("Place it on Sep 30"));
+    await waitFor(() => expect(time.parentElement?.textContent).toContain("Place it on 30 Sep"));
     expect(patches).toEqual([]);
   });
 

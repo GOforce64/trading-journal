@@ -6,7 +6,8 @@ import { DailyChart } from "./DailyChart.js";
 import { IntradayChart } from "./IntradayChart.js";
 import { type ChartTrade, dailyModel, intradayModel } from "./model.js";
 import { DEFAULT_PREFS } from "./prefs.js";
-import { BAR_PX, library, resetLibrary, seriesOf, yOf } from "./testing.js";
+import { COLORS } from "./style.js";
+import { BAR_PX, library, paintedBackground, resetLibrary, seriesOf, yOf } from "./testing.js";
 
 vi.mock("lightweight-charts", async (importOriginal) => {
   const { fakeLibrary } = await import("./testing.js");
@@ -34,17 +35,22 @@ const MODEL = intradayModel(BARS, TRADE, 3, DEFAULT_PREFS.emaLengths);
 beforeEach(() => resetLibrary());
 
 describe("IntradayChart", () => {
-  it("draws candles, lighter outside 09:30–16:00, with volume, EMAs, VWAP and the four levels", () => {
+  it("draws candles in full colour, pre-market and after-hours shaded behind them, with volume, EMAs, VWAP and the four levels", () => {
     render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} />);
     expect(library.charts).toBe(1);
     const [candles] = seriesOf("Candlestick");
     const drawn = candles?.data as { time: number; color?: string }[];
     expect(drawn).toHaveLength(MODEL.candles.length);
     expect(drawn[0]?.time).toBe(nyWallClock("2026-09-25", 570) / 1000);
-    const premarket = drawn.find((candle) => candle.time === nyWallClock(DAY, 240) / 1000);
-    expect(premarket?.color).toBe("rgba(38, 166, 154, 0.45)");
-    const open = drawn.find((candle) => candle.time === nyWallClock(DAY, 570) / 1000);
-    expect(open?.color).toBeUndefined();
+    // Full colour in every session; the background alone marks pre-market and after-hours.
+    expect(drawn.every((candle) => candle.color === undefined)).toBe(true);
+    // MODEL: 25 Sep 09:30–16:00 is 130 regular 3m candles, then 28 Sep 04:00–20:00: 110 pre, 130 regular, 80 post.
+    const [bands] = library.primitives;
+    expect(bands?.type).toBe("Candlestick");
+    expect(paintedBackground(bands?.primitive as never)).toEqual([
+      { color: COLORS.preBand, x: 129.5 * BAR_PX, y: 0, width: 110 * BAR_PX, height: 400 },
+      { color: COLORS.postBand, x: 369.5 * BAR_PX, y: 0, width: 80 * BAR_PX, height: 400 },
+    ]);
     expect(seriesOf("Histogram")[0]?.data).toHaveLength(MODEL.candles.length);
     const lines = seriesOf("Line");
     expect(lines.map((line) => line.options.title ?? null)).toEqual([
@@ -355,6 +361,26 @@ describe("IntradayChart's option view", () => {
   ];
   const OPTION = intradayModel(OPTION_BARS, TRADE, 1, DEFAULT_PREFS.emaLengths, { slots: true });
   const at = (minute: number) => nyWallClock(DAY, minute) / 1000;
+
+  it("has no session backgrounds, also when the same chart switches over from the stock view", () => {
+    // Options trade a quarter-hour past the close, so the option view can hold after-hours candles too.
+    const late = intradayModel(
+      [...OPTION_BARS, { t: nyWallClock(DAY, 965), o: 1.3, h: 1.3, l: 1.2, c: 1.25, v: 5 }],
+      TRADE,
+      1,
+      DEFAULT_PREFS.emaLengths,
+      { slots: true },
+    );
+    expect(late.candles.at(-1)?.session).toBe("post");
+    const { rerender } = render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} />);
+    const bands = library.primitives[0]?.primitive as never;
+    expect(paintedBackground(bands)).toHaveLength(2);
+    rerender(
+      <IntradayChart model={late} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
+    );
+    expect(library.charts).toBe(1);
+    expect(paintedBackground(bands)).toEqual([]);
+  });
 
   it("draws empty minutes as whitespace, so the candles keep their place in time", () => {
     render(

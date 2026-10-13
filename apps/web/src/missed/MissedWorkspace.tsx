@@ -1,5 +1,8 @@
 import {
+  clockText,
   type Direction,
+  dayText,
+  dayTimeText,
   GRADES,
   type MissedLevels,
   missedRisk,
@@ -14,7 +17,6 @@ import { barRange, useMinuteBars } from "../chart/bars.js";
 import { contextMarks } from "../chart/context.js";
 import type { ChartEditing, PointMark } from "../chart/drag.js";
 import type { PriceLine } from "../chart/IntradayChart.js";
-import { clockText } from "../chart/option.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { Chip, Panel } from "../components/ui.js";
 import { type TradePatchBody, useSaveTrade } from "../review/data.js";
@@ -22,7 +24,7 @@ import { SetupPicker, TagChips } from "../review/Pickers.js";
 import { useAutoFillPrices, useRangeProblem } from "../review/prices.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
 import { useDayTrades, useDeleteMissed } from "./data.js";
-import { dayText, excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
+import { excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
 
 const LABEL = "w-14 shrink-0 text-[10px] text-muted uppercase tracking-wider";
 const INPUT =
@@ -295,6 +297,7 @@ export function MissedWorkspace({
   const place = (what: Exclude<Placing, null>, name: string) => (
     <button
       type="button"
+      data-key-target={`place-${what}`}
       onClick={() => setPlacing(what)}
       className={`${SMALL_BUTTON} ${placing === what ? "border-accent text-fg" : ""}`}
     >
@@ -324,12 +327,7 @@ export function MissedWorkspace({
         </span>
         {trade.excluded && <Chip tone="excluded">EXCLUDED</Chip>}
         <span className="num text-muted">
-          {new Date(trade.openedAt).toLocaleDateString("en-US", {
-            timeZone: "America/New_York",
-            month: "short",
-            day: "numeric",
-          })}
-          , {clockText(trade.openedAt)}
+          {dayTimeText(trade.openedAt)}
           {trade.closedAt != null ? ` → ${clockText(trade.closedAt)}` : ""}
         </span>
         <span
@@ -515,6 +513,7 @@ export function MissedWorkspace({
               <textarea
                 key={trade.id}
                 aria-label="Notes"
+                data-key-target="notes"
                 placeholder="Notes…"
                 defaultValue={trade.notes ?? ""}
                 onBlur={(event) => {
@@ -530,6 +529,7 @@ export function MissedWorkspace({
                 />
                 Exclude from stats
               </label>
+              <span className="text-[10px] text-muted">Press ? for shortcuts</span>
             </div>
             {save.error && !refused && <p className="text-down">Couldn't save: {save.error.message}</p>}
             {deletion.error && <p className="text-down">Couldn't delete: {deletion.error.message}</p>}

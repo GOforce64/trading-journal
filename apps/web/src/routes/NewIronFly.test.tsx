@@ -3,8 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewIronFly } from "./NewIronFly.js";
 
-const fill = (label: string, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+/** Types into a field and leaves it, as a person does: the date fields commit on blur. */
+const fill = (label: string, value: string) => {
+  const field = screen.getByLabelText(label);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+};
 
 function setup() {
   const client = new QueryClient({

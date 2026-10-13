@@ -287,11 +287,11 @@ describe("GET /api/bars/option/:contract", () => {
     });
   });
 
-  it("never asks for days before Jan 18, 2024", async () => {
+  it("never asks for days before 18 Jan 2024", async () => {
     const { fetchBars, get } = setupOption(async () => []);
     expect((await get("from=2023-12-01&to=2023-12-10")).body).toMatchObject({
       bars: [],
-      unavailable: { reason: "too_old", message: "Alpaca's option bars start on Jan 18, 2024." },
+      unavailable: { reason: "too_old", message: "Alpaca's option bars start on 18 Jan 2024." },
     });
     expect(fetchBars).not.toHaveBeenCalled();
     await get("from=2024-01-10&to=2024-01-20");

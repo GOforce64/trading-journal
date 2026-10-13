@@ -68,6 +68,7 @@ export function ReviewPanel({
     <textarea
       key={trade.id}
       aria-label="Notes"
+      data-key-target="notes"
       placeholder="Notes…"
       defaultValue={trade.notes ?? ""}
       onBlur={(event) => {
@@ -98,6 +99,7 @@ export function ReviewPanel({
           {emotion}
           {notes}
           {exclude}
+          <span className="text-[10px] text-muted">Press ? for shortcuts</span>
         </div>
         {problem}
       </Panel>
@@ -119,6 +121,7 @@ export function ReviewPanel({
       </div>
       <div className="mt-2 flex items-center gap-2 border-line border-t pt-2">
         {exclude}
+        <span className="text-[10px] text-muted">Press ? for shortcuts</span>
         {/* With setup, grade and stop set the scalp is out of the queue either way, so the button would do nothing. */}
         {trade.review && trade.review.missing.length === 0 && (
           <span className="ml-auto text-[11px] text-muted">Reviewed: setup, grade and stop are set.</span>

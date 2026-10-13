@@ -1,4 +1,4 @@
-import { type LevelBasis, nyClock, occSymbol } from "@tj/core";
+import { clockText, dayText, type LevelBasis, occSymbol } from "@tj/core";
 
 /** Which intraday chart a scalp's page shows (premium-chart spec §6.1). */
 export type ChartView = "stock" | "option";
@@ -23,21 +23,11 @@ export function contractOf(trade: ContractTrade): string | null {
   });
 }
 
-const EXPIRY = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
-
 /** The contract as a trader reads it: "NVDA 232.5C Sep 26". */
 export function contractName(trade: ContractTrade): string {
   const leg = trade.legs[0];
   if (!leg) return trade.underlying;
-  return `${trade.underlying} ${leg.strike}${leg.right} ${EXPIRY.format(new Date(`${leg.expiry}T00:00:00Z`))}`;
-}
-
-const pad = (value: number) => String(value).padStart(2, "0");
-
-/** An instant's minute in New York: "09:52". */
-export function clockText(t: number): string {
-  const { minute } = nyClock(t);
-  return `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
+  return `${trade.underlying} ${leg.strike}${leg.right} ${dayText(leg.expiry)}`;
 }
 
 /**

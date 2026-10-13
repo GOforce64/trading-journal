@@ -42,7 +42,7 @@ Scalps are reviewed on the chart. The trade page must show what the user saw on 
 | What's on the chart | EMAs, VWAP, premarket and prior-day levels, and volume (the user's TradingView layout). |
 | EMA lengths | 8, 20, 50 and 167, editable in Settings. |
 | Timeframe | Opens on **3m**; "mostly 3m, but also sometimes the 5m". 1m, 2m, 5m, 10m, 15m, 30m and 1h are one click away. |
-| Hours | **Full extended hours**, 04:00–20:00 ET. |
+| Hours | **Full extended hours**, 04:00–20:00 ET. Pre-market is shaded gold and after-hours purple (session-backgrounds spec, 13 Oct 2026). |
 | Zoom | "Let me zoom in so I don't see all the candles at all times, only when I need them." It opens on the trade; the rest is a scroll or pinch away. |
 | Daily chart | "A daily chart on the side of the scalp 3m chart": a second chart beside the intraday one, not only a timeframe option. |
 | Prior-day levels | "Prior day high and lows overlaid on the 3m" (PD high and PD low on the intraday chart), with PM high and PM low. |
@@ -256,7 +256,7 @@ On a copy of the real journal, with the user's key, and this morning's NVDA 232.
 - **SPX:** "No stock bars for SPX."
 - **Screenshots at 1280 and 1024 px:**
   - The trade opens on 3m, zoomed on 08:30–10:45, with "B 2 @ 1.06" and "S 2 @ 1.295".
-  - The EMAs, VWAP, and the labelled PM and PD lines are drawn. The premarket candles are lighter.
+  - The EMAs, VWAP, and the labelled PM and PD lines are drawn. Pre-market and after-hours are shaded behind full-colour candles (since 13 Oct 2026; at first, the premarket candles were lighter).
   - The daily chart sits beside the intraday chart at 1280 and below it at 1024. 5m, zooming out, Fit trade and the hover legend all work.
   - AA's iron fly (Jul 16–17) shows "Open" and "Close" markers.
   - Settings has the Chart panel. Without a key, the page reads "Add your Alpaca key in Settings to see the chart."

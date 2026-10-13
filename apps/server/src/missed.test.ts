@@ -6,7 +6,7 @@ const JSON_HEADERS = { "content-type": "application/json", ...LOCAL };
 const ENTRY = nyWallClock("2026-09-30", 9 * 60 + 41);
 const EXIT = nyWallClock("2026-09-30", 9 * 60 + 58);
 
-/** A missed NVDA long marked at 09:41 on Sep 30, with only its entry. */
+/** A missed NVDA long marked at 09:41 on 30 Sep, with only its entry. */
 const missed = (overrides: Record<string, unknown> = {}) => ({
   strategy: "scalp",
   book: "missed",
@@ -89,7 +89,7 @@ describe("missed trades through the trade routes", () => {
     });
     expect(late).toMatchObject({
       status: 400,
-      body: { message: "The exit must be on the entry's day, Sep 30" },
+      body: { message: "The exit must be on the entry's day, 30 Sep" },
     });
   });
 

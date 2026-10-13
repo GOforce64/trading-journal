@@ -1,6 +1,7 @@
 import {
   addDays,
   closedTrades,
+  dayTimeText,
   isTradingDay,
   missedSummary,
   nyDate,
@@ -12,19 +13,12 @@ import { useAllTrades } from "../analytics/data.js";
 import { rText } from "../analytics/format.js";
 import { type Kpi, KpiStrip } from "../analytics/KpiStrip.js";
 import type { TradeView } from "../api.js";
+import { DateField } from "../components/DateField.js";
 import { Chip, Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
+import { listOf, type OpenTrade } from "../nav/tradeList.js";
 import { useSetups, useTags } from "../review/data.js";
 import { lastSession, useMissedTrades } from "./data.js";
-
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
 
 /** The page's periods, by the entry's New York date (missed-trades spec §6.1). */
 const PERIODS = [
@@ -66,7 +60,7 @@ export function MissedPage({
   /** The URL's period; without `onPeriod` the page keeps its own. */
   period?: PeriodId;
   onPeriod?: (period: PeriodId) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
   onNewMissed?: (symbol: string, date: string) => void;
 }) {
   const [own, setOwn] = useState<PeriodId>(chosen ?? "30");
@@ -193,15 +187,13 @@ export function MissedPage({
                   <tr
                     key={trade.id}
                     tabIndex={0}
-                    onClick={() => onOpenTrade?.(trade.id)}
+                    onClick={() => onOpenTrade?.(trade.id, listOf(shown, "Missed"))}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") onOpenTrade?.(trade.id);
+                      if (event.key === "Enter") onOpenTrade?.(trade.id, listOf(shown, "Missed"));
                     }}
                     className="cursor-pointer border-line border-t hover:bg-[#1c2130] focus:bg-[#1c2130] focus:outline-none"
                   >
-                    <td className="num whitespace-nowrap py-1 text-muted">
-                      {ET.format(new Date(trade.openedAt))}
-                    </td>
+                    <td className="num whitespace-nowrap py-1 text-muted">{dayTimeText(trade.openedAt)}</td>
                     <td className="text-fg">{trade.underlying}</td>
                     <td>
                       <span
@@ -292,16 +284,15 @@ function NewMissedPopover({
             className="num w-24 rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent"
           />
         </label>
-        <label className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="w-12 text-[10px] text-muted uppercase tracking-wider">Date</span>
-          <input
-            aria-label="Date"
-            type="date"
+          <DateField
+            label="Date"
             value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="num rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent"
+            onChange={setDate}
+            className="rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent"
           />
-        </label>
+        </div>
         {!trading && date !== "" && <p className="text-[11px] text-down">Not a trading day</p>}
         <div className="mt-1 flex justify-end gap-2">
           <button

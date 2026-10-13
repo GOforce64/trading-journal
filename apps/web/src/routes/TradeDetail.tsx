@@ -1,14 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, type OptionQuote, pctKept, returnOnCost, round2 } from "@tj/core";
+import {
+  closeEstimate,
+  dayText,
+  dayTimeText,
+  type OptionQuote,
+  pctKept,
+  returnOnCost,
+  round2,
+} from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct, premiumText, Tile, usd } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes } from "../market.js";
 import { MissedWorkspace } from "../missed/MissedWorkspace.js";
+import { TradeNavLine } from "../nav/TradeNavLine.js";
+import type { OpenTrade, TradeList } from "../nav/tradeList.js";
+import { useTradeNav } from "../nav/useTradeNav.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
+import { useTradeKeys } from "../review/useTradeKeys.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
@@ -29,14 +41,6 @@ const legPnl = (leg: {
 }) =>
   leg.closePrice == null ? null : round2(leg.quantity * leg.multiplier * (leg.closePrice - leg.openPrice));
 
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
 const NO_QUOTES = new Map<string, OptionQuote>();
 
 export function TradeDetail({
@@ -46,33 +50,69 @@ export function TradeDetail({
   onOpenTrade,
   onDeleted,
   onNewMissed,
+  list = null,
 }: {
   tradeId: string;
   onEdit?: (id: string) => void;
   onSettle?: (id: string) => void;
-  /** Opens another trade: the queue bar's Next and Prev. */
-  onOpenTrade?: (id: string) => void;
+  /** Opens another trade: the queue bar's Next and Prev, and J and K. */
+  onOpenTrade?: OpenTrade;
+  /** The list the trade was opened from (spec §5); J and K step through it. */
+  list?: TradeList | null;
   /** A missed trade was deleted from its page (missed-trades spec §6.3). */
   onDeleted?: () => void;
   /** + Missed on a scalp's chart (missed-trades spec §6.4). */
   onNewMissed?: (symbol: string, date: string) => void;
 }) {
-  const { data: trade, isLoading } = useQuery({
+  const {
+    data: trade,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["trade", tradeId],
     queryFn: async (): Promise<TradeDetailView> => {
       const res = await api.api.trades[":id"].$get({ param: { id: tradeId } });
       if (!res.ok) throw new Error(`load failed: ${res.status}`);
       return res.json();
     },
+    // A trade that's gone stays gone: no retries before saying so (spec §9).
+    retry: (failures, error) => !error.message.endsWith(": 404") && failures < 3,
   });
 
   const today = todayNy();
   const { data: optionQuotes } = useOptionQuotes(trade && isOpen(trade) ? openContracts(trade, today) : []);
 
-  if (isLoading || !trade) return <p className="text-muted">Loading…</p>;
+  const nav = useTradeNav(tradeId, trade, list);
+  const keys = useTradeKeys({
+    trade,
+    nav,
+    onOpenTrade,
+    chart: trade != null && (trade.strategy === "scalp" || trade.book === "missed"),
+  });
+  if (!trade) {
+    if (isLoading) return <p className="text-muted">Loading…</p>;
+    // A trade deleted since its list was opened (spec §9): J and K still go on. Any other failure says so.
+    return (
+      <div className="flex flex-col gap-3">
+        <TradeNavLine nav={nav} error={keys.error} />
+        {error && !error.message.endsWith(": 404") ? (
+          <p role="alert" className="text-down">
+            Could not load this trade: {error.message}
+          </p>
+        ) : (
+          <p className="text-muted">This trade isn't in the journal any more.</p>
+        )}
+      </div>
+    );
+  }
   // A missed trade has its own page: the chart and its levels, and no fills or P&L (missed-trades spec §6.3).
   if (trade.book === "missed" && trade.missed) {
-    return <MissedWorkspace trade={trade} onOpenTrade={onOpenTrade} onDeleted={onDeleted} />;
+    return (
+      <div className="flex flex-col gap-3">
+        <TradeNavLine nav={nav} error={keys.error} />
+        <MissedWorkspace trade={trade} onOpenTrade={onOpenTrade} onDeleted={onDeleted} />
+      </div>
+    );
   }
   const metrics = trade.metrics;
   const detail = trade.ironFly;
@@ -90,6 +130,7 @@ export function TradeDetail({
 
   return (
     <div className="flex flex-col gap-3">
+      <TradeNavLine nav={nav} error={keys.error} />
       <header className="flex flex-wrap items-center gap-2">
         <h1 className="num font-semibold text-[16px]">{trade.underlying}</h1>
         <span className="text-muted">{trade.underlyingName}</span>
@@ -97,8 +138,8 @@ export function TradeDetail({
         <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>
         {trade.excluded && <Chip tone="excluded">EXCLUDED</Chip>}
         <span className="num text-muted">
-          {ET.format(new Date(trade.openedAt))}
-          {trade.closedAt ? ` → ${ET.format(new Date(trade.closedAt))}` : ""}
+          {dayTimeText(trade.openedAt)}
+          {trade.closedAt ? ` → ${dayTimeText(trade.closedAt)}` : ""}
         </span>
         <span className="ml-auto text-[18px]">
           {estimate ? (
@@ -233,7 +274,7 @@ export function TradeDetail({
                     </td>
                     <td>{leg.right === "C" ? "Call" : "Put"}</td>
                     <td>{leg.strike.toFixed(2)}</td>
-                    <td>{leg.expiry.slice(5)}</td>
+                    <td>{dayText(leg.expiry)}</td>
                     <td className="text-right">{leg.quantity}</td>
                     <td className="text-right">{premiumText(leg.openPrice)}</td>
                     <td className="text-right">

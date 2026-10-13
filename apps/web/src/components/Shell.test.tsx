@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { Shell } from "./Shell.js";
 
 const DESTINATIONS = [
@@ -15,6 +15,23 @@ const DESTINATIONS = [
 ];
 
 describe("Shell", () => {
+  it("offers the palette's Search button only when given a way to open it", () => {
+    const onSearch = vi.fn();
+    const { rerender } = render(
+      <Shell activePath="/" onSearch={onSearch}>
+        <p>page</p>
+      </Shell>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search · Ctrl K" }));
+    expect(onSearch).toHaveBeenCalledOnce();
+    rerender(
+      <Shell activePath="/">
+        <p>page</p>
+      </Shell>,
+    );
+    expect(screen.queryByRole("button", { name: "Search · Ctrl K" })).toBeNull();
+  });
+
   it("renders every primary nav destination and its children", () => {
     render(
       <Shell activePath="/journal">

@@ -50,7 +50,7 @@ export class BarsUnreachable extends Error {
 const NO_KEY = { reason: "no_key" as const, message: "Add your Alpaca key in Settings to see the chart." };
 const noBars = (symbol: string) => ({ reason: "no_bars" as const, message: `No stock bars for ${symbol}.` });
 
-const TOO_OLD = { reason: "too_old" as const, message: "Alpaca's option bars start on Jan 18, 2024." };
+const TOO_OLD = { reason: "too_old" as const, message: "Alpaca's option bars start on 18 Jan 2024." };
 const noOptionBars = (contract: string) => ({
   reason: "no_bars" as const,
   message: `No option bars for ${contract}.`,

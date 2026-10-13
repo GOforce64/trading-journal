@@ -6,12 +6,17 @@ import {
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
+import { useState } from "react";
 import { parseAnalyticsSearch, parseDashboardSearch } from "./analytics/search.js";
 import { Shell } from "./components/Shell.js";
+import { Stopped } from "./components/Stopped.js";
 import { Panel } from "./components/ui.js";
 import { useAutoSync, useIbkrSyncing } from "./ibkr.js";
+import { ShortcutsProvider } from "./keys/Shortcuts.js";
 import { MissedPage, parseMissedSearch } from "./missed/MissedPage.js";
 import { NewMissed } from "./missed/NewMissed.js";
+import { type OpenTrade, readTradeList, type TradeList } from "./nav/tradeList.js";
+import { Palette, usePaletteKey } from "./palette/Palette.js";
 import { usePendingReviews } from "./review/data.js";
 import { ComingSoon } from "./routes/ComingSoon.js";
 import { Dashboard } from "./routes/Dashboard.js";
@@ -25,16 +30,33 @@ import { Playbook } from "./routes/Playbook.js";
 import { Scalps } from "./routes/Scalps.js";
 import { Settings } from "./routes/Settings.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
+import { useStopped } from "./stopped.js";
 
+/** Once Stop the journal has stopped the server, only that shows (launcher spec §3.4). */
 function RootLayout() {
+  return useStopped() ? <Stopped /> : <Running />;
+}
+
+/** The app while its server runs. Its hooks unmount with it, so a stopped app makes no requests. */
+function Running() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   useAutoSync();
   const syncing = useIbkrSyncing();
   const toReview = usePendingReviews().data?.length ?? 0;
+  const [palette, setPalette] = useState(false);
+  usePaletteKey(() => setPalette((open) => !open));
   return (
-    <Shell activePath={pathname} syncing={syncing} toReview={toReview}>
-      <Outlet />
-    </Shell>
+    <ShortcutsProvider>
+      <Shell activePath={pathname} syncing={syncing} toReview={toReview} onSearch={() => setPalette(true)}>
+        <Outlet />
+      </Shell>
+      <Palette
+        open={palette}
+        onOpenChange={setPalette}
+        onOpenTrade={openTrade}
+        onGo={(href) => router.navigate({ href })}
+      />
+    </ShortcutsProvider>
   );
 }
 
@@ -47,7 +69,15 @@ const rootRoute = createRootRoute({
   ),
 });
 
-const openTrade = (id: string) => router.navigate({ to: "/trades/$id", params: { id } });
+// The list a trade was opened from rides in the history entry (spec §5): it survives a reload and Back.
+declare module "@tanstack/react-router" {
+  interface HistoryState {
+    tradeList?: TradeList;
+  }
+}
+
+const openTrade: OpenTrade = (id, list) =>
+  router.navigate({ to: "/trades/$id", params: { id }, state: { tradeList: list } });
 const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id }, search: {} });
 /** The missed trade's page replaces the new-trade page, so Back skips the empty chart. */
 const openCreatedMissed = (id: string) =>
@@ -137,11 +167,13 @@ const tradeDetailRoute = createRoute({
   path: "/trades/$id",
   component: function TradeDetailRoute() {
     const { id } = tradeDetailRoute.useParams();
+    const list = readTradeList(useRouterState({ select: (state) => state.location.state }));
     // Keyed by id: Next opens the next scalp with fresh fields, not the last one's typing.
     return (
       <TradeDetail
         key={id}
         tradeId={id}
+        list={list}
         onEdit={editTrade}
         onSettle={settleTrade}
         onOpenTrade={openTrade}

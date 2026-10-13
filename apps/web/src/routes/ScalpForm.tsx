@@ -1,5 +1,7 @@
 import { type PricedLeg, positionCash } from "@tj/core";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { DateField, unreadDates } from "../components/DateField.js";
+import { DateTimeField } from "../components/DateTimeField.js";
 import { Money, Panel, Pct, usd } from "../components/ui.js";
 import { todayNy, useChain, useCompanyName, useSettled } from "../market.js";
 import { ExpirySelect, StrikeSelect } from "./ChainPickers.js";
@@ -59,6 +61,7 @@ export interface ScalpFormProps {
 export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit }: ScalpFormProps) {
   const [values, setValues] = useState<ScalpFormValues>({ ...EMPTY, ...initial });
   const [problem, setProblem] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
   const set = (key: keyof ScalpFormValues) => (event: { target: { value: string } }) =>
     setValues((current) => ({ ...current, [key]: event.target.value }));
   const setValue = (key: keyof ScalpFormValues, value: string) =>
@@ -104,6 +107,11 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   }, [values]);
 
   function submit() {
+    const unread = unreadDates(root.current);
+    if (unread) {
+      setProblem(unread);
+      return;
+    }
     const size = num(values.size);
     if (!Number.isNaN(size) && !Number.isInteger(size)) {
       setProblem("Sizes are whole contracts.");
@@ -145,20 +153,20 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   const input = (label: string, key: keyof ScalpFormValues, type = "text") => (
     <label className={FIELD}>
       {label}
-      <input
-        aria-label={label}
-        type={type}
-        // Times to the second, as a synced fill has them.
-        step={type === "datetime-local" ? 1 : undefined}
-        value={values[key]}
-        onChange={set(key)}
-        className={INPUT}
-      />
+      <input aria-label={label} type={type} value={values[key]} onChange={set(key)} className={INPUT} />
     </label>
   );
 
+  /** Opened, Closed and a typed Expiry: day first, whatever the browser's language (spec §8.2). */
+  const wallClock = (label: string, key: keyof ScalpFormValues, Field: typeof DateField) => (
+    <div className={FIELD}>
+      {label}
+      <Field label={label} value={values[key]} onChange={(next) => setValue(key, next)} className={INPUT} />
+    </div>
+  );
+
   return (
-    <div className="grid gap-3 xl:grid-cols-[1fr_280px]">
+    <div ref={root} className="grid gap-3 xl:grid-cols-[1fr_280px]">
       <Panel title="Scalp">
         {notice}
         <div className="grid grid-cols-3 gap-2">
@@ -171,7 +179,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
               <option value="P">Put</option>
             </select>
           </label>
-          {input("Opened", "openedAt", "datetime-local")}
+          {wallClock("Opened", "openedAt", DateTimeField)}
           {expirations.length > 0 ? (
             <label htmlFor="scalp-expiry" className={FIELD}>
               Expiry
@@ -184,7 +192,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
               />
             </label>
           ) : (
-            input("Expiry", "expiry", "date")
+            wallClock("Expiry", "expiry", DateField)
           )}
           {strikes.length > 0 ? (
             // The select names itself ("Strike"); the caption is only visual.
@@ -204,7 +212,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
           {input("Size", "size", "number")}
           {input("Entry price", "entry", "number")}
           {input("Exit price", "exit", "number")}
-          {input("Closed", "closedAt", "datetime-local")}
+          {wallClock("Closed", "closedAt", DateTimeField)}
           {input("Entry fees", "feesOpen", "number")}
           {input("Exit fees", "feesClose", "number")}
           <label className={FIELD}>

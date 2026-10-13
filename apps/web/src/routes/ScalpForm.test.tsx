@@ -33,8 +33,12 @@ function stubApi(created: unknown = { id: "new-scalp" }) {
 
 const client = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-const fill = (label: string, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+/** Types into a field and leaves it, as a person does: the date fields commit on blur. */
+const fill = (label: string, value: string) => {
+  const field = screen.getByLabelText(label);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+};
 
 function setup(initial?: Partial<ScalpFormValues>) {
   stubApi();
@@ -123,6 +127,22 @@ describe("ScalpForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
     expect(screen.getByText("A strike, an expiry, a size and an entry price are required.")).toBeTruthy();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("refuses to save while Opened or Closed doesn't read, naming them", () => {
+    const { onSubmit } = setup();
+    typeNvda();
+    fill("Opened", "28/09/2026 9.35");
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("Fix Opened first.")).toBeTruthy();
+    fill("Closed", "28/09/2026 9:40:5");
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    expect(screen.getByText("Fix Opened and Closed first.")).toBeTruthy();
+    fill("Opened", "28/09/2026 9:35");
+    fill("Closed", "28/09/2026 9:40");
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it("starts from a scalp being edited", () => {

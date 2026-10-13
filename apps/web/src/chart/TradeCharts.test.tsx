@@ -225,7 +225,7 @@ describe("TradeCharts", () => {
 
 describe("TradeCharts' option view", () => {
   const CONTRACT = "NVDA260926C00232500";
-  const NAME = "NVDA 232.5C Sep 26";
+  const NAME = "NVDA 232.5C 26 Sep";
   const OPTION_BARS: PriceBar[] = [
     { t: nyWallClock(DAY, 571), o: 0.97, h: 1.53, l: 0.97, c: 1.1, v: 50 },
     { t: nyWallClock(DAY, 586), o: 1.1, h: 1.32, l: 0.64, c: 1.29, v: 30 },
@@ -310,11 +310,11 @@ describe("TradeCharts' option view", () => {
     stubOption([
       reply({
         ...EMPTY,
-        unavailable: { reason: "too_old", message: "Alpaca's option bars start on Jan 18, 2024." },
+        unavailable: { reason: "too_old", message: "Alpaca's option bars start on 18 Jan 2024." },
       }),
     ]);
     renderOption("option");
-    expect(await screen.findByText("Alpaca's option bars start on Jan 18, 2024.")).toBeTruthy();
+    expect(await screen.findByText("Alpaca's option bars start on 18 Jan 2024.")).toBeTruthy();
     cleanup();
     stubOption([
       reply({ ...EMPTY, unavailable: { reason: "no_bars", message: `No option bars for ${CONTRACT}.` } }),
@@ -390,8 +390,8 @@ describe("TradeCharts for a missed trade", () => {
 
   it("says what the page asks when there are no bars", async () => {
     stub([answer({ ...OK, bars: [] })]);
-    renderMissed({ emptyText: "No bars for XYZ on Sep 30. Check the ticker." });
-    expect(await screen.findByText("No bars for XYZ on Sep 30. Check the ticker.")).toBeTruthy();
+    renderMissed({ emptyText: "No bars for XYZ on 30 Sep. Check the ticker." });
+    expect(await screen.findByText("No bars for XYZ on 30 Sep. Check the ticker.")).toBeTruthy();
   });
 
   it("leaves the Day's trades toggle off other trades' toolbars", async () => {

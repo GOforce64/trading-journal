@@ -88,6 +88,7 @@ export function SetupPicker({
   return (
     <select
       aria-label="Setup"
+      data-key-target="setup"
       value={trade.setupId ?? ""}
       onChange={(event) => {
         if (event.target.value === NEW) setAdding(true);
@@ -110,6 +111,20 @@ export function SetupPicker({
       <option value={NEW}>+ New setup…</option>
     </select>
   );
+}
+
+/** Inside a chip group (spec §6.3): ←/→ move between the chips, Esc gives the keys back to the page. */
+function chipKeys(event: React.KeyboardEvent<HTMLButtonElement>) {
+  const siblings = Array.from(event.currentTarget.parentElement?.children ?? []);
+  const chips = siblings.filter((each): each is HTMLButtonElement => each instanceof HTMLButtonElement);
+  const at = chips.indexOf(event.currentTarget);
+  if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+    event.preventDefault();
+    chips[(at + (event.key === "ArrowRight" ? 1 : chips.length - 1)) % chips.length]?.focus();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    event.currentTarget.blur();
+  }
 }
 
 /** Mistake or emotion chips (spec §9.1). Mistakes toggle freely; an emotion replaces the one the trade had. */
@@ -135,13 +150,18 @@ export function TagChips({
   const toggle = (tag: Tag) =>
     mine.has(tag.id) ? onPick(trade.tagIds.filter((id) => id !== tag.id)) : add(tag.id);
   return (
-    <span className="inline-flex flex-wrap items-center gap-1">
+    <fieldset
+      aria-label={kind === "skip" ? "Skip reasons" : kind === "emotion" ? "Emotion" : "Mistakes"}
+      data-key-target={kind}
+      className="inline-flex flex-wrap items-center gap-1"
+    >
       {shown.map((tag) => (
         <button
           key={tag.id}
           type="button"
           aria-pressed={mine.has(tag.id)}
           onClick={() => toggle(tag)}
+          onKeyDown={chipKeys}
           className={chipClass(mine.has(tag.id), tag.archived)}
         >
           {tag.name}
@@ -161,11 +181,12 @@ export function TagChips({
           type="button"
           aria-label={kind === "emotion" ? "Add an emotion tag" : "Add a mistake tag"}
           onClick={() => setAdding(true)}
+          onKeyDown={chipKeys}
           className={chipClass(false, false)}
         >
           +
         </button>
       )}
-    </span>
+    </fieldset>
   );
 }

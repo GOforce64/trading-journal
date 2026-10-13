@@ -1,15 +1,8 @@
+import { dayTimeText } from "@tj/core";
 import { Panel } from "../components/ui.js";
 import { SKIP_REASON, type SyncSummary, useIbkrStatus, useIbkrSync, useIbkrSyncing } from "../ibkr.js";
 
-const ET = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const when = (at: number) => ET.format(new Date(at));
+const when = (at: number) => dayTimeText(at);
 
 function ignoredLine(ignored: SyncSummary["ignored"]): string | null {
   const parts = [

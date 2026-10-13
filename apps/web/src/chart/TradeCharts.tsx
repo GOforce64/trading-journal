@@ -1,4 +1,4 @@
-import { isTradingDay, nyMinuteOfDay, PREMARKET_OPEN, type PriceBar, SESSION_END } from "@tj/core";
+import { clockText, isTradingDay, nyMinuteOfDay, PREMARKET_OPEN, type PriceBar, SESSION_END } from "@tj/core";
 import { type ReactNode, useMemo, useState } from "react";
 import { Panel } from "../components/ui.js";
 import { TICKER, todayNy } from "../market.js";
@@ -9,7 +9,7 @@ import { DailyChart } from "./DailyChart.js";
 import type { ChartEditing, PointMark } from "./drag.js";
 import { IntradayChart, type PriceLine } from "./IntradayChart.js";
 import { type ChartFill, type ChartTrade, dailyModel, intradayModel } from "./model.js";
-import { arriveBy, type ChartView, clockText, optionBarsState } from "./option.js";
+import { arriveBy, type ChartView, optionBarsState } from "./option.js";
 import { useChartPrefs } from "./prefs.js";
 
 const NO_BARS: PriceBar[] = [];

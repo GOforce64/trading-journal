@@ -42,6 +42,10 @@ export interface AppDeps {
   ibkrConfig?: () => IbkrConfig | null;
   /** Builds the Flex client for a token; tests pass a fake. */
   flexClient?: (token: string) => FlexClient;
+  /** This process's id, in /api/health so the launcher knows the server it started (launcher spec §3.3). */
+  pid?: number;
+  /** Stops the server once the requests in flight end (launcher spec §3.4). Without it, /api/shutdown is a 404. */
+  shutdown?: () => void;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -64,7 +68,14 @@ export function createApp(deps: AppDeps) {
       if (site === "cross-site" || site === "same-site") return c.json({ error: "forbidden site" }, 403);
       await next();
     })
-    .get("/api/health", (c) => c.json({ ok: true }))
+    .get("/api/health", (c) => c.json({ ok: true, app: "trading-journal", pid: deps.pid ?? null }))
+    .post("/api/shutdown", (c) => {
+      const stop = deps.shutdown;
+      if (!stop) return c.json({ error: "not found" }, 404);
+      // After this answer goes out: the stop waits for the requests in flight, this one included.
+      setTimeout(stop, 0);
+      return c.json({ ok: true });
+    })
     .route("/api/trades", tradeRoutes(deps.db, deps.now))
     .route("/api/setups", setups)
     .route("/api/tags", tags)

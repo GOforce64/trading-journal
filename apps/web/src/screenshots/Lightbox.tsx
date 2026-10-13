@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useModalLayer } from "../keys/Shortcuts.js";
 import { type Shot, shotUrl } from "./Screenshots.js";
 
 /**
@@ -20,6 +21,8 @@ export function Lightbox({
   onCaption: (id: string, caption: string | null) => void;
   onRemove: (id: string) => void;
 }) {
+  // Page keys stay off while it's open: J here mustn't change trades (spec §4).
+  useModalLayer(true);
   const shot = shots[index];
   const [zoomed, setZoomed] = useState(false);
   const [draft, setDraft] = useState(shot?.caption ?? "");

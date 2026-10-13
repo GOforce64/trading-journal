@@ -1,4 +1,5 @@
 import type { TradeView } from "../api.js";
+import { type OpenTrade, QUEUE } from "../nav/tradeList.js";
 import { usePendingReviews } from "./data.js";
 import { queueNav } from "./queue.js";
 import { needsText } from "./text.js";
@@ -6,13 +7,13 @@ import { needsText } from "./text.js";
 const BUTTON = "rounded-sm border border-line bg-panel px-2 py-0.5 text-fg hover:border-accent";
 
 /** Where this scalp stands in the To review queue, and the way to the next one (scalp-review spec §7.2). */
-export function QueueBar({ trade, onOpenTrade }: { trade: TradeView; onOpenTrade?: (id: string) => void }) {
+export function QueueBar({ trade, onOpenTrade }: { trade: TradeView; onOpenTrade?: OpenTrade }) {
   const { data: pending = [] } = usePendingReviews();
   const status = trade.review?.status ?? null;
   const nav = queueNav(pending, trade, status === "pending");
   if (status !== "pending" && nav.left === 0) return null;
   const go = (id: string | null) => {
-    if (id) onOpenTrade?.(id);
+    if (id) onOpenTrade?.(id, QUEUE);
   };
   return (
     <div

@@ -1,6 +1,5 @@
-import { type Direction, type MissedRisk, nyWallClock, round2 } from "@tj/core";
+import { clockText, type Direction, type MissedRisk, nyWallClock, round2 } from "@tj/core";
 import { rText } from "../analytics/format.js";
-import { clockText } from "../chart/option.js";
 
 /** "+2.39", "−1.00": R without its unit. */
 const signed = (value: number) => rText(value).slice(0, -1);
@@ -44,11 +43,6 @@ export function rangeWarning(price: number, bar: { t: number; h: number; l: numb
   if (!bar || (price >= round2(bar.l) && price <= round2(bar.h))) return null;
   return `Outside ${clockText(bar.t)}'s range (${bar.l.toFixed(2)}–${bar.h.toFixed(2)})`;
 }
-
-const DAY = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
-
-/** "Sep 30", for a New York date. */
-export const dayText = (date: string) => DAY.format(new Date(`${date}T00:00:00Z`));
 
 /** "09:41" on the trade's New York date, or a message. */
 export function parseClock(text: string, date: string): number | string {

@@ -1,6 +1,6 @@
 import { nyWallClock } from "@tj/core";
 import { describe, expect, it } from "vitest";
-import { dayText, excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
+import { excursionLine, missedLine, parseClock, rangeWarning } from "./text.js";
 
 const risk = (overrides: Record<string, unknown> = {}) => ({
   risk: 0.62,
@@ -72,11 +72,5 @@ describe("parseClock", () => {
     expect(parseClock("25:00", "2026-09-30")).toBe("Type a time like 09:41");
     expect(parseClock("09:60", "2026-09-30")).toBe("Type a time like 09:41");
     expect(parseClock("0941", "2026-09-30")).toBe("Type a time like 09:41");
-  });
-});
-
-describe("dayText", () => {
-  it("names a New York date the way the pages do", () => {
-    expect(dayText("2026-09-30")).toBe("Sep 30");
   });
 });

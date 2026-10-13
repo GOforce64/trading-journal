@@ -2,6 +2,7 @@ import {
   type ClosedTrade,
   closedTrades,
   contractsSplit,
+  dayText,
   dteSplit,
   equityCurve,
   holdSplit,
@@ -27,18 +28,13 @@ import { SplitGrid } from "../analytics/SplitGrid.js";
 import type { AnalyticsSearch } from "../analytics/search.js";
 import type { TradeView } from "../api.js";
 import { Money } from "../components/ui.js";
-
-const ET_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
+import { listOf, type OpenTrade } from "../nav/tradeList.js";
 
 export interface TabProps {
   trades: readonly TradeView[];
   search: AnalyticsSearch;
   onSearch: (patch: Partial<AnalyticsSearch>) => void;
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }
 
 /** Where the money goes, how it's trending, and what works (spec §7.2). */
@@ -177,7 +173,7 @@ function MoneyPanel({
 }: {
   summary: Summary;
   closed: readonly ClosedTrade[];
-  onOpenTrade?: (id: string) => void;
+  onOpenTrade?: OpenTrade;
 }) {
   const losers = largestLosses(closed);
   const lost = round2(losers.reduce((sum, trade) => sum + trade.netPnl, 0));
@@ -207,11 +203,11 @@ function MoneyPanel({
                 const kept = pctKept(trade);
                 return (
                   <tr key={trade.id} className="border-line border-t">
-                    <td className="num py-0.5 text-muted">{ET_DAY.format(new Date(trade.closedAt))}</td>
+                    <td className="num py-0.5 text-muted">{dayText(trade.closedAt)}</td>
                     <td>
                       <button
                         type="button"
-                        onClick={() => onOpenTrade?.(trade.id)}
+                        onClick={() => onOpenTrade?.(trade.id, listOf(losers, "Largest losses"))}
                         className="text-fg hover:text-accent"
                       >
                         {trade.underlying}

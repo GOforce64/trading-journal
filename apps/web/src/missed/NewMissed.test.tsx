@@ -73,7 +73,7 @@ describe("NewMissed", () => {
     setup();
     expect(charts.props?.levels?.editing.placing).toBe("entry");
     expect(charts.props?.trade?.openedAt).toBe(nyWallClock("2026-09-30", 9 * 60 + 30));
-    expect(charts.props?.emptyText).toBe("No bars for NVDA on Sep 30. Check the ticker.");
+    expect(charts.props?.emptyText).toBe("No bars for NVDA on 30 Sep. Check the ticker.");
     expect(screen.getByText("Click the chart to place the entry")).toBeTruthy();
   });
 
@@ -131,7 +131,7 @@ describe("NewMissed", () => {
     act(() =>
       charts.props?.levels?.editing.onPlacePoint?.("entry", nyWallClock("2026-09-29", 15 * 60), 177.1),
     );
-    expect(await screen.findByText("Place it on Sep 30")).toBeTruthy();
+    expect(await screen.findByText("Place it on 30 Sep")).toBeTruthy();
     expect(posts).toEqual([]);
   });
 

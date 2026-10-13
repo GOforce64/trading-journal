@@ -1,11 +1,11 @@
-import { nyDate, nyWallClock, regularClose } from "@tj/core";
+import { dayText as dayName, nyDate, nyWallClock, regularClose } from "@tj/core";
 import { useMemo, useState } from "react";
 import { contextMarks } from "../chart/context.js";
 import type { ChartEditing, PointMark } from "../chart/drag.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { Chip, Panel } from "../components/ui.js";
 import { useCreateMissed, useDayTrades } from "./data.js";
-import { dayText as dayName, parseClock } from "./text.js";
+import { parseClock } from "./text.js";
 
 const INPUT =
   "num w-[4.6rem] rounded-sm border border-line bg-[#0e1118] px-1.5 py-0.5 text-fg outline-none focus:border-accent";

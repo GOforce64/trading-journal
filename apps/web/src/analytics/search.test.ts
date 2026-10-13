@@ -159,7 +159,7 @@ describe("dashboard periods", () => {
   });
 
   it("names each period", () => {
-    expect(periodLabel("week", "2026-09-26")).toBe("Sep 21 – Sep 27, 2026");
+    expect(periodLabel("week", "2026-09-26")).toBe("21 Sep – 27 Sep 2026");
     expect(periodLabel("month", "2026-09-26")).toBe("September 2026");
     expect(periodLabel("year", "2026-09-26")).toBe("2026");
     expect(periodLabel("all", "2026-09-26")).toBe("All time");

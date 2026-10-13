@@ -1,4 +1,4 @@
-import { type KeptBin, type MonthResult, monthLabel, type RollingPoint } from "@tj/core";
+import { dayText, type KeptBin, type MonthResult, monthLabel, type RollingPoint } from "@tj/core";
 import {
   Bar,
   BarChart,
@@ -36,11 +36,6 @@ export const TOOLTIP = {
   },
   cursor: { fill: "#ffffff08" },
 };
-const NY_DAY = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  month: "short",
-  day: "numeric",
-});
 
 /** Net P&L per close month, labelled with the trade count. */
 export function MonthBars({ months }: { months: readonly MonthResult[] }) {
@@ -69,7 +64,7 @@ export function MonthBars({ months }: { months: readonly MonthResult[] }) {
 /** Expectancy over the last 10 trades, with its current value. */
 export function RollingLine({ points }: { points: readonly RollingPoint[] }) {
   const data = points.map((point) => ({
-    label: NY_DAY.format(new Date(point.closedAt)),
+    label: dayText(point.closedAt),
     value: point.value,
   }));
   const last = data.at(-1);
