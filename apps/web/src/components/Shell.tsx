@@ -40,7 +40,9 @@ export function Shell({
             onClick={onSearch}
             className="mb-3 flex w-full items-center justify-between rounded-sm border border-line px-2 py-1 text-muted hover:text-fg"
           >
-            <span>Search · </span>
+            <span>
+              Search<span className="sr-only"> · </span>
+            </span>
             <kbd className="num text-[10px]">Ctrl K</kbd>
           </button>
         )}
