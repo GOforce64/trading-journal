@@ -22,8 +22,8 @@ export const COLORS = {
   upFaint: "rgba(38, 166, 154, 0.55)",
   downFaint: "rgba(239, 83, 80, 0.55)",
   /** Pre-market and after-hours backgrounds on the stock view (session-backgrounds spec §1). */
-  preBand: "rgba(255, 193, 7, 0.07)",
-  postBand: "rgba(124, 77, 255, 0.09)",
+  preBand: "rgba(255, 176, 0, 0.1)",
+  postBand: "rgba(150, 70, 230, 0.11)",
 };
 /** EMA 1–4 (8, 20, 50, 167 by default). */
 export const EMA_COLORS = ["#f7c948", "#26c6da", "#ab47bc", "#ff7043"] as const;

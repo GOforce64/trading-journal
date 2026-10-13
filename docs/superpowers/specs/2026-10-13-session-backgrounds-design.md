@@ -38,8 +38,8 @@ The exact colours are tuned at the screenshot check (§4); the opacities above a
 - **`chart/sessions.ts`** holds a Lightweight Charts series primitive (its plugin API, 5.2), `SessionBands`:
   - `setBands(bands)` keeps the bands and asks the chart to redraw;
   - one pane view, whose renderer paints in **`drawBackground`**, the layer the library offers for "time areas highlighting";
-  - each band is a `fillRect` over the bitmap's full height. It runs from `logicalToCoordinate(from − 0.5)` to `logicalToCoordinate(to + 0.5)`, the outer edges of its end candles, scaled by the pixel ratio.
-  - A logical index is a candle's centre, so ±0.5 lands on its edges at any zoom, with no bar-spacing arithmetic.
+  - each band is a `fillRect` over the bitmap's full height, scaled by the pixel ratio. It runs from half a bar before its first candle's centre to half a bar after its last's: the outer edges of its end candles.
+  - A logical index is a candle's centre. Lightweight Charts places **whole indexes only**: `logicalToCoordinate` gives 0 for a fraction. So a bar's width is the gap between the first candle's centre and the next one's. The first plan used ±0.5 and painted nothing; the screenshot check caught it (§5).
 - **`IntradayChart`** attaches one `SessionBands` to the candle series when it builds the chart. On each draw it sets `sessionBands(model.candles)` for the stock view, and none for the option view (`model.slots` set).
 - The `upExtended` and `downExtended` colours go. **`COLORS.preBand`** (gold) and **`COLORS.postBand`** (purple) join `style.ts`.
 
@@ -56,3 +56,19 @@ The exact colours are tuned at the screenshot check (§4); the opacities above a
 ## 4. Check
 - On `pnpm demo`, screenshot a scalp's stock chart showing pre-market, the regular session and after-hours, at 1 and 5 minutes, zoomed in and out. Then screenshot the option view to confirm it has no bands. Tune the two colours there.
 - Use the visual check recipe: headless Firefox and puppeteer-core, waiting for Google Fonts first.
+
+## 5. Check (13 Oct 2026)
+- **Data:** `pnpm demo` makes regular-hours bars only. So the check added synthetic NVDA pre-market and after-hours minute bars for 9 and 12 Oct to the demo's database in the scratchpad, and screenshotted the 12 Oct NVDA scalp in headless Firefox.
+- **Found and fixed:** the bands painted zero-wide, because `logicalToCoordinate` gives 0 for a fractional index (§2.3).
+  - Both test fakes now behave like the library, and the tests failed before the fix.
+  - Commit a52f44b.
+- **After the fix:**
+  - At 5m and 15m, zoomed out over two days, each pre-market is a gold band from 04:00 to the 09:30 candle and each after-hours a purple band from 16:00. Both are full height and behind the candles, with edges on candle boundaries.
+  - A band scrolled off the left edge still fills to the edge.
+  - The candles are in full colour.
+  - The option view has no bands.
+  - There were no console errors.
+- **Colours tuned:** at 7%, the gold `rgba(255, 193, 7)` mixed to a grey-olive on `#131722`, and the purple `rgba(124, 77, 255)` at 9% leaned blue. They're now:
+  - **pre-market `rgba(255, 176, 0, 0.1)`**, a warm gold;
+  - **after-hours `rgba(150, 70, 230, 0.11)`**, a clearer purple.
+  - Both are still subtle.

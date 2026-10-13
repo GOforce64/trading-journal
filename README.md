@@ -100,7 +100,8 @@ first. On a trade, **J/K** move through the list you opened it from, **1–5** s
   return on the premium paid, and Avg R on the Dashboard (MAE/MFE from the option's own
   range when the levels are on premium). The chart of the session:
   3-minute candles (1m to 1h), with a daily chart beside it, your fills marked, EMAs,
-  VWAP, and premarket and prior-day levels, from Alpaca's free data.
+  VWAP, premarket and prior-day levels, and pre-market and after-hours shaded as on TradingView,
+  from Alpaca's free data.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
   P&L calendar, open and recent trades) and an Analytics page with every split at once,
   a Scalps tab (time of day, hold time, breakdowns in R and return on cost, and what each
