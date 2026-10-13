@@ -64,7 +64,11 @@ export function TradeDetail({
   /** + Missed on a scalp's chart (missed-trades spec §6.4). */
   onNewMissed?: (symbol: string, date: string) => void;
 }) {
-  const { data: trade, isLoading } = useQuery({
+  const {
+    data: trade,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["trade", tradeId],
     queryFn: async (): Promise<TradeDetailView> => {
       const res = await api.api.trades[":id"].$get({ param: { id: tradeId } });
@@ -87,11 +91,17 @@ export function TradeDetail({
   });
   if (!trade) {
     if (isLoading) return <p className="text-muted">Loading…</p>;
-    // A trade deleted since its list was opened (spec §9): J and K still go on.
+    // A trade deleted since its list was opened (spec §9): J and K still go on. Any other failure says so.
     return (
       <div className="flex flex-col gap-3">
         <TradeNavLine nav={nav} error={keys.error} />
-        <p className="text-muted">This trade isn't in the journal any more.</p>
+        {error && !error.message.endsWith(": 404") ? (
+          <p role="alert" className="text-down">
+            Could not load this trade: {error.message}
+          </p>
+        ) : (
+          <p className="text-muted">This trade isn't in the journal any more.</p>
+        )}
       </div>
     );
   }

@@ -209,6 +209,27 @@ describe("TradeDetail", () => {
     expect(screen.getByTestId("trade-nav").textContent).toContain("2 of 3 · Journal");
   });
 
+  it("says a trade that fails to load for another reason couldn't load, not that it's gone", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/api/trades/t1")
+          ? new Response(JSON.stringify({ error: "boom" }), { status: 500 })
+          : new Response("[]", { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    // The page retries a failure other than 404; retrying at once keeps the test quick.
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } })}>
+        <TradeDetail tradeId="t1" />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Could not load this trade: load failed: 500",
+    );
+    expect(screen.queryByText("This trade isn't in the journal any more.")).toBeNull();
+  });
+
   it("puts the review beside a fly's legs", async () => {
     vi.stubGlobal(
       "fetch",
