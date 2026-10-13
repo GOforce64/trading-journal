@@ -17,7 +17,7 @@ const FILL = { pre: COLORS.preBand, post: COLORS.postBand } as const;
 
 /**
  * Pre-market in gold and after-hours in purple, behind the candles and the pane's full height (session-backgrounds
- * spec §2.3). A logical index is a candle's centre, so ±0.5 is its edge at any zoom.
+ * spec §2.3). A logical index is a candle's centre, and its edges lie half a bar either side, at any zoom.
  */
 export class SessionBands implements ISeriesPrimitive<Time> {
   private bands: readonly SessionBand[] = [];
@@ -54,13 +54,17 @@ export class SessionBands implements ISeriesPrimitive<Time> {
     // biome-ignore lint/correctness/useHookAtTopLevel: the canvas target's method (fancy-canvas), not a React hook
     target.useBitmapCoordinateSpace(({ context, bitmapSize, horizontalPixelRatio }) => {
       if (!timeScale) return;
+      // Lightweight Charts places whole indexes only (a fraction gives 0), so a bar's width comes from two neighbours.
+      const centre = (index: number) => timeScale.logicalToCoordinate(index as Logical);
       for (const band of this.bands) {
-        const left = timeScale.logicalToCoordinate((band.from - 0.5) as Logical);
-        const right = timeScale.logicalToCoordinate((band.to + 0.5) as Logical);
-        if (left == null || right == null) continue;
-        const x = Math.round(left * horizontalPixelRatio);
+        const first = centre(band.from);
+        const next = centre(band.from + 1);
+        const last = centre(band.to);
+        if (first == null || next == null || last == null) continue;
+        const half = (next - first) / 2;
+        const x = Math.round((first - half) * horizontalPixelRatio);
         context.fillStyle = FILL[band.session];
-        context.fillRect(x, 0, Math.round(right * horizontalPixelRatio) - x, bitmapSize.height);
+        context.fillRect(x, 0, Math.round((last + half) * horizontalPixelRatio) - x, bitmapSize.height);
       }
     });
   }

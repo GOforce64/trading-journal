@@ -4,10 +4,14 @@ import { SessionBands } from "./sessions.js";
 import { COLORS } from "./style.js";
 import { PANE, paintedBackground } from "./testing.js";
 
-/** A time scale with candles 4 px apart, candle 0 centred at x = 0, scrolled by `scroll` px. */
+/**
+ * A time scale with candles 4 px apart, candle 0 centred at x = 0, scrolled by `scroll` px. Like Lightweight Charts, it
+ * gives 0 for a fractional logical index.
+ */
 function attach(bands: SessionBands, scroll = 0) {
   const requestUpdate = vi.fn();
-  const chart = { timeScale: () => ({ logicalToCoordinate: (logical: number) => logical * 4 - scroll }) };
+  const logicalToCoordinate = (logical: number) => (Number.isInteger(logical) ? logical * 4 - scroll : 0);
+  const chart = { timeScale: () => ({ logicalToCoordinate }) };
   bands.attached({ chart, requestUpdate } as unknown as SeriesAttachedParameter<Time>);
   return requestUpdate;
 }

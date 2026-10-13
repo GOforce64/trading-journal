@@ -99,7 +99,8 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
       priceScale: () => ({ applyOptions: () => {} }),
       timeScale: () => ({
         coordinateToLogical: (x: number) => x / BAR_PX,
-        logicalToCoordinate: (logical: number) => logical * BAR_PX,
+        // As Lightweight Charts does, a fractional logical index gives 0 (its indexToCoordinate wants an integer).
+        logicalToCoordinate: (logical: number) => (Number.isInteger(logical) ? logical * BAR_PX : 0),
         setVisibleLogicalRange: (range: unknown) => {
           library.ranges.push(range);
         },
