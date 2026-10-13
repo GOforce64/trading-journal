@@ -114,7 +114,8 @@ The launcher writes `<data dir>/launch-error.html` and opens it in the browser. 
 If even the error page can't open, the launcher exits non-zero with the reason on stderr.
 
 ### 3.6 The icon
-- **The nav's blue square** (`#2962ff`, 2–3 px radius) with a small white candlestick.
+- **A purple gradient square** with a green candlestick: violet `#8b5cf6` top-left to deep purple `#4c1d95` bottom-right, the candle `#34d399`. (Changed on 13 Oct 2026 at the user's request; the first icon was the nav's blue square, `#2962ff`, with a white candle.)
+- `scripts/make-icons.mjs` draws it; rerun it after changing the colours.
 - It ships as `icon.svg`, `icon-256.png` and `icon.ico` (16–256 px) in `apps/web/public/`, committed.
 - **It's also the browser tab's favicon,** which the app doesn't have yet.
 

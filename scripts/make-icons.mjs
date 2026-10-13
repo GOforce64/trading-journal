@@ -1,4 +1,4 @@
-// Draws the journal's icon (launcher spec §3.6): the nav's blue square with a white candle. No dependencies:
+// Draws the journal's icon (launcher spec §3.6): a purple gradient square with a green candle. No dependencies:
 // shapes on a 256 grid, 4×4 samples a pixel for smooth corners, PNG through zlib, and an ICO of PNGs.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "web", "public");
-const BLUE = [0x29, 0x62, 0xff];
-const WHITE = [0xff, 0xff, 0xff];
+// The square fades diagonally, violet top-left to deep purple bottom-right.
+const VIOLET = [0x8b, 0x5c, 0xf6];
+const PURPLE = [0x4c, 0x1d, 0x95];
+const GREEN = [0x34, 0xd3, 0x99];
 // [x, y, width, height, corner radius] on a 256 grid.
 const SQUARE = [0, 0, 256, 256, 40];
 const WICK = [122, 40, 12, 176, 0];
@@ -21,8 +23,10 @@ function inside(px, py, [x, y, w, h, r]) {
 }
 
 function colorAt(gx, gy) {
-  if (inside(gx, gy, WICK) || inside(gx, gy, BODY)) return WHITE;
-  return inside(gx, gy, SQUARE) ? BLUE : null;
+  if (inside(gx, gy, WICK) || inside(gx, gy, BODY)) return GREEN;
+  if (!inside(gx, gy, SQUARE)) return null;
+  const t = (gx + gy) / 512;
+  return VIOLET.map((from, c) => from + (PURPLE[c] - from) * t);
 }
 
 function pixels(size) {
@@ -102,7 +106,7 @@ function ico(sizes) {
   return Buffer.concat([header, ...entries, ...images]);
 }
 
-const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><title>Trading Journal</title><rect width="256" height="256" rx="40" fill="#2962ff"/><rect x="122" y="40" width="12" height="176" fill="#fff"/><rect x="92" y="84" width="72" height="92" rx="6" fill="#fff"/></svg>\n`;
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><title>Trading Journal</title><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#4c1d95"/></linearGradient></defs><rect width="256" height="256" rx="40" fill="url(#bg)"/><rect x="122" y="40" width="12" height="176" fill="#34d399"/><rect x="92" y="84" width="72" height="92" rx="6" fill="#34d399"/></svg>\n`;
 
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, "icon.svg"), SVG);
