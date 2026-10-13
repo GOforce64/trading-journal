@@ -19,12 +19,17 @@ describe("runLaunch", () => {
     expect(open.mock.calls[0]?.[0]).toMatch(/^file:\/\/.*launch-error\.html$/);
   });
 
-  it("releases the lock even when the click throws", async () => {
+  it("opens the error page for an unexpected error, and releases the lock", async () => {
     const dir = dataDir();
+    const open = vi.fn();
     const click = vi.fn(async () => {
-      throw new Error("boom");
+      throw new Error("EPERM: operation not permitted, rename 'server.log'");
     });
-    await expect(runLaunch(argv(dir), {}, { ...base, click, open: vi.fn() })).rejects.toThrow("boom");
+    expect(await runLaunch(argv(dir), {}, { ...base, click, open })).toBe(1);
+    expect(readFileSync(join(dir, "launch-error.html"), "utf8")).toContain(
+      "The journal didn't open: EPERM: operation not permitted, rename 'server.log'",
+    );
+    expect(open).toHaveBeenCalledOnce();
     expect(existsSync(join(dir, "launch.lock"))).toBe(false);
   });
 

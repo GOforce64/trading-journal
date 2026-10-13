@@ -55,6 +55,12 @@ export async function runLaunch(
     const paths: LaunchPaths = { repo: REPO, dataDir, port, node: process.execPath, pnpm: args.pnpm };
     const outcome = await deps.click(deps.effects(paths), port);
     return outcome.kind === "failed" ? fail(outcome.failure) : 0;
+  } catch (error) {
+    // Still a page, so the icon never silently does nothing (spec §3.5).
+    return fail({
+      kind: "unexpected",
+      error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+    });
   } finally {
     releaseLock(lock);
   }

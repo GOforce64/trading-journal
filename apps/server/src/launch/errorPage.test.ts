@@ -17,8 +17,21 @@ describe("the error page", () => {
       { kind: "tool-missing" as const, path: "/opt/pnpm" },
       "Node (or pnpm) is no longer at /opt/pnpm. Run `pnpm launcher:install` again.",
     ],
+    [
+      { kind: "unexpected" as const, error: "Error: spawn EACCES\n    at spawn (node:child_process)" },
+      "The journal didn't open: spawn EACCES",
+    ],
   ])("says why: %o", (failure, reason) => {
     expect(failureReason(failure)).toBe(reason);
+  });
+
+  it("shows an unexpected error's details rather than the log", () => {
+    const page = errorPage(
+      { kind: "unexpected", error: "Error: spawn EACCES\n    at spawn (node:child_process)" },
+      "old log",
+    );
+    expect(page).toContain("at spawn (node:child_process)");
+    expect(page).not.toContain("old log");
   });
 
   it("keeps the last 40 lines", () => {

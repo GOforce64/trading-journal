@@ -110,6 +110,7 @@ The launcher writes `<data dir>/launch-error.html` and opens it in the browser. 
 | The server exits, or isn't up within 30 s | "The journal didn't start", with the log's last lines. |
 | An old server is still finishing a request after 10 s | "The journal is finishing a sync before it restarts with your update. Click the icon again in a minute." |
 | node or pnpm has moved | "Node (or pnpm) is no longer at <path>. Run `pnpm launcher:install` again." |
+| Anything unexpected (a log it can't move, a process that won't spawn) | "The journal didn't open: <the error>", with the error's details in place of the log. Added after the final review. |
 
 If even the error page can't open, the launcher exits non-zero with the reason on stderr.
 

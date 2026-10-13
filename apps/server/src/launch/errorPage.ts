@@ -4,7 +4,9 @@ export type Failure =
   | { kind: "update-failed"; output: string }
   | { kind: "not-started" }
   | { kind: "still-busy" }
-  | { kind: "tool-missing"; path: string };
+  | { kind: "tool-missing"; path: string }
+  /** Anything else a click threw (a log it can't move, a process that won't spawn): its stack. */
+  | { kind: "unexpected"; error: string };
 
 export function failureReason(failure: Failure): string {
   switch (failure.kind) {
@@ -18,6 +20,8 @@ export function failureReason(failure: Failure): string {
       return "The journal is finishing a sync before it restarts with your update. Click the icon again in a minute.";
     case "tool-missing":
       return `Node (or pnpm) is no longer at ${failure.path}. Run \`pnpm launcher:install\` again.`;
+    case "unexpected":
+      return `The journal didn't open: ${(failure.error.split("\n")[0] ?? "").replace(/^\w*Error: /, "")}`;
   }
 }
 
@@ -25,6 +29,7 @@ export function failureReason(failure: Failure): string {
 const HINT: Partial<Record<Failure["kind"], string>> = {
   "update-failed": "Run `pnpm start` in the journal's folder to see the whole output.",
   "not-started": "Run `pnpm start` in the journal's folder to see the whole output.",
+  unexpected: "Click the icon again. If it happens again, run `pnpm start` in the journal's folder.",
 };
 
 /** The last `count` lines of a text, without its final newline. */
@@ -38,7 +43,9 @@ const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (char) => ESCAPES[c
 
 /** The page a failed click opens: the reason, what to try, and the last lines of the update's output or the log. */
 export function errorPage(failure: Failure, log: string): string {
-  const lines = tail(failure.kind === "update-failed" ? failure.output : log);
+  const lines = tail(
+    failure.kind === "update-failed" ? failure.output : failure.kind === "unexpected" ? failure.error : log,
+  );
   const hint = HINT[failure.kind];
   return `<!doctype html>
 <html lang="en">
