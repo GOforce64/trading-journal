@@ -395,3 +395,29 @@ One branch (`feat/launcher-keys-palette`) and one PR:
 4. **The nav button's separator dot dangled** ("Search ·"); it's now for screen readers only.
 
 **Left for the user:** click the real icon on Fedora (the browser opening), run `pnpm launcher:install` and click on Windows, and review by keyboard on a Greek layout.
+
+## 14. Final review (13 Oct 2026)
+A fresh Opus review of b8e2ec2..1ab5cf4 found nothing critical. These were fixed test-first, each with a test that failed before the fix:
+- **A date or time that didn't read was dropped when a form was saved with the mouse:** f9da0be. The field marks itself invalid, so a real form won't submit. The scalp and iron fly forms say "Fix Opened first."
+- **A restart didn't wait for the old server's process to exit,** so it could start beside a sync in flight: ab20349 (§3.2).
+- **Any load failure said the trade was deleted:** 5da1ecb. Only a 404 does now; anything else shows "Could not load this trade: …".
+- **Enter re-clicked a mouse-clicked grade where Enter does nothing,** or behind the ? help: 2c18df6. The help now takes focus.
+- **An unexpected launcher error opened no page:** 240c6a6 (§3.5).
+- **With nvm, fnm or volta, a click's update couldn't find node:** 2b52db9 (§3.1).
+- **The Windows shortcut's test** now reads back Arguments and WorkingDirectory: 5bdd5d8. It runs in Windows CI.
+
+The icon became a purple gradient with a green candle at the user's request (e8e63da, §3.6).
+
+**Deferred minors:**
+- the lock's narrow races:
+  - an unreadable lock counts as stale;
+  - the takeover is unlink, then create;
+  - a live launcher's lock ages out after 60 s during a long `pnpm install`;
+- shutdown isn't idempotent (a second Stop during the drain exits mid-sync) and has no time limit;
+- Edit → Save reopens the trade without its list, so J/K stop following it;
+- closing the palette with Ctrl+K keeps the typed query, while Esc and a click outside clear it;
+- `parseDayMonthYear("09/12/0026")` gives `"26-12-09"` (the year isn't padded to four digits);
+- the date guard catches `new Date(…).toLocaleString(` but not `someDate.toLocaleString(`;
+- the `.desktop` records the versioned `/usr/bin/node-22`, so a Fedora upgrade that drops it makes the icon do nothing;
+- clicking a button that already had keyboard focus doesn't mark it as mouse-focused;
+- (pre-existing) MissedWorkspace's "keeps a refused new exit's typed time and price" flakes under suite load.

@@ -72,3 +72,14 @@ The exact colours are tuned at the screenshot check (§4); the opacities above a
   - **pre-market `rgba(255, 176, 0, 0.1)`**, a warm gold;
   - **after-hours `rgba(150, 70, 230, 0.11)`**, a clearer purple.
   - Both are still subtle.
+
+## 6. Final review (13 Oct 2026)
+- A fresh Opus review of 5bdd5d8..bed61bf found no product bugs.
+- It found two test gaps, both fixed in 0cc1bed, and each test now fails with its rule removed:
+  - the option view's "no bands" test now has a 16:05 option candle (session `post`);
+  - a test pins the bands' `zOrder` at `"bottom"`.
+- **Deferred minors:**
+  - `SessionBands` builds a new renderer object every frame;
+  - `SessionBand.session` could be `Exclude<Session, "regular">`;
+  - README line 103 says "premarket" and "pre-market" in one sentence.
+
