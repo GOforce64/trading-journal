@@ -1,4 +1,4 @@
-import { nyClock, round2, snapToBar, snapToMinute } from "@tj/core";
+import { nyClock, round2, sessionBands, snapToBar, snapToMinute } from "@tj/core";
 import {
   CandlestickSeries,
   createChart,
@@ -29,6 +29,7 @@ import {
 } from "./drag.js";
 import type { IntradayModel, LevelLine, Marker, Point } from "./model.js";
 import type { Toggle } from "./prefs.js";
+import { SessionBands } from "./sessions.js";
 import { COLORS, chartOptions, EMA_COLORS, nyTimeText, seconds } from "./style.js";
 
 /** An extra horizontal line, such as the scalp review's stop or a target. A line with an `id` can be dragged. */
@@ -148,6 +149,8 @@ interface Parts {
   priceLines: IPriceLine[];
   /** The dotted line from a missed trade's entry to its exit. */
   hold: ISeriesApi<"Line">;
+  /** Pre-market and after-hours backgrounds (session-backgrounds spec §2.3). */
+  sessions: SessionBands;
 }
 
 /** A line being dragged: where it started, and where it is now (scalp-review spec §8.3). */
@@ -261,6 +264,9 @@ export function IntradayChart({
       borderVisible: false,
       priceLineVisible: false,
     });
+    // Pre-market and after-hours backgrounds behind the candles (session-backgrounds spec §2.3).
+    const sessions = new SessionBands();
+    candles.attachPrimitive(sessions);
     const volume = chart.addSeries(HistogramSeries, {
       priceScaleId: "volume",
       priceFormat: { type: "volume" },
@@ -305,7 +311,7 @@ export function IntradayChart({
       }
       setHovered(times.current.indexOf(param.time * 1000));
     });
-    parts.current = { chart, candles, volume, emas, vwap, levels, markers, priceLines: [], hold };
+    parts.current = { chart, candles, volume, emas, vwap, levels, markers, priceLines: [], hold, sessions };
 
     // Placing and dragging the review's lines (scalp-review spec §8.2–8.3). Lightweight Charts listens to mouse
     // events, so a press on a line is caught on its way down (capture) and kept from the chart, and the drag
@@ -534,6 +540,8 @@ export function IntradayChart({
       const byTime = new Map(bars.map((bar) => [bar.time as number, bar]));
       chart.candles.setData(model.slots.map((t) => byTime.get(seconds(t)) ?? { time: seconds(t) }));
     } else chart.candles.setData(bars);
+    // The option view has only regular hours, so no bands (session-backgrounds spec §1).
+    chart.sessions.setBands(model.slots ? [] : sessionBands(model.candles));
     chart.volume.setData(
       model.candles.map((candle) => ({
         time: seconds(candle.t),

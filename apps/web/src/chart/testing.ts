@@ -33,6 +33,8 @@ export const library = {
   crosshair: null as ((param: { time?: unknown }) => void) | null,
   /** Every chart.applyOptions call, in order. */
   chartOptions: [] as Record<string, unknown>[],
+  /** The primitives attached to a series, such as the session backgrounds. */
+  primitives: [] as { type: string; primitive: ISeriesPrimitive<Time> }[],
 };
 
 export function resetLibrary(): void {
@@ -45,13 +47,14 @@ export function resetLibrary(): void {
   library.markers = [];
   library.crosshair = null;
   library.chartOptions = [];
+  library.primitives = [];
 }
 
 /** The real module with `createChart` and `createSeriesMarkers` replaced by recorders. */
 export function fakeLibrary(real: typeof Charts): typeof Charts {
   const createChart = () => {
     library.charts++;
-    return {
+    const chart = {
       addSeries: (definition: { type?: string }, options: Record<string, unknown> = {}) => {
         const series: FakeSeries = {
           type: definition.type ?? "?",
@@ -83,6 +86,10 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
           removePriceLine: (handle: { record: Record<string, unknown> }) => {
             series.priceLines = series.priceLines.filter((each) => each !== handle.record);
           },
+          attachPrimitive: (primitive: ISeriesPrimitive<Time>) => {
+            library.primitives.push({ type: series.type, primitive });
+            primitive.attached?.({ chart, requestUpdate: () => {} } as never);
+          },
         };
       },
       applyOptions: (options: Record<string, unknown>) => {
@@ -110,6 +117,7 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
         library.removed++;
       },
     };
+    return chart;
   };
   const createSeriesMarkers = () => ({
     setMarkers: (markers: unknown[]) => {
