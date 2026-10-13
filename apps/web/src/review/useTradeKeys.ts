@@ -22,7 +22,13 @@ function focusField(name: string): void {
     }
     return;
   }
-  (target.matches("textarea, input") ? target : target.querySelector<HTMLElement>("button"))?.focus();
+  if (target instanceof HTMLTextAreaElement) {
+    target.focus();
+    // After what's there, to add to it: a focused textarea's cursor would otherwise start at its beginning.
+    target.setSelectionRange(target.value.length, target.value.length);
+    return;
+  }
+  target.querySelector<HTMLElement>("button")?.focus();
 }
 
 /**

@@ -176,6 +176,14 @@ describe("a trade's keys", () => {
     expect(document.activeElement?.textContent).toBe("Calm");
   });
 
+  it("N puts the cursor after the notes already there, to add to them", () => {
+    setup(scalp({ notes: "Took it early" }));
+    press("n");
+    const notes = screen.getByRole("textbox", { name: "Notes" }) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(notes);
+    expect([notes.selectionStart, notes.selectionEnd]).toEqual([13, 13]);
+  });
+
   it("N focuses the notes, where J types instead of moving", () => {
     const { onOpenTrade } = setup(scalp());
     press("n");
