@@ -126,11 +126,16 @@ describe.runIf(process.platform === "win32")("on Windows, for real", () => {
       [
         "-NoProfile",
         "-Command",
-        `(New-Object -ComObject WScript.Shell).CreateShortcut('${file}').TargetPath`,
+        `$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${file}'); $s.TargetPath; $s.Arguments; $s.WorkingDirectory`,
       ],
       { encoding: "utf8" },
     );
-    expect(read.stdout.trim()).toBe(process.execPath);
+    // The quoted pnpm path with its space survives the round trip, as a click passes it to node.
+    expect(read.stdout.trim().split(/\r?\n/)).toEqual([
+      process.execPath,
+      '--import tsx src/launch/main.ts --pnpm "C:\\Users\\G Z\\AppData\\Local\\pnpm\\pnpm.exe" --port 4300',
+      "C:\\Users\\G Z\\Projects\\TradingJournal\\apps\\server",
+    ]);
     expect(removeLauncher("win32", env, "C:\\Users\\G")).toBe(file);
     expect(existsSync(file)).toBe(false);
   });
