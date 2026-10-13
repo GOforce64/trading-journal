@@ -109,6 +109,23 @@ describe("the shortcut layer", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it("keeps Enter from clicking a mouse-focused button again where Enter does nothing", () => {
+    render(
+      <ShortcutsProvider>
+        <button type="button">B</button>
+      </ShortcutsProvider>,
+    );
+    const button = screen.getByRole("button", { name: "B" });
+    fireEvent.pointerDown(button);
+    button.focus();
+    // fireEvent returns false when the default (the button's click) was prevented.
+    expect(press("Enter", {}, button)).toBe(false);
+    button.blur();
+    press("Tab");
+    button.focus();
+    expect(press("Enter", {}, button)).toBe(true);
+  });
+
   it("lets the latest registration win, and forgets one that unmounts", () => {
     const run = vi.fn();
     function Both() {
@@ -143,6 +160,8 @@ describe("the shortcut layer", () => {
     );
     fireEvent.keyDown(document.body, { key: "?", code: "Slash" });
     const help = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+    // Focus moves into the help, so Enter can't click a button behind it.
+    expect(document.activeElement).toBe(help);
     expect(help.textContent).toContain("Next trade");
     expect(help.textContent).toContain("Search pages and trades");
     expect(help.textContent).toContain("Review");

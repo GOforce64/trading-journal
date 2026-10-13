@@ -94,6 +94,9 @@ const KEY_TEXT: Record<string, string> = { Enter: "Enter", Escape: "Esc", "?": "
 function Help({ registry, onClose }: { registry: Registry; onClose: () => void }) {
   const list = useSyncExternalStore(registry.subscribe, registry.list);
   useModalLayer(true);
+  // Focus comes in, so Enter can't click the button behind; on close it goes to the page, not back to that button.
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => dialog.current?.focus(), []);
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
       if (event.key !== "Escape" && event.key !== "?") return;
@@ -117,10 +120,12 @@ function Help({ registry, onClose }: { registry: Registry; onClose: () => void }
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-24">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/50" />
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Keyboard shortcuts"
-        className="relative w-96 rounded-sm border border-line bg-panel p-4 text-[12px]"
+        tabIndex={-1}
+        className="relative w-96 rounded-sm border border-line bg-panel p-4 text-[12px] outline-none"
       >
         <h2 className="mb-2 font-semibold text-fg">Keyboard shortcuts</h2>
         {[...groups].map(([group, items]) => (
@@ -165,11 +170,13 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (registry.layers > 0) return;
-      if (name === "Enter" && target?.matches(ACTIVATES) && !pointerFocus) return;
+      const onButton = name === "Enter" && target?.matches(ACTIVATES) === true;
+      if (onButton && !pointerFocus) return;
       const entry = registry.find(name);
-      if (!entry) return;
+      // Even where Enter does nothing, it mustn't click again the button the mouse just clicked (a grade would clear).
+      if (!entry && !onButton) return;
       event.preventDefault();
-      entry.run();
+      entry?.run();
     };
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("focus", onFocus, true);
