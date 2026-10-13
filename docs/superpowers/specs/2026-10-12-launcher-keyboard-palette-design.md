@@ -366,3 +366,30 @@ One branch (`feat/launcher-keys-palette`) and one PR:
 3. **The trade-page keys,** the chip groups, the setup picker and the help.
 4. **The palette.**
 5. **Docs** (§11) and the **live check** (§10).
+
+---
+
+## 13. Live check (2026-10-13, Fedora)
+
+**What ran:**
+- **The launcher's click path** (install, build, start, health, browser), on a read-only copy of the real journal without its `secrets.json`, port 4391. Only the browser step was swapped for a log line, so no tab opened mid-session:
+  - cold start: 2.1 s;
+  - a second click while running: 86 ms, with no second server;
+  - after a "pull" (`launcher.json`'s commit made stale): restarted in 2.1 s with a new process, and the old log rotated to `server.1.log`;
+  - `POST /api/shutdown`: the port freed;
+  - the port held by another program (`python3 -m http.server`): the error page "Port 4391 is used by another program…", in 79 ms.
+- **`pnpm launcher:install`** wrote `~/.local/share/applications/trading-journal.desktop`, and `desktop-file-validate` passed it.
+- **Keys, in headless Firefox on the copy** (42 paper iron flies; this machine has no scalps):
+  - from Iron Flies, the page reads "1 of 42 · Iron Flies";
+  - 2 saved grade B, X toggled exclude both ways, N focused the notes (where a typed J stayed text), S focused the setup;
+  - J moved to "2 of 42" and K back, and the list survived a reload.
+- **The review queue, on `pnpm demo`:** three Enters marked three queued scalps done, each opening the next ("1 of 5", "1 of 4", "1 of 3"); the queue went from 5 to 2. No console errors.
+- **Every page's text** (dashboard, journal, a scalp, a fly, missed, analytics, playbook, import, settings, to review) held no US-style date. The README's seven images were retaken.
+
+**Found and fixed, test-first:**
+1. **The trade forms' Opened, Closed and fallback Expiry were still the browser's date fields** (built through an input helper that took the type as an argument, which §8.2's list missed). They are now a `DateTimeField` (28/09/2026 09:31:05, 24-hour, seconds kept) and `DateField`. The guard test now also fails on a browser date input outside those two.
+2. **The trade page's legs table wrote expiries as "10-16"**; it now reads "16 Oct".
+3. **N left the cursor at the start of existing notes**, so typing went in front of them; it now goes to the end.
+4. **The nav button's separator dot dangled** ("Search ·"); it's now for screen readers only.
+
+**Left for the user:** click the real icon on Fedora (the browser opening), run `pnpm launcher:install` and click on Windows, and review by keyboard on a Greek layout.
