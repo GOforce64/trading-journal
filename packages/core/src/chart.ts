@@ -11,9 +11,19 @@ export interface PriceBar {
   v: number;
 }
 
-/** A candle on a chart's timeframe. `extended`: it starts outside the regular session, 09:30–16:00 ET. */
+/** Where a candle starts: pre-market (04:00–09:30 ET), the regular session, or after-hours (to 20:00). */
+export type Session = "pre" | "regular" | "post";
+
+/** A candle on a chart's timeframe, with the session it starts in. */
 export interface Candle extends PriceBar {
-  extended: boolean;
+  session: Session;
+}
+
+/** A run of pre-market or after-hours candles on one New York day, by candle index (session-backgrounds spec §2.2). */
+export interface SessionBand {
+  from: number;
+  to: number;
+  session: "pre" | "post";
 }
 
 /** Minutes since midnight, New York. The regular session ends at 16:00, or 13:00 on a half day (`regularClose`). */
@@ -88,10 +98,32 @@ export function aggregate(bars: readonly PriceBar[], minutes: number): Candle[] 
       l: bar.l,
       c: bar.c,
       v: bar.v,
-      extended: slot < REGULAR_OPEN || slot >= regularClose(date),
+      session: slot < REGULAR_OPEN ? "pre" : slot >= regularClose(date) ? "post" : "regular",
     });
   }
   return candles;
+}
+
+/**
+ * The chart's pre-market and after-hours backgrounds (session-backgrounds spec §2.2): each run of consecutive candles
+ * with the same non-regular session on one New York day, by index. The stock view draws no whitespace, so an index is
+ * the candle's place on the chart's time scale.
+ */
+export function sessionBands(candles: readonly Candle[]): SessionBand[] {
+  const bands: SessionBand[] = [];
+  candles.forEach((candle, index) => {
+    if (candle.session === "regular") return;
+    const last = bands.at(-1);
+    const previous = candles[index - 1];
+    const sameRun =
+      last?.to === index - 1 &&
+      last.session === candle.session &&
+      previous != null &&
+      nyClock(previous.t).date === nyClock(candle.t).date;
+    if (last && sameRun) last.to = index;
+    else bands.push({ from: index, to: index, session: candle.session });
+  });
+  return bands;
 }
 
 /**

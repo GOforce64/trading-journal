@@ -522,18 +522,13 @@ export function IntradayChart({
     const range = switched ? chart.chart.timeScale().getVisibleRange() : null;
     drawnView.current = viewKey;
     times.current = model.candles.map((candle) => candle.t);
-    const bars = model.candles.map((candle) => {
-      const bar = {
-        time: seconds(candle.t),
-        open: candle.o,
-        high: candle.h,
-        low: candle.l,
-        close: candle.c,
-      };
-      if (!candle.extended) return bar;
-      const color = candle.c >= candle.o ? COLORS.upExtended : COLORS.downExtended;
-      return { ...bar, color, wickColor: color, borderColor: color };
-    });
+    const bars = model.candles.map((candle) => ({
+      time: seconds(candle.t),
+      open: candle.o,
+      high: candle.h,
+      low: candle.l,
+      close: candle.c,
+    }));
     if (model.slots) {
       // Empty minutes are whitespace, so a thin strike's candles keep their place in time.
       const byTime = new Map(bars.map((bar) => [bar.time as number, bar]));
