@@ -1,4 +1,5 @@
 import type * as Charts from "lightweight-charts";
+import type { ISeriesPrimitive, Time } from "lightweight-charts";
 
 /** What a chart asked of one series. */
 export interface FakeSeries {
@@ -125,3 +126,35 @@ export function fakeLibrary(real: typeof Charts): typeof Charts {
 /** The series of one kind, in the order the chart added them. */
 export const seriesOf = (type: string): FakeSeries[] =>
   library.series.filter((series) => series.type === type);
+
+/** One fillRect a primitive's background made, in bitmap pixels. */
+export interface Fill {
+  color: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** What a primitive paints in the background layer of the fake's pane, at a pixel ratio. */
+export function paintedBackground(primitive: ISeriesPrimitive<Time>, pixelRatio = 1): Fill[] {
+  const fills: Fill[] = [];
+  const context = {
+    fillStyle: "",
+    fillRect(x: number, y: number, width: number, height: number) {
+      fills.push({ color: String(context.fillStyle), x, y, width, height });
+    },
+  };
+  const target = {
+    useBitmapCoordinateSpace: (draw: (scope: unknown) => void) =>
+      draw({
+        context,
+        mediaSize: { width: PANE.width, height: PANE.height },
+        bitmapSize: { width: PANE.width * pixelRatio, height: PANE.height * pixelRatio },
+        horizontalPixelRatio: pixelRatio,
+        verticalPixelRatio: pixelRatio,
+      }),
+  };
+  for (const view of primitive.paneViews?.() ?? []) view.renderer()?.drawBackground?.(target as never);
+  return fills;
+}

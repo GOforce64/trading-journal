@@ -12,8 +12,6 @@ import { nyTickLabel } from "../analytics/equityData.js";
 export const COLORS = {
   up: "#26a69a",
   down: "#ef5350",
-  upExtended: "rgba(38, 166, 154, 0.45)",
-  downExtended: "rgba(239, 83, 80, 0.45)",
   volumeUp: "rgba(38, 166, 154, 0.35)",
   volumeDown: "rgba(239, 83, 80, 0.35)",
   vwap: "#e0e0e0",
@@ -23,6 +21,9 @@ export const COLORS = {
   /** A stock scalp's levels on the option view, as estimates (premium-chart spec §7). */
   upFaint: "rgba(38, 166, 154, 0.55)",
   downFaint: "rgba(239, 83, 80, 0.55)",
+  /** Pre-market and after-hours backgrounds on the stock view (session-backgrounds spec §1). */
+  preBand: "rgba(255, 193, 7, 0.07)",
+  postBand: "rgba(124, 77, 255, 0.09)",
 };
 /** EMA 1–4 (8, 20, 50, 167 by default). */
 export const EMA_COLORS = ["#f7c948", "#26c6da", "#ab47bc", "#ff7043"] as const;
