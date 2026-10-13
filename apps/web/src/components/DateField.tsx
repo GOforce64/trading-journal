@@ -1,5 +1,5 @@
 import { fieldDate, parseDayMonthYear } from "@tj/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 interface FieldProps {
@@ -13,7 +13,8 @@ interface FieldProps {
 /**
  * A date (or date and time) typed day first (launcher-keys-palette spec §8.2), whatever the browser's language.
  * It commits on Enter or blur: a value that doesn't read keeps its text and a message, and changes nothing. 📅
- * opens the browser's own picker, whose pick can't be misread.
+ * opens the browser's own picker, whose pick can't be misread. While its text doesn't read, its form won't submit,
+ * and `unreadDates` names it to a form that saves from a plain button.
  */
 export function WallClockField({
   label,
@@ -36,6 +37,11 @@ export function WallClockField({
   const [text, setText] = useState(shown);
   const [bad, setBad] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  // Before the click that blurred it reaches Save, so a mouse can't submit the old value either.
+  useLayoutEffect(() => {
+    input.current?.setCustomValidity(bad ? message : "");
+  }, [bad, message]);
   // A value from outside (a pick, a preset, a save) replaces what's shown.
   useEffect(() => {
     setText(shown);
@@ -58,6 +64,7 @@ export function WallClockField({
   return (
     <span className="inline-flex items-center gap-1">
       <input
+        ref={input}
         aria-label={label}
         aria-invalid={bad || undefined}
         inputMode="numeric"
@@ -109,6 +116,16 @@ export function WallClockField({
       )}
     </span>
   );
+}
+
+/** "Fix Opened and Closed first." while date fields under `root` don't read, so a form refuses to save; else null. */
+export function unreadDates(root: HTMLElement | null): string | null {
+  const labels = [...(root?.querySelectorAll('input[aria-invalid="true"]') ?? [])].map(
+    (field) => field.getAttribute("aria-label") ?? "a date",
+  );
+  if (labels.length === 0) return null;
+  const last = labels.pop();
+  return `Fix ${labels.length > 0 ? `${labels.join(", ")} and ${last}` : last} first.`;
 }
 
 /** A date: shows 09/12/2026, reads 9/12/26, 9.12.26, 9-12-2026 or ISO. */

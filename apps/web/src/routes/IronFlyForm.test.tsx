@@ -200,6 +200,15 @@ describe("IronFlyForm", () => {
     expect(screen.getByText(/every leg needs a strike, a size and an entry price/i)).toBeTruthy();
   });
 
+  it("refuses to save while Closed doesn't read", () => {
+    const { onSubmit } = setup();
+    priceTheSampleFly();
+    fill("Closed", "9/10");
+    fireEvent.click(screen.getByRole("button", { name: /save trade/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("Fix Closed first.")).toBeTruthy();
+  });
+
   it("starts from an existing trade when editing", () => {
     setup({
       underlying: "ACME",

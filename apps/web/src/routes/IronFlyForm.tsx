@@ -9,7 +9,7 @@ import {
   positionCash,
 } from "@tj/core";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { DateField } from "../components/DateField.js";
+import { DateField, unreadDates } from "../components/DateField.js";
 import { DateTimeField } from "../components/DateTimeField.js";
 import { ESTIMATE_STYLE, estimateTitle, signedUsd } from "../components/Estimate.js";
 import { Money, Panel, usd } from "../components/ui.js";
@@ -149,6 +149,7 @@ export function IronFlyForm({
     legs: { ...EMPTY.legs, ...initial?.legs },
   });
   const [problem, setProblem] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
   /** The user chose to type the expiry and strikes although a chain is available. */
   const [typed, setTyped] = useState(false);
   const [cleared, setCleared] = useState<string | null>(null);
@@ -291,6 +292,11 @@ export function IronFlyForm({
   };
 
   function submit() {
+    const unread = unreadDates(root.current);
+    if (unread) {
+      setProblem(unread);
+      return;
+    }
     if (toPricedLegs(values) === "fractional-size") {
       setProblem("Sizes are whole contracts.");
       return;
@@ -390,7 +396,7 @@ export function IronFlyForm({
 
   return (
     // Side by side from 1280 px: narrower, the legs table can't fit a strike like "1027.5 (ATM)" and its prices.
-    <div className="grid gap-3 xl:grid-cols-[1fr_280px]">
+    <div ref={root} className="grid gap-3 xl:grid-cols-[1fr_280px]">
       <div className="flex flex-col gap-3">
         <Panel title="Trade">
           <div className="grid grid-cols-3 gap-2">

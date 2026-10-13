@@ -1,6 +1,6 @@
 import { type PricedLeg, positionCash } from "@tj/core";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { DateField } from "../components/DateField.js";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { DateField, unreadDates } from "../components/DateField.js";
 import { DateTimeField } from "../components/DateTimeField.js";
 import { Money, Panel, Pct, usd } from "../components/ui.js";
 import { todayNy, useChain, useCompanyName, useSettled } from "../market.js";
@@ -61,6 +61,7 @@ export interface ScalpFormProps {
 export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit }: ScalpFormProps) {
   const [values, setValues] = useState<ScalpFormValues>({ ...EMPTY, ...initial });
   const [problem, setProblem] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
   const set = (key: keyof ScalpFormValues) => (event: { target: { value: string } }) =>
     setValues((current) => ({ ...current, [key]: event.target.value }));
   const setValue = (key: keyof ScalpFormValues, value: string) =>
@@ -106,6 +107,11 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   }, [values]);
 
   function submit() {
+    const unread = unreadDates(root.current);
+    if (unread) {
+      setProblem(unread);
+      return;
+    }
     const size = num(values.size);
     if (!Number.isNaN(size) && !Number.isInteger(size)) {
       setProblem("Sizes are whole contracts.");
@@ -160,7 +166,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   );
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[1fr_280px]">
+    <div ref={root} className="grid gap-3 xl:grid-cols-[1fr_280px]">
       <Panel title="Scalp">
         {notice}
         <div className="grid grid-cols-3 gap-2">

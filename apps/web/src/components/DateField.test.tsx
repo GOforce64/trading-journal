@@ -13,6 +13,7 @@ function Form({ initial, onSubmitted }: { initial: string; onSubmitted: (date: s
       }}
     >
       <DateField label="Date" value={date} onChange={setDate} />
+      <button type="submit">Save</button>
     </form>
   );
 }
@@ -55,6 +56,20 @@ describe("DateField", () => {
     expect(field().value).toBe("9/28/2026");
     fireEvent.blur(field());
     expect(onSubmitted).not.toHaveBeenCalled();
+  });
+
+  it("keeps its form from submitting on a click while the date doesn't read", () => {
+    const onSubmitted = vi.fn();
+    render(<Form initial="2026-09-28" onSubmitted={onSubmitted} />);
+    type("9/28/2026");
+    // A click on Save leaves the field first, as a mouse does.
+    fireEvent.blur(field());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSubmitted).not.toHaveBeenCalled();
+    type("28/9/2026");
+    fireEvent.blur(field());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSubmitted).toHaveBeenCalledWith("2026-09-28");
   });
 
   it("clears to an empty date", () => {

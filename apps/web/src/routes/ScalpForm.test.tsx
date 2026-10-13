@@ -129,6 +129,22 @@ describe("ScalpForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("refuses to save while Opened or Closed doesn't read, naming them", () => {
+    const { onSubmit } = setup();
+    typeNvda();
+    fill("Opened", "28/09/2026 9.35");
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("Fix Opened first.")).toBeTruthy();
+    fill("Closed", "28/09/2026 9:40:5");
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    expect(screen.getByText("Fix Opened and Closed first.")).toBeTruthy();
+    fill("Opened", "28/09/2026 9:35");
+    fill("Closed", "28/09/2026 9:40");
+    fireEvent.click(screen.getByRole("button", { name: "Save scalp" }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("starts from a scalp being edited", () => {
     setup({ underlying: "TSLA", right: "P", strike: "365", size: "2", entry: "1.64", exit: "3.155" });
     expect((screen.getByLabelText("Underlying") as HTMLInputElement).value).toBe("TSLA");
