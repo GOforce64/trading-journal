@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import type { ClickEffects, LaunchState, Probe, UpdateResult } from "./click.js";
 import { isAlive } from "./lock.js";
 
@@ -54,11 +54,26 @@ export async function pollUntil(
   return check();
 }
 
+/**
+ * The environment with the recorded node's folder first on PATH. An app-menu click doesn't get the terminal's PATH,
+ * so with nvm, fnm or volta, pnpm's scripts wouldn't find node otherwise.
+ */
+export function nodeOnPath(
+  env: NodeJS.ProcessEnv,
+  node: string,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
+  const windows = platform === "win32";
+  const key = (windows && Object.keys(env).find((name) => name.toUpperCase() === "PATH")) || "PATH";
+  const dir = (windows ? win32 : posix).dirname(node);
+  return { ...env, [key]: [dir, env[key]].filter(Boolean).join(windows ? ";" : ":") };
+}
+
 /** Runs a command, keeping its output for the error page. A Windows `.cmd` needs a shell. */
-function run(command: string, args: string[], cwd: string): Promise<UpdateResult> {
+function run(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<UpdateResult> {
   return new Promise((resolve) => {
     const shell = /\.(cmd|bat)$/i.test(command);
-    const child = spawn(shell ? `"${command}"` : command, args, { cwd, shell, windowsHide: true });
+    const child = spawn(shell ? `"${command}"` : command, args, { cwd, env, shell, windowsHide: true });
     let output = "";
     child.stdout?.on("data", (chunk) => {
       output += String(chunk);
@@ -138,9 +153,10 @@ export function realEffects(paths: LaunchPaths): ClickEffects {
       return pollUntil(async () => !isAlive(pid) && (await probe(paths.port)).kind === "down", 10_000);
     },
     update: async () => {
-      const install = await run(paths.pnpm, ["install", "--frozen-lockfile"], paths.repo);
+      const env = nodeOnPath(process.env, paths.node);
+      const install = await run(paths.pnpm, ["install", "--frozen-lockfile"], paths.repo, env);
       if (!install.ok) return install;
-      const build = await run(paths.pnpm, ["build"], paths.repo);
+      const build = await run(paths.pnpm, ["build"], paths.repo, env);
       return { ok: build.ok, output: install.output + build.output };
     },
     start: () => startServer(paths),

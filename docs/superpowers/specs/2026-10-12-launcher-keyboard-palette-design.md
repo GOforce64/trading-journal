@@ -61,7 +61,7 @@ All made by the user in the brainstorm, except the rows marked *(follows)*, whic
 
 ### 3.1 Setup, once per machine
 - **`pnpm launcher:install`** writes the icon and records what a click needs. A click from the app menu doesn't get the terminal's PATH or variables, so it records:
-  - the full path of node (`process.execPath`) and of pnpm's entry script, run with that node;
+  - the full path of node (`process.execPath`) and of the pnpm the terminal's PATH finds (here a standalone binary, so there's no entry script to run with node). A click runs `pnpm install` and `pnpm build` with node's folder first on PATH, so their scripts find that node under nvm, fnm or volta too;
   - the repo's path;
   - `TJ_DATA_DIR` and `TJ_PORT`, when set in the terminal that ran the setup.
 - **Fedora:** `$XDG_DATA_HOME/applications/trading-journal.desktop` (usually `~/.local/share/applications`). `Name=Trading Journal`, `Terminal=false`, the icon by absolute path. It can then be pinned to the dock.

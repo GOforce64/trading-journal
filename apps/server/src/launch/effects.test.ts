@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { browserCommand, journalUrl, pollUntil, probe, realEffects } from "./effects.js";
+import { browserCommand, journalUrl, nodeOnPath, pollUntil, probe, realEffects } from "./effects.js";
 import { isAlive } from "./lock.js";
 
 async function serving(body: string | null) {
@@ -111,5 +114,26 @@ describe("stopping the old server", () => {
     const fx = realEffects({ repo: "", dataDir: "", port, node: "", pnpm: "" });
     expect(await fx.stop(pid)).toBe(true);
     expect(isAlive(pid)).toBe(false);
+  });
+});
+
+describe("updating", () => {
+  // An app-menu click doesn't get the terminal's PATH: with nvm, fnm or volta, pnpm's scripts wouldn't find node.
+  it.skipIf(process.platform === "win32")(
+    "runs pnpm with the recorded node's folder first on PATH",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "tj-pnpm-"));
+      const pnpm = join(dir, "pnpm");
+      writeFileSync(pnpm, '#!/bin/sh\necho "$PATH"\n', { mode: 0o755 });
+      const fx = realEffects({ repo: dir, dataDir: dir, port: 0, node: "/opt/nvm/v22/bin/node", pnpm });
+      const result = await fx.update();
+      expect(result.ok).toBe(true);
+      expect(result.output.split("\n")[0]).toMatch(/^\/opt\/nvm\/v22\/bin:/);
+    },
+  );
+
+  it("puts node's folder first in Windows' Path, with its own name and separator", () => {
+    const env = nodeOnPath({ Path: "C:\\Windows" }, "C:\\nvm\\v22\\node.exe", "win32");
+    expect(env).toEqual({ Path: "C:\\nvm\\v22;C:\\Windows" });
   });
 });
