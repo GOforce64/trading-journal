@@ -49,6 +49,10 @@ describe("SessionBands", () => {
     ]);
   });
 
+  it("paints behind the grid and the candles", () => {
+    expect(new SessionBands().paneViews()[0]?.zOrder?.()).toBe("bottom");
+  });
+
   it("paints nothing without bands, or before it's attached", () => {
     const bands = new SessionBands();
     bands.setBands([{ from: 0, to: 1, session: "pre" }]);

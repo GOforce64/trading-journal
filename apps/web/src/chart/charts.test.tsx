@@ -363,11 +363,20 @@ describe("IntradayChart's option view", () => {
   const at = (minute: number) => nyWallClock(DAY, minute) / 1000;
 
   it("has no session backgrounds, also when the same chart switches over from the stock view", () => {
+    // Options trade a quarter-hour past the close, so the option view can hold after-hours candles too.
+    const late = intradayModel(
+      [...OPTION_BARS, { t: nyWallClock(DAY, 965), o: 1.3, h: 1.3, l: 1.2, c: 1.25, v: 5 }],
+      TRADE,
+      1,
+      DEFAULT_PREFS.emaLengths,
+      { slots: true },
+    );
+    expect(late.candles.at(-1)?.session).toBe("post");
     const { rerender } = render(<IntradayChart model={MODEL} show={DEFAULT_PREFS.show} fitKey={0} />);
     const bands = library.primitives[0]?.primitive as never;
     expect(paintedBackground(bands)).toHaveLength(2);
     rerender(
-      <IntradayChart model={OPTION} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
+      <IntradayChart model={late} show={DEFAULT_PREFS.show} fitKey={0} viewKey="option" markersAtPrice />,
     );
     expect(library.charts).toBe(1);
     expect(paintedBackground(bands)).toEqual([]);
