@@ -218,6 +218,17 @@ describe("TradeDetail", () => {
     expect((await screen.findByTestId("review-panel")).textContent).toBe("side");
   });
 
+  it("writes each leg's expiry day first", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse()),
+    );
+    renderDetail();
+    const row = await screen.findByTestId(`leg-row-${trade.legs[0]?.id}`);
+    expect(row.textContent).toContain("16 Oct");
+    expect(row.textContent).not.toContain("10-16");
+  });
+
   it("shows the headline metrics and marks the broken wing", async () => {
     vi.stubGlobal(
       "fetch",

@@ -9,6 +9,8 @@ import {
   positionCash,
 } from "@tj/core";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { DateField } from "../components/DateField.js";
+import { DateTimeField } from "../components/DateTimeField.js";
 import { ESTIMATE_STYLE, estimateTitle, signedUsd } from "../components/Estimate.js";
 import { Money, Panel, usd } from "../components/ui.js";
 import {
@@ -338,6 +340,21 @@ export function IronFlyForm({
     });
   }
 
+  /** Opened, Closed and a typed Expiry: day first, whatever the browser's language (spec §8.2). */
+  const wallClock = (label: string, value: string, key: keyof IronFlyFormValues, Field: typeof DateField) => (
+    <div className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider">
+      {label}
+      <Field
+        label={label}
+        value={value}
+        onChange={(next) => set(key)({ target: { value: next } })}
+        className={
+          "rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[13px] text-fg normal-case tracking-normal outline-none focus:border-accent"
+        }
+      />
+    </div>
+  );
+
   const input = (
     label: string,
     value: string,
@@ -350,8 +367,6 @@ export function IronFlyForm({
       <input
         aria-label={label}
         type={type}
-        // Times to the second, as a synced fly's fills have them.
-        step={type === "datetime-local" ? 1 : undefined}
         value={value}
         placeholder={placeholder}
         onChange={onChange}
@@ -382,7 +397,7 @@ export function IronFlyForm({
             {input("Underlying", values.underlying, set("underlying"))}
             {input("Company", values.underlyingName, set("underlyingName"))}
             {/* Before Expiry: the listed expiries start from the open date. */}
-            {input("Opened", values.openedAt, set("openedAt"), "datetime-local")}
+            {wallClock("Opened", values.openedAt, "openedAt", DateTimeField)}
             {pickers ? (
               <div className="flex flex-col gap-1">
                 <label htmlFor="expiry-select" className={FIELD_LABEL}>
@@ -404,9 +419,9 @@ export function IronFlyForm({
                 </button>
               </div>
             ) : (
-              input("Expiry", values.expiry, set("expiry"), "date")
+              wallClock("Expiry", values.expiry, "expiry", DateField)
             )}
-            {input("Closed", values.closedAt, set("closedAt"), "datetime-local")}
+            {wallClock("Closed", values.closedAt, "closedAt", DateTimeField)}
             <label className="flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wider">
               Book
               <select

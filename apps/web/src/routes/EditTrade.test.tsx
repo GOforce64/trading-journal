@@ -375,7 +375,8 @@ describe("EditTrade", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { onSaved } = setup();
     const openedField = (await screen.findByLabelText("Opened")) as HTMLInputElement;
-    expect(openedField.step).toBe("1");
+    // Shown day first with its seconds, in the browser's own time zone.
+    expect(openedField.value).toMatch(/^28\/09\/2026 \d{2}:31:05$/);
     fireEvent.change(screen.getByLabelText("Exit price"), { target: { value: "1.40" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));

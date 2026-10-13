@@ -24,15 +24,32 @@ function sources(dir: string): string[] {
   });
 }
 
+/** The browser's own date fields take their order from its language; only these two wrap one, for its picker. */
+const DATE_FIELDS = new Set([
+  "apps/web/src/components/DateField.tsx",
+  "apps/web/src/components/DateTimeField.tsx",
+]);
+const DATE_INPUT = /type="(date|datetime-local)"|, "(date|datetime-local)"\)/;
+
+const allSources = () =>
+  ["apps", "packages"]
+    .flatMap((top) => readdirSync(join(ROOT, top)).map((pkg) => join(ROOT, top, pkg, "src")))
+    .filter((dir) => statSync(dir, { throwIfNoEntry: false })?.isDirectory())
+    .flatMap(sources)
+    .map((file) => relative(ROOT, file).split(sep).join("/"));
+
 describe("dates", () => {
   it("are formatted only in dateText.ts", () => {
-    const offenders = ["apps", "packages"]
-      .flatMap((top) => readdirSync(join(ROOT, top)).map((pkg) => join(ROOT, top, pkg, "src")))
-      .filter((dir) => statSync(dir, { throwIfNoEntry: false })?.isDirectory())
-      .flatMap(sources)
-      .map((file) => relative(ROOT, file).split(sep).join("/"))
+    const offenders = allSources()
       .filter((file) => !ALLOWED.has(file))
       .filter((file) => FORMATTER.test(readFileSync(join(ROOT, file), "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
+  it("are typed only in DateField and DateTimeField, never in a browser date input", () => {
+    const offenders = allSources()
+      .filter((file) => !DATE_FIELDS.has(file))
+      .filter((file) => DATE_INPUT.test(readFileSync(join(ROOT, file), "utf8")));
     expect(offenders).toEqual([]);
   });
 });

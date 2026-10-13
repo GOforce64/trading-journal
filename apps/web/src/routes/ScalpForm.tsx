@@ -1,5 +1,7 @@
 import { type PricedLeg, positionCash } from "@tj/core";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { DateField } from "../components/DateField.js";
+import { DateTimeField } from "../components/DateTimeField.js";
 import { Money, Panel, Pct, usd } from "../components/ui.js";
 import { todayNy, useChain, useCompanyName, useSettled } from "../market.js";
 import { ExpirySelect, StrikeSelect } from "./ChainPickers.js";
@@ -145,16 +147,16 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
   const input = (label: string, key: keyof ScalpFormValues, type = "text") => (
     <label className={FIELD}>
       {label}
-      <input
-        aria-label={label}
-        type={type}
-        // Times to the second, as a synced fill has them.
-        step={type === "datetime-local" ? 1 : undefined}
-        value={values[key]}
-        onChange={set(key)}
-        className={INPUT}
-      />
+      <input aria-label={label} type={type} value={values[key]} onChange={set(key)} className={INPUT} />
     </label>
+  );
+
+  /** Opened, Closed and a typed Expiry: day first, whatever the browser's language (spec §8.2). */
+  const wallClock = (label: string, key: keyof ScalpFormValues, Field: typeof DateField) => (
+    <div className={FIELD}>
+      {label}
+      <Field label={label} value={values[key]} onChange={(next) => setValue(key, next)} className={INPUT} />
+    </div>
   );
 
   return (
@@ -171,7 +173,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
               <option value="P">Put</option>
             </select>
           </label>
-          {input("Opened", "openedAt", "datetime-local")}
+          {wallClock("Opened", "openedAt", DateTimeField)}
           {expirations.length > 0 ? (
             <label htmlFor="scalp-expiry" className={FIELD}>
               Expiry
@@ -184,7 +186,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
               />
             </label>
           ) : (
-            input("Expiry", "expiry", "date")
+            wallClock("Expiry", "expiry", DateField)
           )}
           {strikes.length > 0 ? (
             // The select names itself ("Strike"); the caption is only visual.
@@ -204,7 +206,7 @@ export function ScalpForm({ initial, submitLabel, busy, error, notice, onSubmit 
           {input("Size", "size", "number")}
           {input("Entry price", "entry", "number")}
           {input("Exit price", "exit", "number")}
-          {input("Closed", "closedAt", "datetime-local")}
+          {wallClock("Closed", "closedAt", DateTimeField)}
           {input("Entry fees", "feesOpen", "number")}
           {input("Exit fees", "feesClose", "number")}
           <label className={FIELD}>

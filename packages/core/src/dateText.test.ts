@@ -5,10 +5,12 @@ import {
   dayTimeText,
   dayYearText,
   fieldDate,
+  fieldDateTime,
   monthName,
   monthText,
   parseDayMonth,
   parseDayMonthYear,
+  parseDayMonthYearTime,
 } from "./dateText.js";
 
 // 09:35:12 in New York on 28 Sep 2026 (EDT, UTC−4).
@@ -91,5 +93,36 @@ describe("dates typed", () => {
     expect(parseDayMonth("29/2", "2026-10-12")).toBe("2024-02-29");
     expect(parseDayMonth("9/28", "2026-10-12")).toBeNull();
     expect(parseDayMonth("9/12/26", "2026-10-12")).toBeNull();
+  });
+});
+
+describe("dates and times in a field", () => {
+  it("shows a wall-clock date and time day first, with seconds only when it has them", () => {
+    expect(fieldDateTime("2026-09-28T09:35")).toBe("28/09/2026 09:35");
+    expect(fieldDateTime("2026-09-28T09:31:05")).toBe("28/09/2026 09:31:05");
+  });
+
+  it.each([
+    ["28/9/26 9:35", "2026-09-28T09:35"],
+    ["28/09/2026 09:35", "2026-09-28T09:35"],
+    ["28.9.2026 15:57:05", "2026-09-28T15:57:05"],
+    ["9-12-26 0:05", "2026-12-09T00:05"],
+    [" 28/09/2026  09:35 ", "2026-09-28T09:35"],
+    ["2026-09-28T09:35", "2026-09-28T09:35"],
+    ["2026-09-28 09:31:05", "2026-09-28T09:31:05"],
+  ])("reads %s as %s", (text, value) => {
+    expect(parseDayMonthYearTime(text)).toBe(value);
+  });
+
+  it.each([
+    "28/09/2026",
+    "9/28/2026 09:35",
+    "28/09/2026 24:00",
+    "28/09/2026 09:60",
+    "28/09/2026 9",
+    "28/09/2026 09:35 PM",
+    "",
+  ])("refuses %s", (text) => {
+    expect(parseDayMonthYearTime(text)).toBeNull();
   });
 });

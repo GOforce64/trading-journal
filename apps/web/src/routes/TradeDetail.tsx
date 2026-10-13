@@ -1,5 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, dayTimeText, type OptionQuote, pctKept, returnOnCost, round2 } from "@tj/core";
+import {
+  closeEstimate,
+  dayText,
+  dayTimeText,
+  type OptionQuote,
+  pctKept,
+  returnOnCost,
+  round2,
+} from "@tj/core";
 import { api, type TradeDetailView } from "../api.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
@@ -256,7 +264,7 @@ export function TradeDetail({
                     </td>
                     <td>{leg.right === "C" ? "Call" : "Put"}</td>
                     <td>{leg.strike.toFixed(2)}</td>
-                    <td>{leg.expiry.slice(5)}</td>
+                    <td>{dayText(leg.expiry)}</td>
                     <td className="text-right">{leg.quantity}</td>
                     <td className="text-right">{premiumText(leg.openPrice)}</td>
                     <td className="text-right">

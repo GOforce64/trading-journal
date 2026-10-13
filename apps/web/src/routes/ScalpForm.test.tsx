@@ -33,8 +33,12 @@ function stubApi(created: unknown = { id: "new-scalp" }) {
 
 const client = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-const fill = (label: string, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+/** Types into a field and leaves it, as a person does: the date fields commit on blur. */
+const fill = (label: string, value: string) => {
+  const field = screen.getByLabelText(label);
+  fireEvent.change(field, { target: { value } });
+  fireEvent.blur(field);
+};
 
 function setup(initial?: Partial<ScalpFormValues>) {
   stubApi();

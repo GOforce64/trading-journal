@@ -102,3 +102,24 @@ export function parseDayMonth(text: string, today: string): string | null {
   }
   return null;
 }
+
+/** "2026-09-28T09:31:05" → "28/09/2026 09:31:05", as a date-and-time field shows a wall-clock value. */
+export const fieldDateTime = (value: string): string => `${fieldDate(value.slice(0, 10))} ${value.slice(11)}`;
+
+const TIME = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+
+/**
+ * A typed date and time, day/month/year then a 24-hour time: "28/9/26 9:35", "28/09/2026 15:57:05", or ISO
+ * ("2026-09-28T09:35", with a space or a T). Gives the wall-clock value "2026-09-28T09:35[:05]", or null.
+ */
+export function parseDayMonthYearTime(text: string): string | null {
+  const parts = text.trim().split(/\s+|T(?=\d{1,2}:)/);
+  if (parts.length !== 2) return null;
+  const date = parseDayMonthYear(parts[0] ?? "");
+  const time = TIME.exec(parts[1] ?? "");
+  if (!date || !time) return null;
+  const [hour, minute] = [Number(time[1]), Number(time[2])];
+  const second = time[3] == null ? null : Number(time[3]);
+  if (hour > 23 || minute > 59 || (second != null && second > 59)) return null;
+  return `${date}T${pad(hour)}:${pad(minute)}${second == null ? "" : `:${pad(second)}`}`;
+}
