@@ -138,5 +138,6 @@ describe.runIf(process.platform === "win32")("on Windows, for real", () => {
     ]);
     expect(removeLauncher("win32", env, "C:\\Users\\G")).toBe(file);
     expect(existsSync(file)).toBe(false);
-  });
+    // Two cold PowerShell starts (make, then read back) take longer than vitest's 5 s on a CI runner.
+  }, 60_000);
 });
