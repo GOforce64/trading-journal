@@ -63,8 +63,9 @@ describe("generateDemo", () => {
     expect(summary.scalps).toBeLessThanOrEqual(80);
     expect(summary.flies).toBeGreaterThanOrEqual(1);
     expect(summary.to).toBe(END);
+    expect(summary.swings).toBe(8);
     const trades = createTradesRepo(db).list({ taken: true });
-    expect(trades).toHaveLength(summary.scalps + summary.flies);
+    expect(trades).toHaveLength(summary.scalps + summary.flies + summary.swings);
     for (const trade of trades) {
       expect(trade.closedAt).not.toBeNull();
       expect(["live", "paper"]).toContain(trade.book);
@@ -99,9 +100,12 @@ describe("generateDemo", () => {
     const bars = createBarsRepo(db);
     for (const trade of createTradesRepo(db).list({ taken: true })) {
       const lastDay = nyDate(trade.closedAt ?? trade.openedAt);
-      const minuteDays = datesFrom(addDays(nyDate(trade.openedAt), -7), lastDay);
-      expect(bars.knownDays(trade.underlying, "1m", minuteDays).size).toBe(minuteDays.length);
-      const dailyDays = datesFrom(addDays(lastDay, -1_095), lastDay);
+      if (trade.strategy !== "swing") {
+        const minuteDays = datesFrom(addDays(nyDate(trade.openedAt), -7), lastDay);
+        expect(bars.knownDays(trade.underlying, "1m", minuteDays).size).toBe(minuteDays.length);
+      }
+      const reach = trade.strategy === "swing" ? 1_826 : 1_095;
+      const dailyDays = datesFrom(addDays(lastDay, -reach), lastDay);
       expect(bars.knownDays(trade.underlying, "1d", dailyDays).size).toBe(dailyDays.length);
     }
   });
