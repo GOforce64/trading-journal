@@ -84,6 +84,29 @@ describe("SwingChart (swing spec §5.4)", () => {
     ]);
   });
 
+  it("widens the price scale to every strike and the break-even, so none sits off the chart", async () => {
+    stub();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <SwingChart
+          trade={TRADE}
+          lines={[...LINES, { price: 200, color: "#f48fb1", dashed: true, label: "200" }]}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(seriesOf("Candlestick")[0]?.data.length).toBeGreaterThan(0));
+    const provide = seriesOf("Candlestick")[0]?.options.autoscaleInfoProvider as
+      | ((base: () => unknown) => unknown)
+      | undefined;
+    expect(provide).toBeTypeOf("function");
+    // The candles alone span 228–236: a 200 strike and the 240 short strike would be off the scale.
+    expect(provide?.(() => ({ priceRange: { minValue: 228, maxValue: 236 } }))).toEqual({
+      priceRange: { minValue: 200, maxValue: 240 },
+    });
+    // With nothing to show yet, there's nothing to widen.
+    expect(provide?.(() => null)).toBeNull();
+  });
+
   it("switches to weekly candles from five years of bars, with EMA 167 greyed out", async () => {
     const fetchMock = stub();
     show();
