@@ -6,7 +6,7 @@ const labels = (text: string) => matchPages(text).map((page) => page.label);
 describe("matchPages", () => {
   it("lists every page with nothing typed", () => {
     expect(matchPages("")).toEqual(PAGES);
-    expect(PAGES).toHaveLength(14);
+    expect(PAGES).toHaveLength(15);
   });
 
   it("matches the start of each word, in order", () => {
@@ -15,6 +15,7 @@ describe("matchPages", () => {
     expect(labels("missed")).toEqual(["Missed", "Analytics › Missed"]);
     expect(labels("sc an")).toEqual([]);
     expect(labels("nvda")).toEqual([]);
-    expect(labels("sw")).toEqual(["Swings"]);
+    expect(labels("sw")).toEqual(["Swings", "Analytics › Swings"]);
+    expect(labels("an sw")).toEqual(["Analytics › Swings"]);
   });
 });

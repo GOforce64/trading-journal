@@ -32,7 +32,7 @@ interface Draft {
 
 export interface PlaybookProps {
   /** Opens Analytics filtered to a setup, on its tab. */
-  onOpenSetup?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
+  onOpenSetup?: (setupId: string, tab: "scalps" | "swings" | "flies" | "missed") => void;
 }
 
 /** Each setup's stats (scalp-analytics spec §7), then setups and tags to manage (scalp-review spec §10). */

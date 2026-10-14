@@ -15,6 +15,7 @@ export const PAGES: readonly PalettePage[] = [
   { label: "Settings", href: "/settings" },
   { label: "Analytics › Overview", href: "/analytics" },
   { label: "Analytics › Scalps", href: "/analytics?tab=scalps" },
+  { label: "Analytics › Swings", href: "/analytics?tab=swings" },
   { label: "Analytics › Iron flies", href: "/analytics?tab=flies" },
   { label: "Analytics › Missed", href: "/analytics?tab=missed" },
   { label: "Scalps › All", href: "/scalps" },

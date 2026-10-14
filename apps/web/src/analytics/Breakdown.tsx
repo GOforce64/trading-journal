@@ -26,17 +26,19 @@ const tone = (value: number | null) => {
 
 const HEADERS = ["n", "Win %", "Net", "Avg R", "Avg return", "PF"];
 
-/** One dimension at a time: the picker, a table, and its bars (scalp-analytics spec §6.4). */
-export function BreakdownPanel({
+/** One dimension at a time: the picker, a table, and its bars (scalp-analytics spec §6.4, swing spec §6.3). */
+export function BreakdownPanel<D extends string>({
   by,
   onBy,
   rows,
   metric,
   edges,
   note,
+  dimensions,
+  withR = true,
 }: {
-  by: Breakdown;
-  onBy: (by: Breakdown) => void;
+  by: D;
+  onBy: (by: D) => void;
   /** A row only missed trades have carries blank dollars (missed-trades spec §6.8). */
   rows: readonly (BreakdownRow | MissedOnlyRow)[];
   metric: Metric;
@@ -44,12 +46,17 @@ export function BreakdownPanel({
   edges?: EdgeControl;
   /** A line under the picker, such as why missed trades aren't in a contract's breakdown. */
   note?: string;
+  /** The dimensions to pick from: the Scalps tab's `DIMENSIONS`, or the Swings tab's. */
+  dimensions: readonly { id: D; label: string }[];
+  /** False leaves out Avg R, for swings, which have none. */
+  withR?: boolean;
 }) {
-  const label = DIMENSIONS.find((dimension) => dimension.id === by)?.label ?? by;
+  const label = dimensions.find((dimension) => dimension.id === by)?.label ?? by;
+  const headers = withR ? HEADERS : HEADERS.filter((header) => header !== "Avg R");
   return (
     <Section title="Break down by" right={edges && <EdgeEditor title={label} control={edges} />}>
       <fieldset aria-label="Dimension" className="mb-2 flex flex-wrap gap-1 text-[11px]">
-        {DIMENSIONS.map((dimension) => (
+        {dimensions.map((dimension) => (
           <button
             key={dimension.id}
             type="button"
@@ -67,7 +74,7 @@ export function BreakdownPanel({
           <thead>
             <tr className="text-[9px] text-muted uppercase tracking-wider">
               <th className="py-1 text-left font-medium">{label}</th>
-              {HEADERS.map((header) => (
+              {headers.map((header) => (
                 <th key={header} className="text-right font-medium">
                   {header}
                 </th>
@@ -83,12 +90,14 @@ export function BreakdownPanel({
                 <td className={`num text-right ${tone(row.net)}`}>
                   {row.net == null ? "—" : dollars(row.net)}
                 </td>
-                <td
-                  className={`num text-right ${tone(row.avgR)}`}
-                  title={`over ${row.rCount} of ${row.trades}`}
-                >
-                  {row.avgR == null ? "—" : rText(row.avgR)}
-                </td>
+                {withR && (
+                  <td
+                    className={`num text-right ${tone(row.avgR)}`}
+                    title={`over ${row.rCount} of ${row.trades}`}
+                  >
+                    {row.avgR == null ? "—" : rText(row.avgR)}
+                  </td>
+                )}
                 <td className={`num text-right ${tone(row.avgReturn)}`}>{returnText(row.avgReturn)}</td>
                 <td className="num text-right">{profitFactorText(row.profitFactor)}</td>
               </tr>

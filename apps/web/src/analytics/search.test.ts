@@ -94,6 +94,12 @@ describe("parseAnalyticsSearch", () => {
       excluded: true,
     });
   });
+
+  it("keeps the Swings tab and its breakdown, and drops a breakdown that isn't a swing's", () => {
+    expect(parseAnalyticsSearch({ tab: "swings", sby: "held" })).toEqual({ tab: "swings", sby: "held" });
+    expect(parseAnalyticsSearch({ tab: "swings", sby: "structure" })).toEqual({ tab: "swings" });
+    expect(parseAnalyticsSearch({ tab: "swings", sby: "cost" })).toEqual({ tab: "swings" });
+  });
 });
 
 describe("toFilter and applyPatch", () => {
