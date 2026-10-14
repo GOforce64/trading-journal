@@ -39,7 +39,7 @@ It journals two very different strategies:
 | Concept | Definition |
 |---|---|
 | **Trade** | One position from open to flat. It has a strategy, one or more legs, and zero or more fills. |
-| **Strategy** | `scalp` or `iron_fly`. Determines the detail fields, the metrics, and which pages show the trade. |
+| **Strategy** | `scalp`, `iron_fly` or `swing` ([swing spec](2026-10-14-swing-trades-design.md)). Determines the detail fields, the metrics, and which pages show the trade. |
 | **Book** | Which ledger a trade belongs to: **Live**, **Paper**, or **Missed**. Live/Paper come from the trade's account kind. Missed trades have no account. |
 | **Missed trade** | A scalp setup the user saw but didn't take (missed trades are always `scalp`). It has no fills or dollar P&L. It is scored in **R** from entry, stop and exit points marked on the underlying's chart. |
 | **Excluded** | A per-trade flag with an optional reason. Excluded trades stay visible (with a badge) but are left out of every statistic unless "include excluded" is toggled on. |
@@ -147,7 +147,7 @@ All tables use `id TEXT` (UUID). Syncable tables also carry `created_at`, `updat
 
 - **accounts**: `name`, `broker` (`ibkr` | `other`), `kind` (`live` | `paper`), `external_id` (IBKR account number).
 - **trades**:
-  - identity: `strategy` (`scalp` | `iron_fly`), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "XYZ Industries"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
+  - identity: `strategy` (`scalp` | `iron_fly` | `swing`), `chosen_strategy` (the user's Scalp or Swing on a single bought option; the sync never writes it), `is_missed`, `account_id` (null only if missed), `status` (`open` | `closed`), `underlying`, `underlying_name` (e.g. "XYZ Industries"), `structure_label` (free text from the source, e.g. "Short Iron Butterfly")
   - timing and money: `opened_at`, `closed_at`, `gross_pnl`, `fees` (round trip), `fees_open`, `fees_close`, `net_pnl` (null if missed), `planned_risk`, `r_multiple`
   - review: `setup_id`, `grade`, `notes` (Markdown), `excluded`, `exclude_reason`, `reviewed_at`
   - provenance: `source` (`ibkr_flex` | `csv_import` | `oquants_extract` | `manual`), `import_batch_id`, `external_ref` (the source platform's own trade ID where it has a stable one; oQuants has none, so its trades are identified by the UUIDv5 of a natural key instead, see §7.2b)
@@ -367,8 +367,8 @@ Scalps are detailed in [2026-09-30-scalp-analytics-design.md](2026-09-30-scalp-a
   - background `#0b0e14`, panels `#131722`, lines `#1f2430`, text `#d1d4dc`, muted `#6b7385`;
   - accent `#2962ff`, up `#26a69a`, down `#ef5350`.
 - **Inter** for UI text and **JetBrains Mono** for every number (tabular, aligned). Uppercase micro-labels. 2–3 px radii. Dense tables.
-- Semantic chips: strategy (IRON FLY violet, SCALP amber), book (LIVE green, PAPER blue, MISSED grey), and EXCLUDED (dashed outline).
-- Layout: a left nav (Dashboard, Journal, Analytics, Iron Flies, Scalps, Missed, Playbook, Import / Sync, Settings) and a top filter bar.
+- Semantic chips: strategy (IRON FLY violet, SCALP amber, SWING pink), book (LIVE green, PAPER blue, MISSED grey), and EXCLUDED (dashed outline).
+- Layout: a left nav (Dashboard, Journal, Analytics, Iron Flies, Scalps, Swings, Missed, Playbook, Import / Sync, Settings) and a top filter bar.
 - The Dashboard: KPIs, then a full-width equity curve with a drawdown pane, then the P&L calendar beside the open and recent trades.
 - On a trade page, secondary detail (the leg breakdown, the raw imported row) sits behind an expander rather than on screen by default, so the page opens on the numbers that matter.
 - Dark by default. A light theme exists (tokens defined once in CSS variables), but it is not the design focus.

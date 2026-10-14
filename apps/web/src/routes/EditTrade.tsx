@@ -163,7 +163,7 @@ export function EditTrade({
     : toFormValues(trade);
   const notice =
     trade.source === "ibkr_flex" ? <p className="mb-2 text-[11px] text-muted">{SYNCED_NOTICE}</p> : null;
-  if (trade.strategy === "scalp") {
+  if (trade.strategy === "scalp" || (trade.strategy === "swing" && trade.legs.length === 1)) {
     return (
       <ScalpForm
         initial={toScalpFormValues(trade)}
@@ -171,7 +171,8 @@ export function EditTrade({
         busy={save.isPending}
         error={save.error ? String(save.error) : null}
         notice={notice}
-        onSubmit={(payload) => save.mutate(payload)}
+        // The form writes a scalp; a swing stays a swing, and an unchanged strategy is no edited fact.
+        onSubmit={(payload) => save.mutate({ ...payload, strategy: trade.strategy })}
       />
     );
   }

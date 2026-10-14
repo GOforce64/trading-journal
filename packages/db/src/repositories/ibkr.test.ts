@@ -471,3 +471,79 @@ describe("orphans, links and runs", () => {
     expect(ibkr().tradeExists("nope")).toBe(false);
   });
 });
+
+describe("the user's Scalp | Swing choice in the sync (swing spec §3.4)", () => {
+  const vertical = (id = "trade-nvda"): SyncedTradeInput => {
+    const base = scalp({}, id);
+    return {
+      ...base,
+      trade: {
+        ...base.trade,
+        strategy: "swing",
+        structureLabel: "Call debit spread",
+        legs: [
+          {
+            right: "C",
+            strike: 232.5,
+            expiry: "2026-10-16",
+            quantity: 2,
+            multiplier: 100,
+            openPrice: 3,
+            closePrice: null,
+          },
+          {
+            right: "C",
+            strike: 240,
+            expiry: "2026-10-16",
+            quantity: -2,
+            multiplier: 100,
+            openPrice: 1,
+            closePrice: null,
+          },
+        ],
+        closedAt: null,
+        netPnl: null,
+      },
+      legIds: [`${id}-long`, `${id}-short`],
+    };
+  };
+
+  it("keeps a switched single option a swing, and an unchanged re-sync is unchanged", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    trades().update("trade-nvda", { chosenStrategy: "swing" });
+    expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("unchanged");
+    expect(trades().get("trade-nvda")).toMatchObject({
+      strategy: "swing",
+      chosenStrategy: "swing",
+      factsEditedAt: null,
+    });
+  });
+
+  it("keeps the choice when IBKR's facts change", () => {
+    const [leg] = scalp().trade.legs;
+    ibkr().apply(
+      scalp({ closedAt: null, netPnl: null, legs: leg ? [{ ...leg, closePrice: null }] : [] }),
+      ACCOUNT.id,
+    );
+    trades().update("trade-nvda", { chosenStrategy: "swing" });
+    expect(ibkr().apply(scalp(), ACCOUNT.id)).toBe("updated");
+    expect(trades().get("trade-nvda")).toMatchObject({ strategy: "swing", closedAt: expect.any(Number) });
+  });
+
+  it("writes a single option that became a vertical as a swing, whatever the old choice said", () => {
+    ibkr().apply(scalp(), ACCOUNT.id);
+    trades().update("trade-nvda", { chosenStrategy: "scalp" });
+    ibkr().apply(vertical(), ACCOUNT.id);
+    expect(trades().get("trade-nvda")).toMatchObject({ strategy: "swing", chosenStrategy: "scalp" });
+  });
+
+  it("takes a typed swing on the same contract and day as already in the journal", () => {
+    trades().create({ ...scalp().trade, source: "manual", strategy: "swing", chosenStrategy: "swing" });
+    expect(ibkr().isDuplicate(scalp())).toBe(true);
+  });
+
+  it("doesn't take a typed single option for a synced vertical on its long leg", () => {
+    trades().create({ ...scalp().trade, source: "manual" });
+    expect(ibkr().isDuplicate(vertical())).toBe(false);
+  });
+});

@@ -1,4 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
+import { STRATEGIES } from "@tj/core";
 import { createTaxonomyRepo, type Db, DuplicateNameError } from "@tj/db";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -6,7 +7,7 @@ import { z } from "zod";
 const newSetupSchema = z.object({
   name: z.string().trim().min(1).max(60),
   description: z.string().max(500).nullish(),
-  strategy: z.enum(["scalp", "iron_fly"]).nullish(),
+  strategy: z.enum(STRATEGIES).nullish(),
 });
 
 const newTagSchema = z.object({
@@ -21,7 +22,7 @@ const setupPatchSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     description: z.string().max(500).nullable(),
-    strategy: z.enum(["scalp", "iron_fly"]).nullable(),
+    strategy: z.enum(STRATEGIES).nullable(),
     archived: z.boolean(),
   })
   .partial();

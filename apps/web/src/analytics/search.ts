@@ -7,6 +7,8 @@ import {
   type MissedBreakdown,
   monthText,
   parseEdges,
+  SWING_BREAKDOWNS,
+  type SwingBreakdown,
   WEEKDAYS,
   weekdayOfDate,
 } from "@tj/core";
@@ -15,7 +17,7 @@ import { firstDay, lastDay, monthOf, shiftMonth } from "./dates.js";
 
 /** The Analytics page's URL state. Defaults are left out, so the URL stays short (spec §7.1). */
 export interface AnalyticsSearch {
-  tab?: "scalps" | "flies" | "missed";
+  tab?: "scalps" | "swings" | "flies" | "missed";
   from?: string;
   to?: string;
   /** The books, comma-separated in the order live, paper, missed; absent means live and paper (spec §6.8). */
@@ -34,6 +36,8 @@ export interface AnalyticsSearch {
   costEdges?: string;
   /** The Missed tab's breakdown (missed-trades spec §6.6); absent means by skip reason. */
   mby?: Exclude<MissedBreakdown, "skip">;
+  /** The Swings tab's breakdown (swing spec §6.3); absent means by structure. */
+  sby?: Exclude<SwingBreakdown, "structure">;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -75,7 +79,8 @@ export function toggledBooks(search: Pick<AnalyticsSearch, "books">, book: Book)
 /** Keeps what's valid and drops the rest, so an old or hand-edited link still opens. */
 export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSearch {
   const search: AnalyticsSearch = {};
-  if (raw.tab === "scalps" || raw.tab === "flies" || raw.tab === "missed") search.tab = raw.tab;
+  if (raw.tab === "scalps" || raw.tab === "swings" || raw.tab === "flies" || raw.tab === "missed")
+    search.tab = raw.tab;
   const from = text(raw.from);
   if (isDate(from)) search.from = from;
   const to = text(raw.to);
@@ -93,6 +98,8 @@ export function parseAnalyticsSearch(raw: Record<string, unknown>): AnalyticsSea
   if ([true, "true", 1, "1"].includes(raw.excluded as never)) search.excluded = true;
   const by = BREAKDOWNS.find((each) => each === raw.by);
   if (by && by !== "setup") search.by = by;
+  const sby = SWING_BREAKDOWNS.find((each) => each === raw.sby);
+  if (sby && sby !== "structure") search.sby = sby;
   if (raw.metric === "r" || raw.metric === "win") search.metric = raw.metric;
   const creditEdges = text(raw.creditEdges);
   if (creditEdges && parseEdges(creditEdges, "usd")) search.creditEdges = creditEdges;

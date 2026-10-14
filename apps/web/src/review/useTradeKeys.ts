@@ -1,4 +1,4 @@
-import type { Grade } from "@tj/core";
+import { canSwitchStrategy, type Grade } from "@tj/core";
 import { useState } from "react";
 import type { TradeView } from "../api.js";
 import { useShortcut } from "../keys/Shortcuts.js";
@@ -32,7 +32,7 @@ function focusField(name: string): void {
 }
 
 /**
- * The keys on a trade's page (launcher-keys-palette spec §6.1): J/K, 1–5, Enter, S/M/E/N, P/T, X. Only those that
+ * The keys on a trade's page (launcher-keys-palette spec §6.1): J/K, 1–5, Enter, S/M/E/N, P/T, X, W. Only those that
  * apply are registered, so the ? help shows only those. A failed save leaves `error` for the page to show.
  */
 export function useTradeKeys({
@@ -100,6 +100,10 @@ export function useTradeKeys({
   useShortcut(ready && chart ? "t" : null, "Place a target", "Chart", () => field("place-target")?.click());
   useShortcut(ready ? "x" : null, "Exclude from stats", "Review", () => {
     if (trade) void patch({ excluded: !trade.excluded });
+  });
+  const switchable = trade != null && canSwitchStrategy(trade);
+  useShortcut(switchable ? "w" : null, "Scalp or swing", "Review", () => {
+    if (trade) void patch({ chosenStrategy: trade.strategy === "swing" ? "scalp" : "swing" });
   });
   return { error };
 }

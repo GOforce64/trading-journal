@@ -8,6 +8,7 @@ const DESTINATIONS = [
   "Analytics",
   "Iron Flies",
   "Scalps",
+  "Swings",
   "Missed",
   "Playbook",
   "Import / Sync",

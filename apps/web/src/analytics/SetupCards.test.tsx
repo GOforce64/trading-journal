@@ -143,7 +143,7 @@ describe("SetupCards", () => {
 
   it("shows archived setups' cards only on request", () => {
     renderCards({ showArchived: true });
-    expect(card("Old setup").getByText("Both")).toBeTruthy();
+    expect(card("Old setup").getByText("Any")).toBeTruthy();
   });
 
   it("says so when the trades or setups couldn't load, and waits for the setups before saying there are none", () => {
@@ -215,5 +215,53 @@ describe("SetupCards and missed trades", () => {
     expect(pull.getByTestId("card-missed").textContent).toContain("Missed1");
     fireEvent.click(pull.getByRole("button", { name: "1 missed →" }));
     expect(onOpen).toHaveBeenCalledWith("pull", "missed");
+  });
+});
+
+describe("a swing setup's card (swing spec §6.4)", () => {
+  it("leads with the average return on the debit, shows the average days held, and opens the Swings tab", () => {
+    const leg = (strike: number, quantity: number, openPrice: number, closePrice: number) => ({
+      id: `w-${strike}-${quantity}`,
+      right: "C",
+      strike,
+      expiry: "2026-11-06",
+      quantity,
+      multiplier: 100,
+      openPrice,
+      closePrice,
+    });
+    const swingRow = (id: string, opened: string, closed: string, netPnl: number, legs: unknown[]) => ({
+      ...tradeRow({ id, strategy: "scalp", underlying: "NVDA", opened, closed, netPnl, setupId: "weekly" }),
+      strategy: "swing",
+      ironFly: null,
+      legs,
+    });
+    const onOpenSetup = renderCards({
+      trades: [
+        swingRow("w1", "2026-10-02 10:15", "2026-10-09 11:00", 402.1, [
+          leg(230, 1, 5.1, 9),
+          leg(240, -1, 1.3, 1.15),
+        ]),
+        swingRow("w2", "2026-10-05 10:15", "2026-10-06 11:00", 200, [leg(230, 2, 4, 5)]),
+      ] as unknown as TradeView[],
+      setups: [
+        {
+          id: "weekly",
+          name: "Weekly breakout",
+          strategy: "swing",
+          description: null,
+          archived: false,
+          tradeCount: 2,
+        },
+      ] as Setup[],
+      today: "2026-10-13",
+    });
+    const weekly = card("Weekly breakout");
+    expect(weekly.getByText("Avg return")).toBeTruthy();
+    // 402.10 on $380 and 200 on $800: (1.0582 + 0.25) ÷ 2.
+    expect(weekly.getByTestId("card-hero").textContent).toBe("+65.4%");
+    expect(weekly.getByText("Avg held").nextSibling?.textContent).toBe("4.0 days");
+    fireEvent.click(weekly.getByRole("button", { name: "2 trades →" }));
+    expect(onOpenSetup).toHaveBeenCalledWith("weekly", "swings");
   });
 });

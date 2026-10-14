@@ -1,9 +1,18 @@
-import { holdRange, newTradeSchema, nyDate, type PriceBar, stockAt } from "@tj/core";
+import {
+  holdRange,
+  newTradeSchema,
+  nyDate,
+  type PriceBar,
+  SWING_LABELS,
+  stockAt,
+  swingShape,
+} from "@tj/core";
 import { createBarsRepo, createTaxonomyRepo, createTradesRepo, type Db } from "@tj/db";
 import type { FlyPlan } from "./flies.js";
 import type { MissedPlan } from "./missed.js";
 import { cents } from "./prices.js";
 import type { ScalpPlan } from "./scalps.js";
+import type { SwingPlan } from "./swings.js";
 import { symbolInfo } from "./symbols.js";
 
 /** Bars to store, a symbol (or contract) and timeframe at a time, every known day listed, empty ones too. */
@@ -34,6 +43,7 @@ export function writeDemo(
     scalps: readonly ScalpPlan[];
     flies: readonly FlyPlan[];
     missed: readonly MissedPlan[];
+    swings: readonly SwingPlan[];
     bars: DemoBars;
     minutesOf: (symbol: string, date: string) => PriceBar[];
     now: () => number;
@@ -185,6 +195,32 @@ export function writeDemo(
         trade.id,
         { entryPrice: null, holdHigh: hold?.high ?? null, holdLow: hold?.low ?? null },
         clock,
+      );
+    }
+
+    // Swings (swing spec §8): daily-chart trades, so they need no minute bars or fetched prices.
+    for (const plan of input.swings) {
+      clock = plan.closedAt + input.jitter(`${plan.symbol}:${plan.openedAt}:written`) * MINUTE_MS;
+      const shape = swingShape(plan.legs);
+      const feesOpen = cents(plan.fees / 2);
+      trades.create(
+        newTradeSchema.parse({
+          strategy: "swing",
+          book: plan.book,
+          underlying: plan.symbol,
+          underlyingName: symbolInfo(plan.symbol).name,
+          structureLabel: shape ? SWING_LABELS[shape] : null,
+          openedAt: plan.openedAt,
+          closedAt: plan.closedAt,
+          netPnl: plan.netPnl,
+          fees: plan.fees,
+          feesOpen,
+          feesClose: cents(plan.fees - feesOpen),
+          notes: plan.notes,
+          grade: plan.grade,
+          source: "manual",
+          legs: plan.legs,
+        }),
       );
     }
   })();

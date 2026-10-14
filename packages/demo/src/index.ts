@@ -2,9 +2,10 @@ import { addDays, isTradingDay, nyDate, nyWallClock, occSymbol, type PriceBar } 
 import type { Db } from "@tj/db";
 import { type EarningsEvent, earningsSchedule, type FlyPlan, planFly } from "./flies.js";
 import { type MissedPlan, planMissed } from "./missed.js";
-import { dailyBar, dailyWalk, minuteBars, syntheticDailyBar, tradingDays } from "./prices.js";
+import { dailyBar, dailyWalk, minuteBars, syntheticDailyBar, tradingDays, walkBack } from "./prices.js";
 import { chance, int, pick, stream } from "./random.js";
 import { planScalps, type ScalpPlan } from "./scalps.js";
+import { planSwings } from "./swings.js";
 import { FLY_SYMBOLS, SCALP_SYMBOLS, SYMBOLS, symbolInfo } from "./symbols.js";
 import { type DemoBars, writeDemo } from "./write.js";
 
@@ -24,11 +25,15 @@ export interface DemoSummary {
   flies: number;
   /** Missed trades, apart from the scalps and flies (missed-trades spec §8). */
   missed: number;
+  /** Swings (swing spec §8). */
+  swings: number;
   bars: number;
 }
 
 /** How far back the daily chart reaches from a trade's last day (the server's `DAILY_DAYS`). */
 const DAILY_REACH = 1_095;
+/** How far back a swing's weekly chart reaches (the server's WEEKLY_DAYS). */
+const WEEKLY_REACH = 1_826;
 /** How far before its entry a trade's minute chart starts (`barRange` in the web app). */
 const MINUTE_REACH = 7;
 
@@ -64,6 +69,17 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
       return [symbol, dailyWalk(stream(seed, `${symbol}:walk`), symbol, walkSessions, gaps)] as const;
     }),
   );
+
+  // The weekly chart's older years (swing spec §8), walked back from each walk's first open.
+  const backFrom = addDays(first, -WEEKLY_REACH);
+  const backSessions = tradingDays(backFrom, addDays(walkFrom, -1));
+  const backs = new Map(
+    Object.keys(SYMBOLS).map((symbol) => {
+      const firstOpen = walks.get(symbol)?.get(walkSessions[0] ?? "")?.open ?? symbolInfo(symbol).start;
+      return [symbol, walkBack(stream(seed, `${symbol}:back`), symbol, backSessions, firstOpen)] as const;
+    }),
+  );
+  const swings = planSwings(stream(seed, "swings"), sessions, walks, SCALP_SYMBOLS);
 
   // Each symbol's minute bars, made once a day on first use, bridged to the walk's close.
   const minutes = new Map<string, Map<string, PriceBar[]>>();
@@ -153,8 +169,8 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
     const made = minutes.get(symbol) ?? new Map<string, PriceBar[]>();
     const { vol, volume } = symbolInfo(symbol);
     const daily: { date: string; bars: PriceBar[] }[] = [];
-    for (let date = walkFrom; date <= last; date = addDays(date, 1)) {
-      const day = walk?.get(date);
+    for (let date = backFrom; date <= last; date = addDays(date, 1)) {
+      const day = walk?.get(date) ?? backs.get(symbol)?.get(date);
       const own = made.get(date);
       if (!day) daily.push({ date, bars: [] });
       else if (own) daily.push({ date, bars: [dailyBar(date, own)] });
@@ -182,6 +198,7 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
     scalps,
     flies,
     missed,
+    swings,
     bars,
     minutesOf,
     now,
@@ -193,6 +210,7 @@ export function generateDemo(db: Db, options: DemoOptions): DemoSummary {
     scalps: scalps.length,
     flies: flies.length,
     missed: missed.length,
+    swings: swings.length,
     bars: written,
   };
 }

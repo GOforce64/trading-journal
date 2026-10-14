@@ -88,7 +88,7 @@ describe("Playbook", () => {
     expect(screen.getByTestId("setup-crush").textContent).toContain("Iron flies");
     expect(screen.queryByTestId("setup-old")).toBeNull();
     fireEvent.click(within(setupsPanel()).getByLabelText("Show archived"));
-    expect(screen.getByTestId("setup-old").textContent).toContain("Both");
+    expect(screen.getByTestId("setup-old").textContent).toContain("Any");
   });
 
   it("adds a setup from + New setup", async () => {
@@ -103,6 +103,27 @@ describe("Playbook", () => {
     await waitFor(() =>
       expect(sent(fetchMock, "POST")).toEqual([
         [expect.stringContaining("/api/setups"), { name: "Gap and go", strategy: null, description: null }],
+      ]),
+    );
+  });
+
+  it("adds a setup for swings, and calls a setup for every strategy Any", async () => {
+    const fetchMock = stubApi();
+    renderPlaybook();
+    fireEvent.click(await screen.findByRole("button", { name: "+ New setup" }));
+    const strategy = screen.getByRole("combobox", { name: "Strategy" });
+    expect(within(strategy).getByRole("option", { name: "Any" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Setup name" }), {
+      target: { value: "Weekly breakout" },
+    });
+    fireEvent.change(strategy, { target: { value: "swing" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Setup name" }), { key: "Enter" });
+    await waitFor(() =>
+      expect(sent(fetchMock, "POST")).toEqual([
+        [
+          expect.stringContaining("/api/setups"),
+          { name: "Weekly breakout", strategy: "swing", description: null },
+        ],
       ]),
     );
   });

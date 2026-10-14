@@ -1,4 +1,4 @@
-import { nyMinuteOfDay, nyWallClock, regularClose } from "./calendar.js";
+import { addDays, nyMinuteOfDay, nyWallClock, regularClose, WEEKDAYS, weekdayOfDate } from "./calendar.js";
 import { nyDate } from "./marks.js";
 
 /** One bar of prices. `t` is its start, as epoch ms; `v` is shares. */
@@ -244,4 +244,31 @@ export function dailyFromMinutes(bars: readonly PriceBar[], date: string): Price
     day.v += bar.v;
   }
   return day;
+}
+
+/** The Monday of a YYYY-MM-DD date's week, Monday to Sunday. */
+export const mondayOf = (date: string): string => addDays(date, -WEEKDAYS.indexOf(weekdayOfDate(date)));
+
+/**
+ * Daily bars grouped by their New York week (swing spec §4.2): the first open, the highest high, the lowest low, the
+ * last close and the summed volume, stamped at the week's first session. A week is keyed by its Monday, holiday or
+ * not.
+ */
+export function weeklyBars(daily: readonly PriceBar[]): PriceBar[] {
+  const weeks: PriceBar[] = [];
+  let week = "";
+  for (const bar of daily) {
+    const monday = mondayOf(nyClock(bar.t).date);
+    const last = weeks.at(-1);
+    if (!last || monday !== week) {
+      weeks.push({ ...bar });
+      week = monday;
+      continue;
+    }
+    last.h = Math.max(last.h, bar.h);
+    last.l = Math.min(last.l, bar.l);
+    last.c = bar.c;
+    last.v += bar.v;
+  }
+  return weeks;
 }

@@ -196,3 +196,28 @@ export function optionBars(
     };
   });
 }
+
+/**
+ * Sessions before a walk's first, walked backwards from its first open (swing spec §8): the weekly chart's five years,
+ * without changing any price the forward walk already made.
+ */
+export function walkBack(
+  rng: Rng,
+  symbol: string,
+  sessions: readonly string[],
+  firstOpen: number,
+): Map<string, { open: number; close: number }> {
+  const { vol } = symbolInfo(symbol);
+  const dt = 1 / TRADING_DAYS_A_YEAR;
+  const walk = new Map<string, { open: number; close: number }>();
+  let next = firstOpen;
+  for (const date of [...sessions].reverse()) {
+    const close = cents(Math.max(0.5, next / (1 + uniform(rng, -0.004, 0.004))));
+    const open = cents(
+      Math.max(0.5, close / Math.exp((DRIFT - (vol * vol) / 2) * dt + vol * Math.sqrt(dt) * normal(rng))),
+    );
+    walk.set(date, { open, close });
+    next = open;
+  }
+  return walk;
+}

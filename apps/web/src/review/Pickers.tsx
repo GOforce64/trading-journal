@@ -67,7 +67,8 @@ export function SetupPicker({
   const { data: setups = [] } = useSetups();
   const create = useCreateSetup();
   const [adding, setAdding] = useState(false);
-  const strategy = trade.strategy === "iron_fly" ? "iron_fly" : "scalp";
+  const strategy =
+    (["scalp", "iron_fly", "swing"] as const).find((each) => each === trade.strategy) ?? "scalp";
   const offered = setups.filter(
     (setup) => !setup.archived && (setup.strategy == null || setup.strategy === strategy),
   );

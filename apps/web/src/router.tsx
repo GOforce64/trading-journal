@@ -29,6 +29,7 @@ import { NewScalp } from "./routes/NewScalp.js";
 import { Playbook } from "./routes/Playbook.js";
 import { Scalps } from "./routes/Scalps.js";
 import { Settings } from "./routes/Settings.js";
+import { Swings } from "./routes/Swings.js";
 import { TradeDetail } from "./routes/TradeDetail.js";
 import { useStopped } from "./stopped.js";
 
@@ -132,6 +133,12 @@ const scalpsRoute = createRoute({
       />
     );
   },
+});
+
+const swingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/swings",
+  component: () => <Swings onOpenTrade={openTrade} />,
 });
 
 const newScalpRoute = createRoute({
@@ -265,6 +272,7 @@ export const router = createRouter({
     newIronFlyRoute,
     scalpsRoute,
     newScalpRoute,
+    swingsRoute,
     newMissedRoute,
     missedRoute,
     tradeDetailRoute,

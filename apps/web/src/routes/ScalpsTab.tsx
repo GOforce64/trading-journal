@@ -11,7 +11,7 @@ import {
   withMissedGroups,
 } from "@tj/core";
 import { useMemo } from "react";
-import { BreakdownPanel } from "../analytics/Breakdown.js";
+import { BreakdownPanel, DIMENSIONS } from "../analytics/Breakdown.js";
 import { useAllTrades } from "../analytics/data.js";
 import { rememberEdges, resolveEdges } from "../analytics/edges.js";
 import { profitFactorText, rText, segmentClass, winRateText } from "../analytics/format.js";
@@ -205,6 +205,7 @@ export function ScalpsTab({ trades, search, onSearch }: TabProps) {
             metric={metric}
             edges={edges}
             note={contractNote}
+            dimensions={DIMENSIONS}
           />
           {mistakes ? (
             <MistakeCost rows={mistakes} />

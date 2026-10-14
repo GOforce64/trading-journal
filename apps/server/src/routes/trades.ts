@@ -10,6 +10,7 @@ import {
   type ReviewStatus,
   reviewStatus,
   type ScalpRisk,
+  STRATEGIES,
   scalpRisk,
   tradePatchSchema,
 } from "@tj/core";
@@ -25,7 +26,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 const listQuerySchema = z.object({
-  strategy: z.enum(["scalp", "iron_fly"]).optional(),
+  strategy: z.enum(STRATEGIES).optional(),
   book: z.enum(["live", "paper", "missed"]).optional(),
   underlying: z.string().optional(),
   includeExcluded: z.enum(["true", "false"]).optional(),
@@ -118,7 +119,7 @@ export function tradeRoutes(db: Db, now?: () => number) {
       };
       if (query.review === "pending") {
         // Every pending trade, oldest first: the queue must never stop at the newest 500. Only scalps can wait.
-        if (filter.strategy === "iron_fly") return c.json([]);
+        if (filter.strategy && filter.strategy !== "scalp") return c.json([]);
         return c.json(
           repo
             .list({ ...filter, strategy: "scalp", limit: null })

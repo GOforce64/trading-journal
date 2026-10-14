@@ -338,6 +338,30 @@ describe("EditTrade", () => {
     expect(JSON.parse(String(patch?.[1]?.body)).legs[0]).toMatchObject({ closePrice: 1.4, quantity: 2 });
   });
 
+  it("edits a single swing in the scalp form and keeps it a swing (swing spec §3.7)", async () => {
+    const swing = {
+      ...trade,
+      strategy: "swing",
+      chosenStrategy: "swing",
+      underlying: "NVDA",
+      structureLabel: "Long call",
+      ironFly: null,
+      legs: [
+        { ...trade.legs[0], right: "C", strike: 232.5, quantity: 2, openPrice: 1.06, closePrice: 1.295 },
+      ],
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(swing), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { onSaved } = setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("t1"));
+    const patch = fetchMock.mock.calls.find((call) => String(call[1]?.method).toUpperCase() === "PATCH");
+    expect(JSON.parse(String(patch?.[1]?.body))).toMatchObject({ strategy: "swing" });
+  });
+
   it("asks for no move data after saving a scalp, which only flies have", async () => {
     const scalp = { ...trade, strategy: "scalp", underlying: "NVDA", ironFly: null, legs: [trade.legs[0]] };
     const fetchMock = vi.fn(

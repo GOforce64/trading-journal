@@ -41,6 +41,9 @@ function shownAtOnce(body: TradePatchBody) {
     ...(body.tagIds === undefined ? {} : { tagIds: body.tagIds }),
     ...(body.notes === undefined ? {} : { notes: body.notes }),
     ...(body.excluded === undefined ? {} : { excluded: body.excluded }),
+    ...(body.chosenStrategy === undefined
+      ? {}
+      : { chosenStrategy: body.chosenStrategy, strategy: body.chosenStrategy }),
   };
 }
 
@@ -122,7 +125,7 @@ export function useCreateSetup() {
   return useMutation({
     mutationFn: async (input: {
       name: string;
-      strategy: "scalp" | "iron_fly" | null;
+      strategy: "scalp" | "iron_fly" | "swing" | null;
       description?: string | null;
     }) => {
       const res = await api.api.setups.$post({ json: input });

@@ -48,12 +48,19 @@ export function Pct({ value }: { value: number | null }) {
 const CHIP_TONES: Record<string, string> = {
   iron_fly: "bg-[#7e57c22a] text-[#b39ddb]",
   scalp: "bg-[#ff980022] text-[#ffb74d]",
+  swing: "bg-[#ec407a22] text-[#f48fb1]",
   live: "bg-[#26a69a22] text-up",
   paper: "bg-[#2962ff22] text-[#82a8ff]",
   missed: "bg-[#6b738522] text-[#9aa3b5]",
   excluded: "border border-muted border-dashed text-muted",
   default: "bg-[#1c2130] text-[#9aa3b5]",
 };
+
+const STRATEGY_CHIPS: Record<string, string> = { iron_fly: "IRON FLY", scalp: "SCALP", swing: "SWING" };
+
+/** A strategy's chip text in lists: "IRON FLY", "SCALP", "SWING". */
+export const strategyChipText = (strategy: string): string =>
+  STRATEGY_CHIPS[strategy] ?? strategy.toUpperCase();
 
 export function Chip({ tone = "default", children }: { tone?: string; children: ReactNode }) {
   const styles = CHIP_TONES[tone] ?? CHIP_TONES.default;

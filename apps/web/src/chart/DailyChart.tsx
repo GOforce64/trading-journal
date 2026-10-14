@@ -1,17 +1,20 @@
 import { nyClock } from "@tj/core";
 import {
+  type AutoscaleInfo,
   CandlestickSeries,
   createChart,
   createSeriesMarkers,
   HistogramSeries,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   LineSeries,
+  LineStyle,
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
-import { markerLook } from "./IntradayChart.js";
+import { markerLook, type PriceLine } from "./IntradayChart.js";
 import type { DailyModel } from "./model.js";
 import type { Toggle } from "./prefs.js";
 import { COLORS, chartOptions, EMA_COLORS } from "./style.js";
@@ -22,6 +25,22 @@ interface Parts {
   volume: ISeriesApi<"Histogram">;
   emas: ISeriesApi<"Line">[];
   markers: ISeriesMarkersPluginApi<Time>;
+  priceLines: IPriceLine[];
+}
+
+const NO_LINES: readonly PriceLine[] = [];
+
+/** The candles' price range, widened to every line's price (swing spec §4.4): each strike and the break-even show. */
+function withLines(info: AutoscaleInfo | null, lines: readonly PriceLine[]): AutoscaleInfo | null {
+  if (!info?.priceRange || lines.length === 0) return info;
+  const prices = lines.map((line) => line.price);
+  return {
+    ...info,
+    priceRange: {
+      minValue: Math.min(info.priceRange.minValue, ...prices),
+      maxValue: Math.max(info.priceRange.maxValue, ...prices),
+    },
+  };
 }
 
 /** A daily bar's date, which the chart takes as a business day. */
@@ -33,14 +52,20 @@ export function DailyChart({
   show,
   fitKey,
   height = 420,
+  lines = NO_LINES,
 }: {
   model: DailyModel;
   show: Record<Toggle, boolean>;
   fitKey: number;
   height?: number;
+  /** A swing's strikes and break-even (swing spec §4.4). */
+  lines?: readonly PriceLine[];
 }) {
   const container = useRef<HTMLDivElement>(null);
   const parts = useRef<Parts | null>(null);
+  // Read by the price scale, which otherwise sizes itself to the candles alone and leaves a far strike off the chart.
+  const shownLines = useRef(lines);
+  shownLines.current = lines;
 
   useEffect(() => {
     const element = container.current;
@@ -53,6 +78,7 @@ export function DailyChart({
       wickDownColor: COLORS.down,
       borderVisible: false,
       priceLineVisible: false,
+      autoscaleInfoProvider: (base: () => AutoscaleInfo | null) => withLines(base(), shownLines.current),
     });
     const volume = chart.addSeries(HistogramSeries, {
       priceScaleId: "volume",
@@ -70,7 +96,14 @@ export function DailyChart({
         crosshairMarkerVisible: false,
       }),
     );
-    parts.current = { chart, candles, volume, emas, markers: createSeriesMarkers(candles, []) };
+    parts.current = {
+      chart,
+      candles,
+      volume,
+      emas,
+      markers: createSeriesMarkers(candles, []),
+      priceLines: [],
+    };
     return () => {
       chart.remove();
       parts.current = null;
@@ -122,6 +155,23 @@ export function DailyChart({
     });
     chart.volume.applyOptions({ visible: show.volume });
   }, [show]);
+
+  // A swing's strikes and break-even (swing spec §4.4): the library titles each on the price axis at its own price.
+  useEffect(() => {
+    const chart = parts.current;
+    if (!chart) return;
+    for (const priceLine of chart.priceLines) chart.candles.removePriceLine(priceLine);
+    chart.priceLines = lines.map((each) =>
+      chart.candles.createPriceLine({
+        price: each.price,
+        color: each.color,
+        lineWidth: 1,
+        lineStyle: each.dashed ? LineStyle.Dashed : LineStyle.Solid,
+        title: each.label,
+        axisLabelVisible: true,
+      }),
+    );
+  }, [lines]);
 
   return <div ref={container} style={{ height }} data-testid="daily-chart" />;
 }

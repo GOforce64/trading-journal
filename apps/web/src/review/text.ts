@@ -22,8 +22,8 @@ export function contractText(trade: {
   return leg ? `${trade.underlying} ${leg.strike}${leg.right}` : trade.underlying;
 }
 
-const STRATEGY_LABELS: Record<string, string> = { scalp: "Scalps", iron_fly: "Iron flies" };
+const STRATEGY_LABELS: Record<string, string> = { scalp: "Scalps", iron_fly: "Iron flies", swing: "Swings" };
 
-/** A setup's strategy in words: "Scalps", "Iron flies", or "Both" for a setup that takes either. */
+/** A setup's strategy in words: "Scalps", "Iron flies", "Swings", or "Any" for a setup that takes every strategy. */
 export const strategyLabel = (strategy: string | null) =>
-  (strategy == null ? undefined : STRATEGY_LABELS[strategy]) ?? "Both";
+  (strategy == null ? undefined : STRATEGY_LABELS[strategy]) ?? "Any";

@@ -347,8 +347,15 @@ export interface ReturnTrade {
   legs: readonly { quantity: number; multiplier: number; openPrice: number }[];
 }
 
-/** The premium paid for a single long option: contracts × multiplier × entry premium. Null for anything else. */
+/**
+ * The premium paid: for a scalp, a single long option's contracts × multiplier × entry premium; for a swing, the net
+ * debit, its legs' signed cost (swing spec §4.1). Null for anything else.
+ */
 export function premiumPaid(trade: Pick<ReturnTrade, "strategy" | "legs">): number | null {
+  if (trade.strategy === "swing") {
+    const debit = trade.legs.reduce((sum, leg) => sum + leg.quantity * leg.multiplier * leg.openPrice, 0);
+    return debit > 0 ? debit : null;
+  }
   const leg = trade.legs.length === 1 ? trade.legs[0] : undefined;
   if (trade.strategy !== "scalp" || !leg || leg.quantity <= 0) return null;
   const cost = leg.quantity * leg.multiplier * leg.openPrice;
@@ -356,8 +363,8 @@ export function premiumPaid(trade: Pick<ReturnTrade, "strategy" | "legs">): numb
 }
 
 /**
- * A scalp's net P&L over the premium paid, contracts × multiplier × entry premium: 0.211 is +21.1%.
- * Null for an open trade, a fly, or anything but a single long option.
+ * A scalp's or a swing's net P&L over the premium paid (`premiumPaid`): 0.211 is +21.1%. Null for an open trade, a
+ * fly, or a scalp that isn't a single long option.
  */
 export function returnOnCost(trade: ReturnTrade): number | null {
   const cost = premiumPaid(trade);

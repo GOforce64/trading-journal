@@ -3,7 +3,7 @@ import { Command } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { rText } from "../analytics/format.js";
 import type { TradeView } from "../api.js";
-import { Chip, Money } from "../components/ui.js";
+import { Chip, Money, strategyChipText } from "../components/ui.js";
 import { keyName } from "../keys/keyName.js";
 import { useModalLayer } from "../keys/Shortcuts.js";
 import { todayNy } from "../market.js";
@@ -39,7 +39,7 @@ function TradeRow({ trade, setup }: { trade: TradeView; setup: string | undefine
     <span className="flex w-full items-center gap-2">
       <span className="num w-14 shrink-0 text-muted">{dayText(trade.openedAt)}</span>
       <span className="num w-32 shrink-0 text-fg">{contractText(trade)}</span>
-      <Chip tone={trade.strategy}>{trade.strategy === "iron_fly" ? "IRON FLY" : "SCALP"}</Chip>
+      <Chip tone={trade.strategy}>{strategyChipText(trade.strategy)}</Chip>
       <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>
       <span className="min-w-0 flex-1 truncate text-muted">{setup ?? ""}</span>
       {trade.book !== "missed" && <Money value={trade.netPnl} />}

@@ -52,18 +52,23 @@ export function barRoutes(service: BarService) {
         throw error;
       }
     })
-    .get("/:symbol/daily", zValidator("query", z.object({ to: isoDate })), async (c) => {
-      const symbol = c.req.param("symbol").toUpperCase();
-      if (!TICKER.test(symbol)) return c.json({ error: "bad request" }, 400);
-      try {
-        const answer = await service.daily(symbol, c.req.valid("query").to);
-        return c.json(
-          { symbol, bars: answer.bars, partial: answer.partial, unavailable: answer.unavailable },
-          200,
-        );
-      } catch (error) {
-        if (error instanceof BarsUnreachable) return c.json(UNREACHABLE, 502);
-        throw error;
-      }
-    });
+    .get(
+      "/:symbol/daily",
+      zValidator("query", z.object({ to: isoDate, span: z.enum(["daily", "weekly"]).optional() })),
+      async (c) => {
+        const symbol = c.req.param("symbol").toUpperCase();
+        if (!TICKER.test(symbol)) return c.json({ error: "bad request" }, 400);
+        const { to, span } = c.req.valid("query");
+        try {
+          const answer = await service.daily(symbol, to, span);
+          return c.json(
+            { symbol, bars: answer.bars, partial: answer.partial, unavailable: answer.unavailable },
+            200,
+          );
+        } catch (error) {
+          if (error instanceof BarsUnreachable) return c.json(UNREACHABLE, 502);
+          throw error;
+        }
+      },
+    );
 }

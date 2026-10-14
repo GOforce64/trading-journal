@@ -6,6 +6,7 @@ import { bsPrice } from "./pricing.js";
 import {
   contractsHeld,
   holdRange,
+  premiumPaid,
   type RiskTrade,
   returnOnCost,
   scalpRisk,
@@ -486,5 +487,21 @@ describe("returnOnCost", () => {
     expect(returnOnCost(nvda({ legs: [leg(), leg({ right: "P" })] }))).toBeNull();
     expect(returnOnCost(nvda({ legs: [leg({ quantity: -2 })] }))).toBeNull();
     expect(returnOnCost(nvda({ legs: [leg({ openPrice: 0 })] }))).toBeNull();
+  });
+});
+
+describe("return on debit for swings (swing spec §4.1)", () => {
+  const legs = [
+    { quantity: 1, multiplier: 100, openPrice: 5.1 },
+    { quantity: -1, multiplier: 100, openPrice: 1.3 },
+  ];
+
+  it("takes a swing's net debit as the premium paid", () => {
+    expect(premiumPaid({ strategy: "swing", legs })).toBeCloseTo(380, 6);
+    expect(returnOnCost({ strategy: "swing", netPnl: 402.1, legs })).toBeCloseTo(1.0582, 4);
+  });
+
+  it("still has none for a fly", () => {
+    expect(premiumPaid({ strategy: "iron_fly", legs })).toBeNull();
   });
 });

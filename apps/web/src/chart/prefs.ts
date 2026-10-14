@@ -10,6 +10,8 @@ export interface ChartPrefs {
   minutes: number;
   show: Record<Toggle, boolean>;
   emaLengths: number[];
+  /** The swing chart's candles (swing spec §5.4). */
+  swingPeriod: "daily" | "weekly";
 }
 
 export const DEFAULT_PREFS: ChartPrefs = {
@@ -26,6 +28,7 @@ export const DEFAULT_PREFS: ChartPrefs = {
     day: true,
   },
   emaLengths: [8, 20, 50, 167],
+  swingPeriod: "daily",
 };
 
 const KEY = "tj.chart";
@@ -39,7 +42,7 @@ export function loadPrefs(): ChartPrefs {
     if (!raw) return DEFAULT_PREFS;
     const saved: unknown = JSON.parse(raw);
     if (typeof saved !== "object" || saved === null) return DEFAULT_PREFS;
-    const { minutes, show: savedShow, emaLengths } = saved as Record<string, unknown>;
+    const { minutes, show: savedShow, emaLengths, swingPeriod } = saved as Record<string, unknown>;
     const show = { ...DEFAULT_PREFS.show };
     for (const toggle of TOGGLES) {
       const value =
@@ -55,6 +58,7 @@ export function loadPrefs(): ChartPrefs {
         Array.isArray(emaLengths) && emaLengths.length === 4 && emaLengths.every(isLength)
           ? emaLengths
           : DEFAULT_PREFS.emaLengths,
+      swingPeriod: swingPeriod === "weekly" ? "weekly" : "daily",
     };
   } catch {
     return DEFAULT_PREFS;

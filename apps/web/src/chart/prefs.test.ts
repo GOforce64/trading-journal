@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("chart preferences", () => {
-  it("starts on 3m with every indicator on and EMAs 8, 20, 50 and 167", () => {
+  it("starts on 3m with every indicator on, EMAs 8, 20, 50 and 167, and swings on Daily", () => {
     expect(loadPrefs()).toEqual({
       minutes: 3,
       show: {
@@ -22,7 +22,15 @@ describe("chart preferences", () => {
         day: true,
       },
       emaLengths: [8, 20, 50, 167],
+      swingPeriod: "daily",
     });
+  });
+
+  it("remembers a swing chart left on Weekly, and reads anything else as Daily", () => {
+    localStorage.setItem("tj.chart", JSON.stringify({ swingPeriod: "weekly" }));
+    expect(loadPrefs().swingPeriod).toBe("weekly");
+    localStorage.setItem("tj.chart", JSON.stringify({ swingPeriod: "monthly" }));
+    expect(loadPrefs().swingPeriod).toBe("daily");
   });
 
   it("shows the day's trades for choices saved before there was such a toggle", () => {

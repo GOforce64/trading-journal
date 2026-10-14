@@ -151,7 +151,7 @@ function sameDayCandle<T extends { t: number }>(candles: readonly T[], t: number
   return next && nyClock(next.t).date === date ? next : undefined;
 }
 
-const drawable = (candles: readonly { t: number }[], values: readonly (number | null)[]): Point[] =>
+export const drawable = (candles: readonly { t: number }[], values: readonly (number | null)[]): Point[] =>
   values.flatMap((value, index) => {
     const candle = candles[index];
     return value === null || !candle ? [] : [{ t: candle.t, value }];
@@ -161,7 +161,10 @@ const drawable = (candles: readonly { t: number }[], values: readonly (number | 
  * The opening view (spec §8): WINDOW_PAD candles before the first mark to as many after the last. The end may lie past
  * the last candle, as empty space, so a live session's new candles don't move the view and undo the reader's zoom.
  */
-function openingWindow(candles: readonly { t: number }[], marks: readonly Marker[]): ViewWindow | null {
+export function openingWindow(
+  candles: readonly { t: number }[],
+  marks: readonly Marker[],
+): ViewWindow | null {
   if (candles.length === 0 || marks.length === 0) return null;
   const times = marks.map((mark) => mark.t);
   const first = Math.max(0, candleAt(candles, Math.min(...times)));

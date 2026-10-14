@@ -216,3 +216,42 @@ describe("missed trades in the trade schemas", () => {
     expect(tradePatchSchema.safeParse({ missed: { direction: "sideways" } }).success).toBe(false);
   });
 });
+
+describe("swings in the model (swing spec §3.1)", () => {
+  const base = {
+    book: "paper" as const,
+    underlying: "NVDA",
+    openedAt: 1_790_000_000_000,
+    legs: [
+      { right: "C" as const, strike: 230, expiry: "2026-11-06", quantity: 1, openPrice: 5.1 },
+      { right: "C" as const, strike: 240, expiry: "2026-11-06", quantity: -1, openPrice: 1.3 },
+    ],
+  };
+
+  it("takes a debit vertical as a swing", () => {
+    expect(newTradeSchema.safeParse({ ...base, strategy: "swing" }).success).toBe(true);
+  });
+
+  it("refuses a swing whose legs aren't a swing shape", () => {
+    const credit = base.legs.map((leg) => ({ ...leg, quantity: -leg.quantity }));
+    expect(newTradeSchema.safeParse({ ...base, strategy: "swing", legs: credit }).success).toBe(false);
+  });
+
+  it("takes a chosen strategy only on one bought leg, equal to the strategy", () => {
+    const single = { ...base, legs: [base.legs[0]] };
+    expect(newTradeSchema.safeParse({ ...single, strategy: "swing", chosenStrategy: "swing" }).success).toBe(
+      true,
+    );
+    expect(newTradeSchema.safeParse({ ...single, strategy: "scalp", chosenStrategy: "swing" }).success).toBe(
+      false,
+    );
+    expect(newTradeSchema.safeParse({ ...base, strategy: "swing", chosenStrategy: "swing" }).success).toBe(
+      false,
+    );
+  });
+
+  it("lets a patch carry the user's choice, and nothing else", () => {
+    expect(tradePatchSchema.parse({ chosenStrategy: "swing" })).toEqual({ chosenStrategy: "swing" });
+    expect(tradePatchSchema.safeParse({ chosenStrategy: "iron_fly" }).success).toBe(false);
+  });
+});

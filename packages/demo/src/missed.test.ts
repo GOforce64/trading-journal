@@ -38,7 +38,9 @@ describe("the demo's missed trades", () => {
     expect(summary.missed).toBeGreaterThanOrEqual(15);
     expect(summary.missed).toBeLessThanOrEqual(25);
     expect(missedTrades()).toHaveLength(summary.missed);
-    expect(createTradesRepo(db).list({ taken: true })).toHaveLength(summary.scalps + summary.flies);
+    expect(createTradesRepo(db).list({ taken: true })).toHaveLength(
+      summary.scalps + summary.flies + summary.swings,
+    );
   });
 
   it("marks each one sensibly: early in the session, a stop on its side, an exit later that day, and a reason", () => {

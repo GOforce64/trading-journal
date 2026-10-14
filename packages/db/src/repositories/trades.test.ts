@@ -877,3 +877,101 @@ describe("staleOptionRange", () => {
     expect(staleOptionRange([leg], [{ ...leg, right: "P" }])).toBe(true);
   });
 });
+
+describe("the Scalp | Swing switch (swing spec §3.5)", () => {
+  let db: Db;
+  let clock = 1_000;
+  const repo = () => createTradesRepo(db, () => clock);
+  beforeEach(() => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-switch-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    db = openDatabase(file);
+    clock = 1_000;
+  });
+
+  const single: NewTrade = {
+    strategy: "scalp",
+    book: "paper",
+    underlying: "NVDA",
+    underlyingName: null,
+    structureLabel: "Long call",
+    openedAt: 1_790_000_000_000,
+    closedAt: 1_790_300_000_000,
+    netPnl: 100,
+    fees: 2,
+    feesOpen: 1,
+    feesClose: 1,
+    notes: null,
+    grade: null,
+    excluded: false,
+    excludeReason: null,
+    source: "manual",
+    setupId: null,
+    tagIds: [],
+    legs: [
+      {
+        right: "C",
+        strike: 230,
+        expiry: "2026-11-06",
+        quantity: 1,
+        multiplier: 100,
+        openPrice: 5,
+        closePrice: 6.02,
+      },
+    ],
+    ironFly: null,
+    missed: null,
+  };
+
+  it("switches a single bought option to a swing and back, without marking its facts edited", () => {
+    const { id } = repo().create(single);
+    clock = 2_000;
+    expect(repo().update(id, { chosenStrategy: "swing" })).toMatchObject({
+      strategy: "swing",
+      chosenStrategy: "swing",
+      updatedAt: 2_000,
+      factsEditedAt: null,
+    });
+    expect(repo().update(id, { chosenStrategy: "scalp" })).toMatchObject({
+      strategy: "scalp",
+      chosenStrategy: "scalp",
+    });
+  });
+
+  it("refuses the switch on anything but a single bought option", () => {
+    const vertical = repo().create({
+      ...single,
+      strategy: "swing",
+      structureLabel: "Call debit spread",
+      legs: [
+        {
+          right: "C",
+          strike: 230,
+          expiry: "2026-11-06",
+          quantity: 1,
+          multiplier: 100,
+          openPrice: 5.1,
+          closePrice: 9,
+        },
+        {
+          right: "C",
+          strike: 240,
+          expiry: "2026-11-06",
+          quantity: -1,
+          multiplier: 100,
+          openPrice: 1.3,
+          closePrice: 1.15,
+        },
+      ],
+    });
+    expect(() => repo().update(vertical.id, { chosenStrategy: "scalp" })).toThrow(
+      new ReviewRuleError("Only a single bought call or put can be switched."),
+    );
+  });
+
+  it("refuses a swing whose new legs aren't a swing shape", () => {
+    const { id } = repo().create({ ...single, strategy: "swing", chosenStrategy: "swing" });
+    const short = [{ ...single.legs[0], quantity: -1 }] as NewTrade["legs"];
+    expect(() => repo().update(id, { legs: short })).toThrow(ReviewRuleError);
+  });
+});

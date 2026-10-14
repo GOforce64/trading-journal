@@ -1,5 +1,5 @@
-import { type NewTrade, nyDate } from "@tj/core";
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { canSwitchStrategy, type NewTrade, nyDate } from "@tj/core";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { Db } from "../client.js";
 import {
   accounts,
@@ -121,6 +121,15 @@ function facts(trade: NewTrade, accountId: string) {
   };
 }
 
+/**
+ * The user's Scalp | Swing on a single bought option (swing spec §3.4): the sync owns the strategy, except there. A
+ * trade that is now a vertical is a swing whatever the stored choice says.
+ */
+function withChoice(candidate: SyncedTradeInput, chosen: string | null): SyncedTradeInput {
+  if ((chosen !== "scalp" && chosen !== "swing") || !canSwitchStrategy(candidate.trade)) return candidate;
+  return { ...candidate, trade: { ...candidate.trade, strategy: chosen } };
+}
+
 /** Fills, sync runs, and synced trades written without touching the user's side (spec §8.1). */
 export function createIbkrRepo(db: Db, now: () => number = Date.now) {
   function writeLegs(candidate: SyncedTradeInput, timestamp: number) {
@@ -211,7 +220,10 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       .where(
         and(
           eq(trades.underlying, trade.underlying),
-          eq(trades.strategy, trade.strategy),
+          // A typed single option is the same trade whether the user called it a scalp or a swing.
+          trade.strategy === "iron_fly"
+            ? eq(trades.strategy, "iron_fly")
+            : inArray(trades.strategy, ["scalp", "swing"]),
           amongSynced ? eq(trades.source, "ibkr_flex") : ne(trades.source, "ibkr_flex"),
           isNull(trades.deletedAt),
         ),
@@ -237,9 +249,11 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
           return true;
         }
       } else if (
-        first &&
-        otherLegs.some(
-          (leg) => leg.right === first.right && leg.strike === first.strike && leg.expiry === first.expiry,
+        otherLegs.length === trade.legs.length &&
+        trade.legs.every((mine) =>
+          otherLegs.some(
+            (leg) => leg.right === mine.right && leg.strike === mine.strike && leg.expiry === mine.expiry,
+          ),
         )
       ) {
         return true;
@@ -390,9 +404,11 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
     },
 
     /** Inserts or rewrites the sync's side of a trade (spec §5.5). Never the user's side, a deleted trade, or edited facts. */
-    apply(candidate: SyncedTradeInput, accountId: string): ApplyResult {
-      const existing = db.select().from(trades).where(eq(trades.id, candidate.id)).get();
+    apply(incoming: SyncedTradeInput, accountId: string): ApplyResult {
+      const existing = db.select().from(trades).where(eq(trades.id, incoming.id)).get();
       if (existing?.deletedAt != null) return "deleted";
+      // Compared and written with the user's choice in: else a switched trade would differ on every run.
+      const candidate = withChoice(incoming, existing?.chosenStrategy ?? null);
       const timestamp = now();
       if (!existing) {
         db.insert(trades)
@@ -410,6 +426,7 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
             importBatchId: null,
             editedAt: null,
             factsEditedAt: null,
+            chosenStrategy: null,
             createdAt: timestamp,
             updatedAt: timestamp,
             deletedAt: null,

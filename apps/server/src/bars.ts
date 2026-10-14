@@ -22,6 +22,8 @@ import type { MarketData } from "./marketData.js";
  * on the last 126 (spec §6).
  */
 const DAILY_DAYS = 1_095;
+/** Five years for a swing's weekly view (swing spec §4.2): EMA 50 draws from its 150th week. */
+const WEEKLY_DAYS = 1_826;
 
 export interface BarAnswer {
   bars: PriceBar[];
@@ -190,10 +192,10 @@ export function createBarService({
       return { bars: all, partial, unavailable: all.length === 0 ? noBars(symbol) : null };
     },
 
-    async daily(symbol: string, to: string): Promise<BarAnswer> {
+    async daily(symbol: string, to: string, span: "daily" | "weekly" = "daily"): Promise<BarAnswer> {
       const today = nyDate(now());
       const last = to < today ? to : addDays(today, -1);
-      const dates = datesBetween(addDays(last, -DAILY_DAYS), last);
+      const dates = datesBetween(addDays(last, span === "weekly" ? -WEEKLY_DAYS : -DAILY_DAYS), last);
       const known = repo.knownDays(symbol, "1d", dates);
       const missing = dates.filter((date) => !known.has(date));
       const sources = market?.sources() ?? null;

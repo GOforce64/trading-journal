@@ -46,10 +46,11 @@ function Card({
   card: SetupCard;
   setup: Setup;
   today: string;
-  onOpen?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
+  onOpen?: (setupId: string, tab: "scalps" | "swings" | "flies" | "missed") => void;
 }) {
   const fly = card.kind === "fly";
-  const hero = fly ? card.kept : card.avgR;
+  const swing = card.kind === "swing";
+  const hero = fly ? card.kept : swing ? card.avgReturn : card.avgR;
   const missedOnly = card.trades === 0;
   return (
     <article aria-label={setup.name} className="flex flex-col rounded-sm border border-line bg-panel p-2.5">
@@ -61,18 +62,26 @@ function Card({
       {missedOnly && <p className="mt-2 text-muted">No taken trades yet</p>}
       <div className={`mt-1 flex items-end justify-between gap-2 ${missedOnly ? "hidden" : ""}`}>
         <div>
-          <div className="text-[9px] text-muted uppercase tracking-wider">{fly ? "Kept" : "Avg R"}</div>
+          <div className="text-[9px] text-muted uppercase tracking-wider">
+            {fly ? "Kept" : swing ? "Avg return" : "Avg R"}
+          </div>
           <div data-testid="card-hero" className={`num text-[20px] ${tone(hero)}`}>
-            {fly ? shareText(card.kept) : card.avgR == null ? "—" : rText(card.avgR)}
+            {fly
+              ? shareText(card.kept)
+              : swing
+                ? returnText(card.avgReturn)
+                : card.avgR == null
+                  ? "—"
+                  : rText(card.avgR)}
           </div>
           <div className="text-[9px] text-muted">
-            {fly ? "of max profit" : `over ${card.rCount} of ${card.trades}`}
+            {fly ? "of max profit" : swing ? "on the debit" : `over ${card.rCount} of ${card.trades}`}
           </div>
         </div>
         <Sparkline
           points={card.points}
-          format={fly ? dollars : rText}
-          label={fly ? "Cumulative net P&L" : "Cumulative R"}
+          format={fly || swing ? dollars : rText}
+          label={fly || swing ? "Cumulative net P&L" : "Cumulative R"}
         />
       </div>
       {/* Spread by content rather than four equal columns, which wrapped "Avg return" on a narrow card. */}
@@ -84,6 +93,10 @@ function Card({
         </Stat>
         {fly ? (
           <Stat label="PF">{profitFactorText(card.profitFactor)}</Stat>
+        ) : swing ? (
+          <Stat label="Avg held">
+            {card.avgDaysHeld == null ? "—" : `${card.avgDaysHeld.toFixed(1)} days`}
+          </Stat>
         ) : (
           <Stat label="Avg return" className={tone(card.avgReturn)}>
             {returnText(card.avgReturn)}
@@ -116,7 +129,7 @@ function Card({
         ) : (
           <button
             type="button"
-            onClick={() => onOpen?.(card.setupId, fly ? "flies" : "scalps")}
+            onClick={() => onOpen?.(card.setupId, fly ? "flies" : swing ? "swings" : "scalps")}
             className="text-accent hover:underline"
           >
             {card.trades} {card.trades === 1 ? "trade" : "trades"} →
@@ -141,7 +154,7 @@ export function SetupCards({
   trades: readonly TradeView[] | undefined;
   setups: readonly Setup[];
   showArchived: boolean;
-  onOpenSetup?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
+  onOpenSetup?: (setupId: string, tab: "scalps" | "swings" | "flies" | "missed") => void;
   /** New York's date, YYYY-MM-DD; the year decides whether a date shows its own. */
   today?: string;
   /** The trades or the setups couldn't load. */

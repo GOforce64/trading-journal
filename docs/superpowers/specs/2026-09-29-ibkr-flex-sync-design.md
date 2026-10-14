@@ -31,7 +31,7 @@ Success means:
 - **Trade charts and the bars cache** (Phase 2, step 2).
 - **Short single-leg scalps** in the scalp form. The user's scalps are bought calls and puts.
 - **Stock positions**, including shares delivered by an assignment. They're ignored and counted.
-- **Multi-leg structures other than iron flies** (verticals, strangles, a fifth leg). They're skipped with a reason, to be entered by hand.
+- **Multi-leg structures other than iron flies** (verticals, strangles, a fifth leg). They're skipped with a reason, to be entered by hand. *Debit verticals are now swings ([swing spec](2026-10-14-swing-trades-design.md) §3.3); credit verticals and the rest are still skipped.*
 - **Syncing on a timer while the app is open.** It syncs on open and on the button only.
 
 ---
@@ -164,7 +164,7 @@ A new nullable epoch-ms column. `repo.update` sets it when a patch **actually ch
 
 | The sync owns (the broker's facts) | The user owns |
 |---|---|
-| `strategy`, `underlying`, `structureLabel`, `openedAt`, `closedAt`, `netPnl`, `fees`, `feesOpen`, `feesClose`, `accountId`, `book`, every leg; the fly's `bodyPutStrike`, `bodyCallStrike`, `putWingStrike`, `callWingStrike`, `contracts`, `creditPerShare`, `netCost` | `underlyingName`, `notes`, `grade`, `setupId`, tags, `excluded`, `excludeReason`; the fly's earnings fields, the four move overrides, `sourceNotes`; the fetched stock prices (move data) |
+| `strategy` (on a single bought option, the user's `chosen_strategy` when set: swing spec §3.4), `underlying`, `structureLabel`, `openedAt`, `closedAt`, `netPnl`, `fees`, `feesOpen`, `feesClose`, `accountId`, `book`, every leg; the fly's `bodyPutStrike`, `bodyCallStrike`, `putWingStrike`, `callWingStrike`, `contracts`, `creditPerShare`, `netCost` | `underlyingName`, `notes`, `grade`, `setupId`, tags, `excluded`, `excludeReason`; the fly's earnings fields, the four move overrides, `sourceNotes`; the fetched stock prices (move data) |
 
 - A sync writes only its own columns, and **only when something changed**. `updatedAt` stays meaningful for the machine merge (parent §12).
 - A sync **never writes a trade with `facts_edited_at` set.**
@@ -231,7 +231,7 @@ Both machines need the same `since` to produce identical trades, and the Setting
    - **A fill that takes a contract through zero** (selling 2 against a long 1) is split at zero: its closing part ends the position, so the trade it closed goes flat, and the rest opens a new one with its share of the commission. The fill itself links to the trade it closed, or, when that part was skipped, to the trade the rest began. The count runs from the window's first fill, so a split also needs IBKR's mark: only a fill marked `C;O` (or unmarked) is split, and never in a contract whose first fill closes, since it was held from before the window. Fills in the same second sort by key, not by when they happened, so a count alone can cross zero where the account never did.
 2. **Classification**, by how each contract was opened. The opening fills are those marked `O`, or, where IBKR gave no mark, those that grow the position.
    - **Every contract opened by buying → scalps.** Each contract is split into its own round trips, flat to flat, and each round trip is one scalp with one leg. A round trip opened by selling (a short after the contract went flat or through zero) is skipped as unrecognised.
-   - **Some contract opened by selling → a multi-leg candidate.** It's an **iron fly** when it has exactly one short call, one short put, and at most one long call and one long put (core's `ironFlyStructureFromLegs`; 1-wing flies count). Otherwise, or when a contract changed side within the episode (a short leg bought back past zero), it's skipped: "unrecognised structure, enter it by hand".
+   - **Some contract opened by selling → a multi-leg candidate.** It's an **iron fly** when it has exactly one short call, one short put, and at most one long call and one long put (core's `ironFlyStructureFromLegs`; 1-wing flies count). Else it's a **swing** when it's a debit vertical: two contracts, one bought and one sold, the same size, the long strike nearer the money (swing spec §3.3). Otherwise, or when a contract changed side within the episode (a short leg bought back past zero), it's skipped: "unrecognised structure, enter it by hand".
    - **A closing fill before any opening fill** for its contract means the episode is skipped: "opened before the start date".
 3. **Legs, per contract:**
    - `quantity` is the total opened, signed.
@@ -269,7 +269,7 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
    - **Regroup.** Run `groupFills` over the account's fills on or after `since`.
    - **Guards, per candidate:**
      - A trade with the candidate's id that was deleted is skipped: "deleted".
-     - **Already in the journal:** a fly with the same ticker, expiry and body strike(s), opened the same New York day, from any non-IBKR source (oQuants or typed). For a scalp, a typed scalp on the same contract (ticker, right, strike, expiry) opened the same New York day. Either is skipped: "already in the journal". The oQuants import applies the same test the other way round: a fly already synced from IBKR shows as "already synced from IBKR" and is never imported, because for a few days flies are logged in both.
+     - **Already in the journal:** a fly with the same ticker, expiry and body strike(s), opened the same New York day, from any non-IBKR source (oQuants or typed). For a scalp, a typed scalp on the same contract (ticker, right, strike, expiry) opened the same New York day; a typed single option the user switched to Swing counts too, and a synced swing matches only a typed trade with the same legs (swing spec §3.4). Either is skipped: "already in the journal". The oQuants import applies the same test the other way round: a fly already synced from IBKR shows as "already synced from IBKR" and is never imported, because for a few days flies are logged in both.
      - **Your edits:** a trade with `facts_edited_at` set is not written. If the candidate differs from it, the summary adds "kept your edits".
    - **Write.**
      - Insert new trades (`source = ibkr_flex`).

@@ -20,6 +20,7 @@ import { FliesTab } from "./FliesTab.js";
 import { MissedTab } from "./MissedTab.js";
 import { OverviewTab } from "./OverviewTab.js";
 import { ScalpsTab } from "./ScalpsTab.js";
+import { SwingsTab } from "./SwingsTab.js";
 
 export interface AnalyticsProps {
   search: AnalyticsSearch;
@@ -59,6 +60,9 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
         <TabButton active={search.tab === "scalps"} onClick={() => onSearch({ tab: "scalps" })}>
           Scalps
         </TabButton>
+        <TabButton active={search.tab === "swings"} onClick={() => onSearch({ tab: "swings" })}>
+          Swings
+        </TabButton>
         <TabButton active={search.tab === "flies"} onClick={() => onSearch({ tab: "flies" })}>
           Iron flies
         </TabButton>
@@ -68,6 +72,9 @@ export function Analytics({ search, onSearch, onOpenTrade }: AnalyticsProps) {
       </nav>
       {search.tab === "scalps" && (
         <ScalpsTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
+      )}
+      {search.tab === "swings" && (
+        <SwingsTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />
       )}
       {search.tab === "flies" && (
         <FliesTab trades={trades} search={search} onSearch={onSearch} onOpenTrade={onOpenTrade} />

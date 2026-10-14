@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { DIRECTIONS } from "./missed.js";
 import { LEVEL_BASES } from "./review.js";
+import { CHOSEN_STRATEGIES, swingShape } from "./swing.js";
 
-export const STRATEGIES = ["scalp", "iron_fly"] as const;
+export const STRATEGIES = ["scalp", "iron_fly", "swing"] as const;
 export const BOOKS = ["live", "paper", "missed"] as const;
 export const GRADES = ["A", "B", "C", "D", "F"] as const;
 export const SOURCES = ["ibkr_flex", "csv_import", "oquants_extract", "manual"] as const;
@@ -115,6 +116,8 @@ const newTradeShape = z.object({
   legs: tradeFields.legs.default([]),
   ironFly: tradeFields.ironFly.default(null),
   missed: tradeFields.missed.default(null),
+  /** The user's Scalp or Swing on a single bought option (swing spec §3.1); the sync never writes it. */
+  chosenStrategy: z.enum(CHOSEN_STRATEGIES).nullish(),
 });
 
 export const newTradeSchema = newTradeShape
@@ -147,7 +150,20 @@ export const newTradeSchema = newTradeShape
   .refine((trade) => trade.missed == null || (trade.missed.exitPrice == null) === (trade.closedAt == null), {
     message: "an exit needs both a time and a price",
     path: ["closedAt"],
-  });
+  })
+  .refine((trade) => trade.strategy !== "swing" || swingShape(trade.legs) != null, {
+    message: "a swing is one bought call or put, or a debit vertical",
+    path: ["legs"],
+  })
+  .refine(
+    (trade) =>
+      trade.chosenStrategy == null ||
+      (trade.book !== "missed" &&
+        trade.legs.length === 1 &&
+        (trade.legs[0]?.quantity ?? 0) > 0 &&
+        trade.strategy === trade.chosenStrategy),
+    { message: "only a single bought call or put takes a chosen strategy", path: ["chosenStrategy"] },
+  );
 
 /** A profit target on the trade's basis, trimming whole contracts (scalp-R spec §8). */
 export const scalpTargetSchema = z.object({
@@ -173,13 +189,19 @@ export const scalpLevelsPatchSchema = z
   .partial();
 
 /** Every field optional, no defaults; `source` is provenance and is never patched. */
-export const tradePatchSchema = z.object(tradeFields).omit({ source: true }).partial().extend({
-  /** Part of a missed trade's levels; the repository checks the result against the stored row. */
-  missed: missedLevelsSchema.partial().optional(),
-  scalp: scalpLevelsPatchSchema.optional(),
-  /** true stamps the trade reviewed with the server's clock; false puts it back in the queue. */
-  reviewed: z.boolean().optional(),
-});
+export const tradePatchSchema = z
+  .object(tradeFields)
+  .omit({ source: true })
+  .partial()
+  .extend({
+    /** Part of a missed trade's levels; the repository checks the result against the stored row. */
+    missed: missedLevelsSchema.partial().optional(),
+    scalp: scalpLevelsPatchSchema.optional(),
+    /** true stamps the trade reviewed with the server's clock; false puts it back in the queue. */
+    reviewed: z.boolean().optional(),
+    /** The user's Scalp or Swing (swing spec §3.5); the repository sets `strategy` with it. */
+    chosenStrategy: z.enum(CHOSEN_STRATEGIES).optional(),
+  });
 
 export type LegInput = z.infer<typeof legInputSchema>;
 export type IronFlyDetailsInput = z.infer<typeof ironFlyDetailsSchema>;

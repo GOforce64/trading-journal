@@ -14,11 +14,12 @@ import { INPUT, NameField } from "../review/Pickers.js";
 import { useBackfillPrices } from "../review/prices.js";
 import { strategyLabel } from "../review/text.js";
 
-type Strategy = "scalp" | "iron_fly" | null;
+type Strategy = "scalp" | "iron_fly" | "swing" | null;
 const STRATEGIES: { value: Strategy; label: string }[] = [
   { value: "scalp", label: "Scalps" },
   { value: "iron_fly", label: "Iron flies" },
-  { value: null, label: "Both" },
+  { value: "swing", label: "Swings" },
+  { value: null, label: "Any" },
 ];
 const BUTTON = "rounded-sm border border-line px-2 py-0.5 text-muted hover:border-accent hover:text-fg";
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -31,7 +32,7 @@ interface Draft {
 
 export interface PlaybookProps {
   /** Opens Analytics filtered to a setup, on its tab. */
-  onOpenSetup?: (setupId: string, tab: "scalps" | "flies" | "missed") => void;
+  onOpenSetup?: (setupId: string, tab: "scalps" | "swings" | "flies" | "missed") => void;
 }
 
 /** Each setup's stats (scalp-analytics spec §7), then setups and tags to manage (scalp-review spec §10). */
