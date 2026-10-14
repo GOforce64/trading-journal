@@ -386,6 +386,10 @@ One branch (`feat/swing-trades`) and one PR:
   - after switching the SPCX scalp to Swing, run 2: 35 unchanged, SPCX still a swing, its facts not marked edited.
 - **Keys on a swing page** (headless Firefox, opened from the Swings list): W switched the long put to Scalp and back to Swing; 2 set grade B; ? listed "Scalp or swing"; J moved to the next swing.
 
+**After the final review (14 Oct 2026):**
+- **Strike and break-even lines were off the chart** whenever they lay outside the candles' range: Lightweight Charts sizes the price scale from the candles alone. The candle series now has an `autoscaleInfoProvider` that widens the range to every line. Seen on the demo's NVDA 21.5 long put: its break-even at 20.45, below every candle, now shows with its label.
+- **That check found a demo bug:** each leg of a spread was priced at its own random volatility, so a short leg could cost more than its long one, and a demo spread closed for a debit ("B 1 @ 0.31"). Both legs now share one volatility a day. The demo's swings changed with it, so the README's swing screenshots were taken again; the QQQ spread above now closes at "S 2 @ 3.02".
+
 **Still to check with real data, on a machine with the keys:** a swing's chart on real Alpaca bars, and a real paper sync bringing in a debit vertical as a swing.
 
 **Noticed, not changed:** a closed swing's daily chart ends at its exit day, as a scalp's does (the bars are fetched up to the trade's last day), so the padding after the exit is blank. Seeing what the stock did after the exit would need the range to run past the close.
