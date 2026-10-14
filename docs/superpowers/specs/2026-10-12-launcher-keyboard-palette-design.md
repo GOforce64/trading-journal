@@ -183,6 +183,7 @@ Registered by the scalp, iron fly and missed trade pages. Only the keys that app
 | P | Places the stop on the chart, as + Stop does | ✓ | | ✓ |
 | T | Places a target, as + Target does: a scalp's next target, a missed trade's one target | ✓ | | ✓ |
 | X | Toggles Exclude from stats | ✓ | ✓ | ✓ |
+| W | Scalp or swing: switches a single bought option ([swing spec](2026-10-14-swing-trades-design.md) §5.2) | ✓ | | |
 | ? | The help | ✓ | ✓ | ✓ |
 
 - **At the end of a list, or with an empty queue,** Enter still marks the scalp done and stays. The queue bar then says "REVIEWED ✓ 0 left".

@@ -102,6 +102,13 @@ first. On a trade, **J/K** move through the list you opened it from, **1–5** s
   3-minute candles (1m to 1h), with a daily chart beside it, your fills marked, EMAs,
   VWAP, premarket and prior-day levels, and pre-market and after-hours shaded as on TradingView,
   from Alpaca's free data.
+- **Swings** — a bought call or put held for days, or a debit vertical (bull call or bear put
+  spread). Verticals sync from IBKR as swings; a bought option syncs as a scalp, and a
+  Scalp | Swing switch on its page (or W) moves it, with a "Held overnight: a swing?" prompt
+  on scalps that crossed a close. Each swing's page has a daily chart, or weekly over five
+  years, with your fills and the strikes and break-even drawn on it; its debit, max profit,
+  % of max profit captured, return on the debit, days held and DTE at open; and an
+  Analytics Swings tab breaks them down by structure, days held, DTE and more.
 - **Review** — a Dashboard for the current period (KPIs, equity curve with drawdown,
   P&L calendar, open and recent trades) and an Analytics page with every split at once,
   a Scalps tab (time of day, hold time, breakdowns in R and return on cost, and what each
@@ -126,6 +133,10 @@ first. On a trade, **J/K** move through the list you opened it from, **1–5** s
   <tr>
     <td><img src="docs/images/analytics.png" alt="Analytics, Scalps tab: KPIs, time of day, hold time, breakdown by setup, and what each mistake costs"></td>
     <td><img src="docs/images/iron-flies-analytics.png" alt="Analytics, Iron flies tab: results measured against max profit"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/swing.png" alt="A call debit spread's page: daily candles with the fills, the strikes and the break-even, then debit, max profit, % of max, days held and DTE"></td>
+    <td><img src="docs/images/swings-analytics.png" alt="Analytics, Swings tab: KPIs and a breakdown by structure"></td>
   </tr>
 </table>
 

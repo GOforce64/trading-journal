@@ -40,7 +40,7 @@ const COUNT = 8;
 const NOTES = {
   won: [
     "Held through the pullback; the trend did the work.",
-    "Took it at the target the week before expiry.",
+    "Sold at the target rather than hold into the decay.",
   ],
   lost: ["Thesis broke on the gap down; cut it.", "Theta ate it while the stock went nowhere."],
 };

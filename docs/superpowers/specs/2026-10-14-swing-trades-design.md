@@ -1,6 +1,6 @@
 # Swing trades: design
 
-- **Date:** 14 Oct 2026. **Status:** approved. The design was approved section by section on 14 Oct 2026, and the user moved on to the plan (writing-plans) after reading the spec.
+- **Date:** 14 Oct 2026. **Status:** implemented on `feat/swing-trades`. The design was approved section by section on 14 Oct 2026, and the user moved on to the plan (writing-plans) after reading the spec. Plan: [2026-10-14-swing-trades.md](../plans/2026-10-14-swing-trades.md); its deviations are in §14, the live check in §15.
 - **Branch:** `feat/swing-trades`, from main b66587d.
 - **The ask (14 Oct 2026):** "i want to add a swing strategy, could be a long option or a spread".
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md).
@@ -355,3 +355,37 @@ One branch (`feat/swing-trades`) and one PR:
 6. **The chart:** Daily | Weekly, the 5-year span, the price lines, the markers, EMA 167 on Weekly.
 7. **Analytics:** the Swings tab and the Playbook's swing cards.
 8. **Demo, docs and the check:** the demo's swings, the README screenshot, the other specs' changes (§11), and the live check (§10).
+
+---
+
+## 14. Plan deviations
+
+1. **There is no strategy filter in the UI.** "The strategy filter gains Swing" (§6.2) means the list API's `strategy` parameter (the Swings page uses it) and the palette's strategy words ("swing", "swings").
+2. **The Swings tab's breakdown is kept in `sby`**, like the Missed tab's `mby`, so the Scalps tab's `by` is untouched. An unknown `sby` is dropped rather than "falling back" (§6.3); the tab then shows its default, by structure.
+3. **Every demo swing is closed** (§8 said one would be open). An open one would ask the chart for bars up to the real today, which the demo can't have without a key.
+4. **The demo writes five years of daily bars for every symbol**, not only for swings. The older two years are walked backwards from the existing walk's first open, so no price the demo already made moves.
+5. **Strike lines are titled `String(strike)`** ("230", "232.5"); the break-even is "BE " + `priceText` ("BE 233.80").
+6. **The swing chart's load failure** reads "Couldn't load the chart: Alpaca didn't answer." with a Retry button, and the toolbar stays, so Daily still works when Weekly's fetch fails.
+7. **Label alignment was checked on screenshots** (§15): Lightweight Charts' coordinates aren't reachable from the page.
+8. **Tests the plan missed** were updated as they surfaced: the palette's page count (13 → 15), the chart preferences' defaults (`swingPeriod: "daily"`, plus a test that Weekly is remembered), the key tests' trade fixture (`legs: []`), the migration test's own `columns` read, and the demo's missed-trades test counting taken trades with swings.
+
+## 15. Live check (14 Oct 2026, Fedora)
+
+**This machine has no `secrets.json`:** no Alpaca key and no IBKR sync settings. So the two checks against real data ran as substitutes:
+
+- **The chart, on `pnpm demo`** (synthetic bars, five years, no key needed). Screenshots at 1280 and 1024 px, Daily and Weekly, of the QQQ 407.5/417.5 call debit spread (2 Jun → 11 Jun 2026) and the SPY 402.5 long put:
+  - **every label sits on its line**: the 417.5, "BE 411.27" and 407.5 title boxes and their axis labels each centred on their dotted line;
+  - **the candles have wicks**, in Daily and in Weekly;
+  - **the markers are on the right candles**: "B 2 @ 3.77" on 2 Jun and "S 2 @ 3.52" on 11 Jun; in Weekly, on the weeks of 1 Jun and 8 Jun;
+  - EMA 167 is greyed out on Weekly, and EMA 8, 20 and 50 draw;
+  - the tiles agree: 9 days and 7 sessions held, DTE 38 (10 Jul 2026), −4.44% of max (−$55.36 of $1,246), −7.34% return on the $754 debit;
+  - at 1024 px nothing overlaps; the Scalp | Swing switch shows on the long put (Swing pressed) and not on the spread, whose Edit is hidden;
+  - the Analytics Swings tab: 8 swings, the KPIs, and the breakdown by structure with its bars.
+- **The sync, offline on a copy of the real journal** (35 synced paper scalps, 97 fills, 42 oQuants flies). The real `createIbkrSync` ran with an IBKR stand-in whose statements are empty, so it regrouped every stored fill with the new rules and applied them:
+  - run 1: 35 unchanged, nothing added, updated, orphaned or skipped, and no trade changed strategy;
+  - after switching the SPCX scalp to Swing, run 2: 35 unchanged, SPCX still a swing, its facts not marked edited.
+- **Keys on a swing page** (headless Firefox, opened from the Swings list): W switched the long put to Scalp and back to Swing; 2 set grade B; ? listed "Scalp or swing"; J moved to the next swing.
+
+**Still to check with real data, on a machine with the keys:** a swing's chart on real Alpaca bars, and a real paper sync bringing in a debit vertical as a swing.
+
+**Noticed, not changed:** a closed swing's daily chart ends at its exit day, as a scalp's does (the bars are fetched up to the trade's last day), so the padding after the exit is blank. Seeing what the stock did after the exit would need the range to run past the close.
