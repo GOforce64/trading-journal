@@ -5,10 +5,15 @@ import {
   dayTimeText,
   type OptionQuote,
   pctKept,
+  premiumPaid,
   returnOnCost,
   round2,
+  swingMetrics,
 } from "@tj/core";
+import { useMemo } from "react";
 import { api, type TradeDetailView } from "../api.js";
+import { SwingChart } from "../chart/SwingChart.js";
+import { swingLines } from "../chart/swing.js";
 import { TradeCharts } from "../chart/TradeCharts.js";
 import { ESTIMATE_STYLE, EstimatedPnl, quotedAtText, signedUsd } from "../components/Estimate.js";
 import { Chip, Money, Panel, Pct, premiumText, Tile, usd } from "../components/ui.js";
@@ -20,12 +25,14 @@ import { useTradeNav } from "../nav/useTradeNav.js";
 import { ReviewPanel } from "../review/ReviewPanel.js";
 import { RiskTiles } from "../review/RiskTiles.js";
 import { ScalpWorkspace } from "../review/ScalpWorkspace.js";
+import { OvernightHint, StrategySwitch } from "../review/StrategySwitch.js";
 import { useTradeKeys } from "../review/useTradeKeys.js";
 import { Screenshots } from "../screenshots/Screenshots.js";
 import { FillsPanel } from "./FillsPanel.js";
 import { MoveTiles } from "./MoveTiles.js";
 import { ScalpTiles } from "./ScalpTiles.js";
 import { SettlePanel } from "./SettlePanel.js";
+import { SwingTiles } from "./SwingTiles.js";
 import { SyncedBanner } from "./SyncedBanner.js";
 
 /** Cash paid (positive) or received (negative) to open a leg. */
@@ -89,6 +96,10 @@ export function TradeDetail({
     onOpenTrade,
     chart: trade != null && (trade.strategy === "scalp" || trade.book === "missed"),
   });
+  const lines = useMemo(
+    () => (trade?.strategy === "swing" ? swingLines(swingMetrics(trade, today), trade.legs) : []),
+    [trade, today],
+  );
   if (!trade) {
     if (isLoading) return <p className="text-muted">Loading…</p>;
     // A trade deleted since its list was opened (spec §9): J and K still go on. Any other failure says so.
@@ -119,6 +130,13 @@ export function TradeDetail({
   // What closing now would realise; shown, never stored (spec §9).
   const marketOn = optionQuotes?.available === true;
   const estimate = isOpen(trade) ? closeEstimate(trade, optionQuotes?.quotes ?? NO_QUOTES, today) : null;
+  const swing = trade.strategy === "swing";
+  const estimatedPnl = estimate?.kind === "estimate" ? estimate.netPnl : null;
+  // A swing's return on debit, or while it's open the live estimate's (swing spec §5.1).
+  const debit = swing ? premiumPaid(trade) : null;
+  const swingPct = swing
+    ? (returnOnCost(trade) ?? (estimatedPnl != null && debit ? estimatedPnl / debit : null))
+    : null;
   // Mark columns only when there are marks: not without a key, and not on an expired trade.
   const marked = estimate?.kind === "estimate" ? estimate : null;
   const markOf = (index: number) => marked?.legs.find((leg) => leg.index === index);
@@ -135,6 +153,7 @@ export function TradeDetail({
         <h1 className="num font-semibold text-[16px]">{trade.underlying}</h1>
         <span className="text-muted">{trade.underlyingName}</span>
         <Chip tone={trade.strategy}>{trade.structureLabel ?? "IRON FLY"}</Chip>
+        <StrategySwitch trade={trade} />
         <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>
         {trade.excluded && <Chip tone="excluded">EXCLUDED</Chip>}
         <span className="num text-muted">
@@ -148,25 +167,37 @@ export function TradeDetail({
             <Money value={trade.netPnl} />
           )}
         </span>
-        {/* A fly's P&L against max profit (its metrics need both wings, % kept doesn't); a scalp's return on cost. */}
-        <span data-testid="header-pct" className="text-[18px]">
+        {/* A fly's P&L against max profit (its metrics need both wings, % kept doesn't); a scalp's or swing's return. */}
+        <span
+          data-testid="header-pct"
+          className={`text-[18px] ${swing && trade.closedAt == null ? ESTIMATE_STYLE : ""}`}
+        >
           <Pct
             value={
-              trade.strategy === "scalp" ? returnOnCost(trade) : (metrics?.pnlPctOfCost ?? pctKept(trade))
+              trade.strategy === "iron_fly"
+                ? (metrics?.pnlPctOfCost ?? pctKept(trade))
+                : swing
+                  ? swingPct
+                  : returnOnCost(trade)
             }
           />
         </span>
-        <button
-          type="button"
-          onClick={() => onEdit?.(trade.id)}
-          className="rounded-sm border border-line bg-panel px-3 py-1 text-fg hover:border-accent"
-        >
-          Edit
-        </button>
+        {!(swing && trade.legs.length > 1) && (
+          <button
+            type="button"
+            onClick={() => onEdit?.(trade.id)}
+            className="rounded-sm border border-line bg-panel px-3 py-1 text-fg hover:border-accent"
+          >
+            Edit
+          </button>
+        )}
       </header>
       <SyncedBanner trade={trade} />
+      {trade.strategy === "scalp" && <OvernightHint trade={trade} />}
       {trade.strategy === "scalp" ? (
         <ScalpWorkspace trade={trade} onOpenTrade={onOpenTrade} onNewMissed={onNewMissed} />
+      ) : swing ? (
+        <SwingChart trade={trade} lines={lines} />
       ) : (
         <TradeCharts trade={trade} />
       )}
@@ -200,6 +231,8 @@ export function TradeDetail({
             {metrics ? `${metrics.breakevenLow} / ${metrics.breakevenHigh}` : "—"}
           </Tile>
         </div>
+      ) : swing ? (
+        <SwingTiles trade={trade} today={today} estimatedPnl={estimatedPnl} />
       ) : (
         <>
           <ScalpTiles trade={trade} />
@@ -220,7 +253,16 @@ export function TradeDetail({
           <SettlePanel trade={trade} onEdit={onEdit} onEditSettled={onSettle} />
         ))}
 
-      <div className={`grid gap-3 ${trade.strategy === "iron_fly" ? "lg:grid-cols-[1.35fr_1fr]" : ""}`}>
+      {swing &&
+        estimate?.kind === "expired" &&
+        trade.source === "ibkr_flex" &&
+        trade.factsEditedAt == null && (
+          <p className="text-[11px] text-muted">
+            IBKR books the expiry overnight: the next sync closes this trade at its expiry values.
+          </p>
+        )}
+
+      <div className={`grid gap-3 ${trade.strategy !== "scalp" ? "lg:grid-cols-[1.35fr_1fr]" : ""}`}>
         <Panel title="Legs">
           <div
             data-testid="legs-total"
@@ -317,7 +359,7 @@ export function TradeDetail({
           )}
         </Panel>
 
-        {trade.strategy === "iron_fly" && <ReviewPanel trade={trade} layout="side" />}
+        {trade.strategy !== "scalp" && <ReviewPanel trade={trade} layout="side" />}
       </div>
       <FillsPanel fills={trade.fills ?? []} />
       <Screenshots trade={{ id: trade.id, attachments: trade.attachments ?? [] }} />

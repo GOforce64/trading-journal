@@ -25,6 +25,7 @@ const scalp = (extra: Record<string, unknown> = {}) =>
     setupId: null,
     reviewedAt: null,
     review: { status: "pending", missing: ["stop"] },
+    legs: [],
     ...extra,
   }) as unknown as TradeView;
 const LIST = listOf([{ id: "t0" }, { id: "t1" }, { id: "t2" }], "Journal");
@@ -104,6 +105,18 @@ describe("a trade's keys", () => {
       ["t2", LIST],
       ["t0", LIST],
     ]);
+  });
+
+  it("W switches a single bought option between scalp and swing", async () => {
+    const first = setup(scalp({ legs: [{ quantity: 1 }] }));
+    press("w");
+    await waitFor(() => expect(first.patches).toEqual([{ chosenStrategy: "swing" }]));
+  });
+
+  it("registers no W on a trade that can't switch", () => {
+    const { patches } = setup(scalp({ legs: [{ quantity: 1 }, { quantity: -1 }] }));
+    press("w");
+    expect(patches).toEqual([]);
   });
 
   it("1–5 set the grade, and the trade's own grade clears it", async () => {
