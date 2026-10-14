@@ -50,6 +50,10 @@ describe("parseTradeQuery", () => {
       { kind: "book", book: "paper" },
       { kind: "book", book: "live" },
     ]);
+    expect(read("swing swings")).toEqual([
+      { kind: "strategy", strategy: "swing" },
+      { kind: "strategy", strategy: "swing" },
+    ]);
   });
 
   it("reads tickers, exact or by prefix, in any case", () => {

@@ -143,7 +143,7 @@ describe("SetupCards", () => {
 
   it("shows archived setups' cards only on request", () => {
     renderCards({ showArchived: true });
-    expect(card("Old setup").getByText("Both")).toBeTruthy();
+    expect(card("Old setup").getByText("Any")).toBeTruthy();
   });
 
   it("says so when the trades or setups couldn't load, and waits for the setups before saying there are none", () => {

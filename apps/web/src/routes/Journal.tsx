@@ -1,16 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { closeEstimate, dayTimeText, type OptionQuote, pctKept, returnOnCost } from "@tj/core";
+import { closeEstimate, dayTimeText, type OptionQuote, pctKept, returnOnCost, type Strategy } from "@tj/core";
 import { useState } from "react";
 import { rText } from "../analytics/format.js";
 import { api, type TradeView } from "../api.js";
 import { EstimatedPnl } from "../components/Estimate.js";
-import { Chip, Money, Panel, Pct } from "../components/ui.js";
+import { Chip, Money, Panel, Pct, strategyChipText } from "../components/ui.js";
 import { isOpen, openContracts, todayNy, useOptionQuotes, useQuotes } from "../market.js";
 import { listOf, type OpenTrade, QUEUE } from "../nav/tradeList.js";
 import { useSetups } from "../review/data.js";
 
 export interface JournalFilter {
-  strategy?: "scalp" | "iron_fly";
+  strategy?: Strategy;
   book?: "live" | "paper" | "missed";
   includeExcluded?: boolean;
   /** Taken trades only, the missed ones left out (missed-trades spec §6.5). */
@@ -47,7 +47,7 @@ const PRICE = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximum
 const NO_QUOTES = new Map<string, OptionQuote>();
 
 /** The % column's header: a scalp's return on the premium paid, a fly's share of max profit kept. */
-const PCT_HEADER = { scalp: "Return", iron_fly: "% kept" } as const;
+const PCT_HEADER: Record<Strategy, string> = { scalp: "Return", iron_fly: "% kept", swing: "Return" };
 
 function LivePrice({ tradeId, quote }: { tradeId: string; quote?: { price: number; at: number } }) {
   if (!quote) return null;
@@ -182,7 +182,7 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
                   <LivePrice tradeId={trade.id} quote={quotes?.[trade.underlying]} />
                 </td>
                 <td>
-                  <Chip tone={trade.strategy}>{trade.strategy === "iron_fly" ? "IRON FLY" : "SCALP"}</Chip>
+                  <Chip tone={trade.strategy}>{strategyChipText(trade.strategy)}</Chip>
                 </td>
                 <td>
                   <Chip tone={trade.book}>{trade.book.toUpperCase()}</Chip>{" "}
@@ -217,9 +217,9 @@ export function Journal({ lockedFilter, title = "Journal", actions, onOpenTrade,
                     value={
                       trade.book === "missed"
                         ? null
-                        : trade.strategy === "scalp"
-                          ? returnOnCost(trade)
-                          : pctKept(trade)
+                        : trade.strategy === "iron_fly"
+                          ? pctKept(trade)
+                          : returnOnCost(trade)
                     }
                   />
                 </td>

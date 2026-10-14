@@ -1,10 +1,18 @@
-import { addDays, nyDate, parseDayMonth, parseDayMonthYear, WEEKDAYS, weekdayOfDate } from "@tj/core";
+import {
+  addDays,
+  nyDate,
+  parseDayMonth,
+  parseDayMonthYear,
+  type Strategy,
+  WEEKDAYS,
+  weekdayOfDate,
+} from "@tj/core";
 
 /** One word of a palette query, read (launcher-keys-palette spec §7.3). */
 export type Word =
   | { kind: "day"; date: string }
   | { kind: "month"; month: string }
-  | { kind: "strategy"; strategy: "scalp" | "iron_fly" }
+  | { kind: "strategy"; strategy: Strategy }
   | { kind: "book"; book: "live" | "paper" | "missed" }
   | { kind: "ticker"; ticker: string; exact: boolean }
   | { kind: "setup"; ids: string[]; text: string }
@@ -61,9 +69,11 @@ const WEEKDAY_WORDS: Record<string, number> = {
   sun: 6,
   sunday: 6,
 };
-const STRATEGIES: Record<string, "scalp" | "iron_fly"> = {
+const STRATEGIES: Record<string, Strategy> = {
   scalp: "scalp",
   scalps: "scalp",
+  swing: "swing",
+  swings: "swing",
   fly: "iron_fly",
   flies: "iron_fly",
   iron: "iron_fly",

@@ -8,6 +8,7 @@ export const PAGES: readonly PalettePage[] = [
   { label: "Dashboard", href: "/" },
   { label: "Journal", href: "/journal" },
   { label: "Iron Flies", href: "/iron-flies" },
+  { label: "Swings", href: "/swings" },
   { label: "Missed", href: "/missed" },
   { label: "Playbook", href: "/playbook" },
   { label: "Import / Sync", href: "/import" },

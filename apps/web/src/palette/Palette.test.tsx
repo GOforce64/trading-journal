@@ -89,7 +89,7 @@ describe("the palette", () => {
     stub(TRADES);
     renderPalette();
     open();
-    expect(screen.getAllByRole("option")).toHaveLength(13);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
     expect(screen.getByText("↑↓ move · Enter open · Esc close")).toBeTruthy();
     fireEvent.keyDown(input(), { key: "k", code: "KeyK", ctrlKey: true });
     expect(screen.queryByRole("combobox")).toBeNull();

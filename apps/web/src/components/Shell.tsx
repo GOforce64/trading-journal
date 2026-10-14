@@ -6,6 +6,7 @@ const NAV = [
   { label: "Analytics", path: "/analytics" },
   { label: "Iron Flies", path: "/iron-flies" },
   { label: "Scalps", path: "/scalps" },
+  { label: "Swings", path: "/swings" },
   { label: "Missed", path: "/missed" },
   { label: "Playbook", path: "/playbook" },
   { label: "Import / Sync", path: "/import" },
