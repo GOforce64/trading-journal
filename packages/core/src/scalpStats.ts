@@ -12,6 +12,7 @@ import {
   tradeSize,
 } from "./splits.js";
 import { type Closed, type StatTrade, type Summary, summarize } from "./stats.js";
+import { calendarDays } from "./swing.js";
 
 /** The scalp analytics (scalp-analytics spec §6, §7, §9): time buckets, breakdowns, mistake cost and setup cards. */
 
@@ -86,6 +87,9 @@ export interface GroupStats {
 
 const mean = (values: readonly number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+
+const heldDays = (trade: { openedAt: number; closedAt: number }) =>
+  calendarDays(nyDate(trade.openedAt), nyDate(trade.closedAt));
 
 function median(values: readonly number[]): number | null {
   if (values.length === 0) return null;
@@ -387,8 +391,10 @@ export const cumulativeR = (trades: readonly ClosedScalp[]): CumulativePoint[] =
 /** A Playbook card (spec §7.2). */
 export interface SetupCard extends GroupStats {
   setupId: string;
-  /** "fly" when every closed trade is an iron fly. */
-  kind: "scalp" | "fly";
+  /** "fly" when every closed trade is an iron fly, "swing" when every one is a swing (swing spec §6.4). */
+  kind: "scalp" | "fly" | "swing";
+  /** A swing setup's mean calendar days held; null otherwise. */
+  avgDaysHeld: number | null;
   /** A fly setup's Σ net ÷ Σ max profit; null for a scalp setup. */
   kept: number | null;
   /** Cumulative R for a scalp setup, cumulative net $ for a fly setup. */
@@ -439,12 +445,14 @@ export function setupCards(
     Math.max(...(missedBySetup.get(setupId) ?? []).map((trade) => trade.openedAt));
   const taken = bySetup.map(([setupId, members]): SetupCard => {
     const fly = members.every((trade) => trade.strategy === "iron_fly");
+    const swing = members.every((trade) => trade.strategy === "swing");
     return {
       setupId,
-      kind: fly ? "fly" : "scalp",
+      kind: fly ? "fly" : swing ? "swing" : "scalp",
       ...groupStats(members),
       kept: fly ? keptStats(members).keptOverall : null,
-      points: fly ? cumulative(members, (trade) => trade.netPnl) : cumulativeR(members),
+      avgDaysHeld: swing ? mean(members.map(heldDays)) : null,
+      points: fly || swing ? cumulative(members, (trade) => trade.netPnl) : cumulativeR(members),
       lastClosedAt: Math.max(...members.map((trade) => trade.closedAt), lastEntry(setupId)),
       missed: missedOnCard(missedBySetup.get(setupId) ?? []),
     };
@@ -459,6 +467,7 @@ export function setupCards(
         kind: "scalp",
         ...groupStats([]),
         kept: null,
+        avgDaysHeld: null,
         points: [],
         lastClosedAt: lastEntry(setupId),
         missed: missedOnCard(members),

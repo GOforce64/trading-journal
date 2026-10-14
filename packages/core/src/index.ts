@@ -18,3 +18,4 @@ export * from "./settle.js";
 export * from "./splits.js";
 export * from "./stats.js";
 export * from "./swing.js";
+export * from "./swingStats.js";
