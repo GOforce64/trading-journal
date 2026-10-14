@@ -1,6 +1,6 @@
 # Swing trades: design
 
-- **Date:** 14 Oct 2026. **Status:** draft, for the user's review. The design was approved section by section on 14 Oct 2026.
+- **Date:** 14 Oct 2026. **Status:** approved. The design was approved section by section on 14 Oct 2026, and the user moved on to the plan (writing-plans) after reading the spec.
 - **Branch:** `feat/swing-trades`, from main b66587d.
 - **The ask (14 Oct 2026):** "i want to add a swing strategy, could be a long option or a spread".
 - **Parent spec:** [2026-09-22-trading-journal-design.md](2026-09-22-trading-journal-design.md).
