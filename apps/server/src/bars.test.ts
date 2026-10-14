@@ -201,6 +201,16 @@ describe("GET /api/bars/:symbol/daily", () => {
     expect(tradingDays).toBeGreaterThanOrEqual(3 * 167 - 1 + 126);
   });
 
+  it("asks for five years for the weekly view, fetching only what the three years lacked", async () => {
+    const { dailyBars, get } = setup();
+    await get("/api/bars/SPY/daily?to=2026-09-29");
+    await get("/api/bars/SPY/daily?to=2026-09-29&span=weekly");
+    expect(dailyBars.mock.calls).toEqual([
+      ["SPY", "2023-09-29", "2026-09-28"],
+      ["SPY", "2021-09-28", "2023-09-28"],
+    ]);
+  });
+
   it("ends at the trade's last day when that's in the past", async () => {
     const { dailyBars, get } = setup();
     await get("/api/bars/SPY/daily?to=2026-07-17");

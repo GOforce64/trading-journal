@@ -5,6 +5,7 @@ import {
   aggregate,
   dailyFromMinutes,
   ema,
+  mondayOf,
   nyClock,
   optionClose,
   PREMARKET_OPEN,
@@ -13,6 +14,7 @@ import {
   sessionLevels,
   sessionSlots,
   vwap,
+  weeklyBars,
 } from "./chart.js";
 import { nyDate } from "./marks.js";
 
@@ -329,5 +331,47 @@ describe("sessionBands", () => {
     const FRIDAY = "2026-11-27";
     const candles = aggregate([minute(FRIDAY, "12:59"), minute(FRIDAY, "13:00"), minute(FRIDAY, "13:01")], 1);
     expect(sessionBands(candles)).toEqual([{ from: 1, to: 2, session: "post" }]);
+  });
+});
+
+describe("weeklyBars (swing spec §4.2)", () => {
+  const day = (date: string, o: number, h: number, l: number, c: number) => ({
+    t: nyWallClock(date, 0),
+    o,
+    h,
+    l,
+    c,
+    v: 100,
+  });
+
+  it("makes one candle a week, Monday to Friday, stamped at its first session", () => {
+    expect(
+      weeklyBars([
+        day("2026-10-05", 10, 12, 9, 11),
+        day("2026-10-06", 11, 13, 10, 12),
+        day("2026-10-09", 12, 15, 11, 14),
+        day("2026-10-12", 14, 14, 13, 13),
+      ]),
+    ).toEqual([
+      { t: nyWallClock("2026-10-05", 0), o: 10, h: 15, l: 9, c: 14, v: 300 },
+      { t: nyWallClock("2026-10-12", 0), o: 14, h: 14, l: 13, c: 13, v: 100 },
+    ]);
+  });
+
+  it("keys a week by its Monday, across a new year and in a week whose Monday is a holiday", () => {
+    // 29 Dec 2025 to 2 Jan 2026 has 1 Jan off; Monday 19 Jan 2026 is Martin Luther King Day.
+    const weeks = weeklyBars([
+      day("2025-12-29", 1, 2, 1, 2),
+      day("2025-12-31", 2, 3, 2, 3),
+      day("2026-01-02", 3, 4, 3, 4),
+      day("2026-01-20", 5, 6, 5, 6),
+      day("2026-01-23", 6, 7, 4, 5),
+    ]);
+    expect(weeks.map((week) => [nyClock(week.t).date, week.o, week.c])).toEqual([
+      ["2025-12-29", 1, 4],
+      ["2026-01-20", 5, 5],
+    ]);
+    expect(mondayOf("2026-01-23")).toBe("2026-01-19");
+    expect(mondayOf("2026-01-01")).toBe("2025-12-29");
   });
 });

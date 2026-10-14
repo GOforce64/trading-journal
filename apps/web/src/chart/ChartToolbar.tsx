@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import type { ChartView } from "./option.js";
 import { type ChartPrefs, TIMEFRAMES, type Toggle, timeframeLabel } from "./prefs.js";
 
-const BUTTON = "rounded-[2px] border px-1.5 py-0.5 text-[10px]";
-const on = (pressed: boolean) =>
+export const BUTTON = "rounded-[2px] border px-1.5 py-0.5 text-[10px]";
+export const on = (pressed: boolean) =>
   pressed ? "border-accent bg-[#2962ff22] text-fg" : "border-line text-muted hover:text-fg";
 
 /** Timeframes, the Stock | Option switch, indicator toggles and Fit trade, above the charts (spec §8). */

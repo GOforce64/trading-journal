@@ -5,13 +5,15 @@ import {
   createSeriesMarkers,
   HistogramSeries,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   LineSeries,
+  LineStyle,
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
-import { markerLook } from "./IntradayChart.js";
+import { markerLook, type PriceLine } from "./IntradayChart.js";
 import type { DailyModel } from "./model.js";
 import type { Toggle } from "./prefs.js";
 import { COLORS, chartOptions, EMA_COLORS } from "./style.js";
@@ -22,7 +24,10 @@ interface Parts {
   volume: ISeriesApi<"Histogram">;
   emas: ISeriesApi<"Line">[];
   markers: ISeriesMarkersPluginApi<Time>;
+  priceLines: IPriceLine[];
 }
+
+const NO_LINES: readonly PriceLine[] = [];
 
 /** A daily bar's date, which the chart takes as a business day. */
 const day = (t: number) => nyClock(t).date;
@@ -33,11 +38,14 @@ export function DailyChart({
   show,
   fitKey,
   height = 420,
+  lines = NO_LINES,
 }: {
   model: DailyModel;
   show: Record<Toggle, boolean>;
   fitKey: number;
   height?: number;
+  /** A swing's strikes and break-even (swing spec §4.4). */
+  lines?: readonly PriceLine[];
 }) {
   const container = useRef<HTMLDivElement>(null);
   const parts = useRef<Parts | null>(null);
@@ -70,7 +78,14 @@ export function DailyChart({
         crosshairMarkerVisible: false,
       }),
     );
-    parts.current = { chart, candles, volume, emas, markers: createSeriesMarkers(candles, []) };
+    parts.current = {
+      chart,
+      candles,
+      volume,
+      emas,
+      markers: createSeriesMarkers(candles, []),
+      priceLines: [],
+    };
     return () => {
       chart.remove();
       parts.current = null;
@@ -122,6 +137,23 @@ export function DailyChart({
     });
     chart.volume.applyOptions({ visible: show.volume });
   }, [show]);
+
+  // A swing's strikes and break-even (swing spec §4.4): the library titles each on the price axis at its own price.
+  useEffect(() => {
+    const chart = parts.current;
+    if (!chart) return;
+    for (const priceLine of chart.priceLines) chart.candles.removePriceLine(priceLine);
+    chart.priceLines = lines.map((each) =>
+      chart.candles.createPriceLine({
+        price: each.price,
+        color: each.color,
+        lineWidth: 1,
+        lineStyle: each.dashed ? LineStyle.Dashed : LineStyle.Solid,
+        title: each.label,
+        axisLabelVisible: true,
+      }),
+    );
+  }, [lines]);
 
   return <div ref={container} style={{ height }} data-testid="daily-chart" />;
 }
