@@ -5,6 +5,8 @@ import {
   type PricedLeg,
   positionCash,
   round2,
+  SWING_LABELS,
+  swingShape,
 } from "@tj/core";
 import { uuidV5 } from "../oquants/ids.js";
 import type { FillKind, OpenClose } from "./parse.js";
@@ -252,16 +254,37 @@ function settle(episode: FillForGrouping[], out: Grouped, options: GroupOptions)
     opened("C", false) <= 1 &&
     opened("P", false) <= 1 &&
     opened("C", false) + opened("P", false) >= 1;
-  if (!isFly) {
-    skip("unrecognised");
+  if (isFly) {
+    addTrade(contracts, "iron_fly", out, options);
     return;
   }
-  addTrade(contracts, "iron_fly", out, options);
+  // A debit vertical (swing spec §3.3): two contracts, one bought and one sold, the same size, the long nearer.
+  if (!changesSide && contracts.length === 2 && isDebitVertical(contracts)) {
+    addTrade(contracts, "swing", out, options);
+    return;
+  }
+  skip("unrecognised");
+}
+
+/** Whether two contracts' opening fills make a debit vertical, by the same rule as the model's. */
+function isDebitVertical(contracts: FillForGrouping[][]): boolean {
+  const legs = contracts.map((fills) => {
+    const first = fills[0];
+    const sign = Math.sign(first?.quantity ?? 0);
+    return {
+      right: first?.right ?? "",
+      strike: first?.strike ?? 0,
+      expiry: first?.expiry ?? "",
+      quantity: sum(fills.filter((fill) => Math.sign(fill.quantity) === sign).map((fill) => fill.quantity)),
+    };
+  });
+  const shape = swingShape(legs);
+  return shape === "call_debit_spread" || shape === "put_debit_spread";
 }
 
 function addTrade(
   legFills: FillForGrouping[][],
-  strategy: "scalp" | "iron_fly",
+  strategy: "scalp" | "iron_fly" | "swing",
   out: Grouped,
   options: GroupOptions,
 ): void {
@@ -327,9 +350,7 @@ function addTrade(
     structureLabel:
       strategy === "iron_fly"
         ? "Short Iron Butterfly"
-        : firstOpening.right === "C"
-          ? "Long call"
-          : "Long put",
+        : SWING_LABELS[swingShape(legs) ?? (firstOpening.right === "C" ? "long_call" : "long_put")],
     openedAt: all[0]?.executedAt ?? firstOpening.executedAt,
     closedAt,
     netPnl: cash.netPnl,

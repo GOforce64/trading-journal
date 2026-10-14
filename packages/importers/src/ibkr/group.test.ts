@@ -397,3 +397,66 @@ describe("groupFills rules", () => {
     );
   });
 });
+
+describe("groupFills: debit verticals (swing spec §3.3)", () => {
+  const c230 = { conid: "c230", right: "C" as const, strike: 230, expiry: "2026-11-06" };
+  const c240 = { conid: "c240", right: "C" as const, strike: 240, expiry: "2026-11-06" };
+  const p250 = { conid: "p250", right: "P" as const, strike: 250, expiry: "2026-11-06" };
+  const p240 = { conid: "p240", right: "P" as const, strike: 240, expiry: "2026-11-06" };
+
+  it("makes a call debit spread, opened and closed, one swing", () => {
+    const { candidates, skipped } = groupFills(
+      [
+        fill({ ...c230, quantity: 1, price: 5.1 }),
+        fill({ ...c240, quantity: -1, price: 1.3 }),
+        fill({ ...c230, quantity: -1, price: 9 }),
+        fill({ ...c240, quantity: 1, price: 1.15 }),
+      ],
+      OPTIONS,
+    );
+    expect(skipped).toEqual([]);
+    expect(candidates).toHaveLength(1);
+    // (9 − 5.10) × 100 + (1.30 − 1.15) × 100, less four $1 commissions.
+    expect(candidates[0]?.trade).toMatchObject({
+      strategy: "swing",
+      structureLabel: "Call debit spread",
+      netPnl: 401,
+    });
+  });
+
+  it("names a put debit spread", () => {
+    const { candidates } = groupFills(
+      [fill({ ...p250, quantity: 2, price: 6 }), fill({ ...p240, quantity: -2, price: 2.5 })],
+      OPTIONS,
+    );
+    expect(candidates[0]?.trade).toMatchObject({
+      strategy: "swing",
+      structureLabel: "Put debit spread",
+      closedAt: null,
+    });
+  });
+
+  it("skips a credit vertical and uneven sizes as unrecognised", () => {
+    const credit = groupFills(
+      [fill({ ...c230, quantity: -1, price: 5.1 }), fill({ ...c240, quantity: 1, price: 1.3 })],
+      OPTIONS,
+    );
+    const uneven = groupFills(
+      [fill({ ...c230, quantity: 2, price: 5.1 }), fill({ ...c240, quantity: -1, price: 1.3 })],
+      OPTIONS,
+    );
+    for (const { candidates, skipped } of [credit, uneven]) {
+      expect(candidates).toEqual([]);
+      expect(skipped).toEqual([expect.objectContaining({ reason: "unrecognised" })]);
+    }
+  });
+
+  it("keeps the single option's trade id when a call is legged into a spread", () => {
+    const bought = fill({ ...c230, quantity: 1, price: 5.1 });
+    const alone = groupFills([bought], OPTIONS).candidates[0];
+    const legged = groupFills([bought, fill({ ...c240, quantity: -1, price: 1.3 })], OPTIONS).candidates[0];
+    expect(alone?.trade.strategy).toBe("scalp");
+    expect(legged?.trade).toMatchObject({ strategy: "swing", structureLabel: "Call debit spread" });
+    expect(legged?.id).toBe(alone?.id);
+  });
+});
