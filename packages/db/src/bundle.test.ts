@@ -571,3 +571,15 @@ describe("mergeBundle and missed trades", () => {
     expect(b.trades.get(id)).toMatchObject({ grade: "A", missed: { entryPrice: 178.42 } });
   });
 });
+
+describe("mergeBundle and the Scalp | Swing choice", () => {
+  it("carries the user's choice to the other machine (swing spec §3.2)", () => {
+    const a = journal();
+    const b = journal();
+    const { id } = a.trades.create(scalp);
+    a.clock.now = 3_000;
+    a.trades.update(id, { chosenStrategy: "swing" });
+    mergeBundle(b.db, bundleOf(a.db));
+    expect(b.trades.get(id)).toMatchObject({ strategy: "swing", chosenStrategy: "swing" });
+  });
+});

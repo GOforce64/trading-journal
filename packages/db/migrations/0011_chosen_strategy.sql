@@ -1,0 +1,1 @@
+ALTER TABLE `trades` ADD `chosen_strategy` text;

@@ -1,4 +1,5 @@
 import {
+  canSwitchStrategy,
   contractsHeld,
   dayText,
   type MissedLevels,
@@ -9,6 +10,7 @@ import {
   round2,
   sessionMoment,
   sortTargets,
+  swingShape,
   type TargetLevel,
   type TradePatch,
   trimProblem,
@@ -555,6 +557,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
         excluded: input.excluded,
         excludeReason: input.excludeReason,
         source: input.source,
+        chosenStrategy: input.chosenStrategy ?? null,
         externalRef: null,
         importBatchId,
         // Typing a trade in by hand is a user edit; an import is not.
@@ -647,10 +650,21 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       const columns = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined));
       // The review rules (scalp-review spec §6.2) are checked before anything is written.
       checkBook(existing, patch);
-      if (scalp && (patch.strategy ?? existing.strategy) !== "scalp") {
+      const record = hydrate(db, existing);
+      // The user's Scalp | Swing (swing spec §3.5): only on a single bought option, and it sets the strategy too.
+      if (patch.chosenStrategy !== undefined) {
+        if (!canSwitchStrategy({ book: existing.book, legs: patch.legs ?? record.legs })) {
+          throw new ReviewRuleError("Only a single bought call or put can be switched.");
+        }
+        columns.strategy = patch.chosenStrategy;
+      }
+      const strategy = (columns.strategy as string | undefined) ?? existing.strategy;
+      if (strategy === "swing" && swingShape(patch.legs ?? record.legs) == null) {
+        throw new ReviewRuleError("A swing is one bought call or put, or a debit vertical.");
+      }
+      if (scalp && strategy !== "scalp") {
         throw new ReviewRuleError("Only a scalp has a stop and target");
       }
-      const record = hydrate(db, existing);
       const levels = scalp
         ? mergeLevels(id, record.scalp, scalp, positionOf(patch.legs ?? record.legs))
         : null;

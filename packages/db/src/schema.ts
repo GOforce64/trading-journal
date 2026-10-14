@@ -34,7 +34,7 @@ export const trades = sqliteTable(
   "trades",
   {
     id: text("id").primaryKey(),
-    /** 'scalp' | 'iron_fly' */
+    /** 'scalp' | 'iron_fly' | 'swing' */
     strategy: text("strategy").notNull(),
     /** 'live' | 'paper' | 'missed' */
     book: text("book").notNull(),
@@ -63,6 +63,8 @@ export const trades = sqliteTable(
     factsEditedAt: integer("facts_edited_at"),
     /** When the user clicked Done reviewing (scalp-review spec §5); null otherwise. */
     reviewedAt: integer("reviewed_at"),
+    /** The user's Scalp or Swing on a single bought option (swing spec §3.1); the sync never writes it. */
+    chosenStrategy: text("chosen_strategy"),
     ...syncColumns,
   },
   (table) => [

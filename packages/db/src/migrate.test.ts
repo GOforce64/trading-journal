@@ -212,4 +212,14 @@ describe("runMigrations", () => {
     expect(columns("bars")).toEqual(["symbol", "timeframe", "t", "o", "h", "l", "c", "v"]);
     expect(columns("bar_days")).toEqual(["symbol", "timeframe", "date", "count", "fetched_at"]);
   });
+
+  it("adds trades.chosen_strategy (swing spec §3.2)", () => {
+    const file = join(tempDir(), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const db = openDatabase(file);
+    const columns = db
+      .all<{ name: string }>(sql.raw("pragma table_info(trades)"))
+      .map((column) => column.name);
+    expect(columns).toContain("chosen_strategy");
+  });
 });
