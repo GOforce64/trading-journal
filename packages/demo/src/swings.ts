@@ -91,11 +91,10 @@ export function planSwings(
     const short = right === "C" ? long + step * int(rng, 2, 4) : long - step * int(rng, 2, 4);
     const expiry = expiryAfter(entry, int(rng, 28, 42));
     const contracts = int(rng, 1, 3);
+    // One volatility a day for both legs: a leg nearer the money is then never the cheaper one.
+    const sigma = { [entry]: vol * uniform(rng, 0.9, 1.1), [exit]: vol * uniform(rng, 0.9, 1.1) };
     const price = (strike: number, spot: number, date: string) =>
-      Math.max(
-        0.05,
-        cents(bsPrice(right, spot, strike, yearsBetween(date, expiry), vol * uniform(rng, 0.9, 1.1))),
-      );
+      Math.max(0.05, cents(bsPrice(right, spot, strike, yearsBetween(date, expiry), sigma[date] ?? vol)));
     const legs: SwingLegPlan[] = [
       {
         right,

@@ -48,6 +48,18 @@ describe("planSwings (swing spec §8)", () => {
     }
   });
 
+  it("prices a spread's long leg at or above its short leg, at the open and at the close", () => {
+    // Nearer the money is never cheaper: a debit to open, and a credit (or nothing) to close.
+    const many = Array.from({ length: 40 }, (_, seed) =>
+      planSwings(stream(seed, "swings"), sessions, walks, ["NVDA", "TSLA"]),
+    ).flat();
+    for (const plan of many.filter((each) => each.legs.length === 2)) {
+      const [long, short] = plan.legs;
+      expect(long?.openPrice).toBeGreaterThan(short?.openPrice ?? Number.POSITIVE_INFINITY);
+      expect(long?.closePrice).toBeGreaterThanOrEqual(short?.closePrice ?? Number.POSITIVE_INFINITY);
+    }
+  });
+
   it("makes the same swings from the same seed", () => {
     expect(planSwings(stream(1, "swings"), sessions, walks, ["NVDA", "TSLA"])).toEqual(plans);
   });
