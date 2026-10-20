@@ -652,11 +652,18 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       checkBook(existing, patch);
       const record = hydrate(db, existing);
       // The user's Scalp | Swing (swing spec §3.5): only on a single bought option, and it sets the strategy too.
+      let choiceOnly = false;
       if (patch.chosenStrategy !== undefined) {
         if (!canSwitchStrategy({ book: existing.book, legs: patch.legs ?? record.legs })) {
           throw new ReviewRuleError("Only a single bought call or put can be switched.");
         }
         columns.strategy = patch.chosenStrategy;
+      } else if (patch.strategy !== undefined && patch.strategy !== existing.strategy) {
+        // A changed strategy is the user's choice too, as the switch records it: on a single bought option it's its
+        // Scalp | Swing, and, like the switch, it isn't an edit of the broker's facts. Anything else has no choice.
+        const switchable = canSwitchStrategy({ book: existing.book, legs: patch.legs ?? record.legs });
+        choiceOnly = switchable && (patch.strategy === "scalp" || patch.strategy === "swing");
+        columns.chosenStrategy = choiceOnly ? patch.strategy : null;
       }
       const strategy = (columns.strategy as string | undefined) ?? existing.strategy;
       if (strategy === "swing" && swingShape(patch.legs ?? record.legs) == null) {
@@ -674,7 +681,7 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
       }
       const missed = mergeMissed(record, patch, missedPatch);
 
-      const factsEdited = changesFacts(record, patch);
+      const factsEdited = changesFacts(record, choiceOnly ? { ...patch, strategy: undefined } : patch);
       return db.transaction((tx) => {
         tx.update(trades)
           .set({

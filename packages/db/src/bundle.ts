@@ -1,3 +1,4 @@
+import { canSwitchStrategy } from "@tj/core";
 import { sql } from "drizzle-orm";
 import type { Db } from "./client.js";
 
@@ -297,7 +298,20 @@ function overlay(incoming: Aggregate, local: Aggregate, lacking: ReadonlySet<Bun
       return [child, incoming.children[child].map((row) => ({ ...mine.get(keyOf(child, row)), ...row }))];
     }),
   ) as Record<Child, Row[]>;
-  return { trade: { ...local.trade, ...incoming.trade }, children };
+  const trade = { ...local.trade, ...incoming.trade };
+  // An older app's row has no Scalp | Swing choice, and its strategy is no decision: it knew no swings. The local
+  // choice stands, and the strategy follows it, so the two never disagree; but only on legs it can apply to.
+  const legs = children.legs
+    .filter((leg) => leg.deleted_at == null)
+    .map((leg) => ({ quantity: Number(leg.quantity) }));
+  if (
+    local.trade.chosen_strategy != null &&
+    !("chosen_strategy" in incoming.trade) &&
+    canSwitchStrategy({ book: String(trade.book), legs })
+  ) {
+    trade.strategy = local.trade.chosen_strategy;
+  }
+  return { trade, children };
 }
 
 /** The winning aggregate, with the fetched prices it lacks taken from the losing one (`DERIVED`). */

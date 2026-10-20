@@ -27,6 +27,8 @@ function groupSkipped<S extends { ticker: string; openedAt: number; reason: stri
 }
 
 const LABEL = { paper: "Paper", live: "Live" } as const;
+/** Skipped trades listed one by one; the rest are counted, so a year of Activity stays short. */
+const SKIPPED_SHOWN = 5;
 
 /** One account's last run: its line, and what it skipped, kept and ignored (spec §9.2). */
 function AccountBlock({ book, summary }: { book: SyncSummary["book"]; summary: SyncSummary | null }) {
@@ -36,13 +38,16 @@ function AccountBlock({ book, summary }: { book: SyncSummary["book"]; summary: S
     line = `${LABEL[book]} · ${summary.error?.message ?? "The last sync failed."}`;
   else {
     const account = summary.account
-      ? `${summary.account.kind === "paper" ? "Paper" : "Live"} ${summary.account.externalId}`
+      ? `${LABEL[summary.account.kind]} ${summary.account.externalId}`
       : LABEL[book];
     const at = summary.lastRunAt != null ? ` · last synced ${when(summary.lastRunAt)} ET` : "";
     line = `${account}${at} · ${summary.added} added, ${summary.updated} updated, ${summary.unchanged} unchanged`;
   }
   const failed = summary?.status === "error";
   const ignored = summary && !failed ? ignoredLine(summary.ignored) : null;
+  const skipped = summary ? groupSkipped(summary.skipped) : [];
+  // The trades past the shown lines, each line counting as many as it groups.
+  const hidden = skipped.slice(SKIPPED_SHOWN).reduce((sum, group) => sum + group.count, 0);
 
   return (
     <div className="flex flex-col gap-1">
@@ -54,14 +59,15 @@ function AccountBlock({ book, summary }: { book: SyncSummary["book"]; summary: S
           {summary.activityFailed && (
             <p className="text-down">The Activity statement failed; today's fills are in.</p>
           )}
-          {summary.skipped.length > 0 && (
+          {skipped.length > 0 && (
             <ul className="flex flex-col gap-0.5">
-              {groupSkipped(summary.skipped).map(({ key, skip, count }) => (
+              {skipped.slice(0, SKIPPED_SHOWN).map(({ key, skip, count }) => (
                 <li key={key}>
                   Skipped {skip.ticker} · {when(skip.openedAt)} — {SKIP_REASON[skip.reason]}
                   {count > 1 ? ` ×${count}` : ""}
                 </li>
               ))}
+              {hidden > 0 && <li>… and {hidden} more skipped</li>}
             </ul>
           )}
           {summary.keptEdits.length > 0 && (

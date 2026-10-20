@@ -1,5 +1,6 @@
 import { nyWallClock, regularClose, sessionsBetween } from "./calendar.js";
 import { nyDate } from "./marks.js";
+import { round2 } from "./money.js";
 
 /** A swing's shapes (swing spec §3.1): one bought call or put, or a debit vertical. */
 export const SWING_SHAPES = ["long_call", "long_put", "call_debit_spread", "put_debit_spread"] as const;
@@ -48,6 +49,10 @@ export function swingShape(legs: readonly SwingShapeLeg[]): SwingShape | null {
 /** Calendar days from one YYYY-MM-DD date to another. */
 export const calendarDays = (from: string, to: string): number =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/** A closed trade's calendar days held, New York day to day: the one rule the scalp and swing stats share. */
+export const daysHeldOf = (trade: { openedAt: number; closedAt: number }): number =>
+  calendarDays(nyDate(trade.openedAt), nyDate(trade.closedAt));
 
 /** Only a single bought call or put that isn't missed can be a scalp or a swing at the user's word (spec §3.5). */
 export function canSwitchStrategy(trade: { book: string; legs: readonly { quantity: number }[] }): boolean {
@@ -121,7 +126,6 @@ export interface SwingMetrics {
 }
 
 const exact = (value: number) => Math.round(value * 1e6) / 1e6;
-const cents = (value: number) => Math.round(value * 100) / 100;
 
 /** A swing's numbers, from its legs and P&L (spec §4.1); null when its legs aren't a swing shape. */
 export function swingMetrics(trade: SwingTrade, today: string): SwingMetrics | null {
@@ -131,9 +135,9 @@ export function swingMetrics(trade: SwingTrade, today: string): SwingMetrics | n
   const short = trade.legs.find((leg) => leg.quantity < 0) ?? null;
   const contracts = long.quantity;
   const debitPerShare = exact(long.openPrice - (short?.openPrice ?? 0));
-  const debit = cents(debitPerShare * long.multiplier * contracts);
+  const debit = round2(debitPerShare * long.multiplier * contracts);
   const width = short ? exact(Math.abs(short.strike - long.strike)) : null;
-  const maxProfit = width == null ? null : cents((width - debitPerShare) * long.multiplier * contracts);
+  const maxProfit = width == null ? null : round2((width - debitPerShare) * long.multiplier * contracts);
   const net = trade.closedAt != null ? trade.netPnl : null;
   const openDay = nyDate(trade.openedAt);
   const endDay = trade.closedAt != null ? nyDate(trade.closedAt) : today;

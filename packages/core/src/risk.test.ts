@@ -496,9 +496,10 @@ describe("return on debit for swings (swing spec §4.1)", () => {
     { quantity: -1, multiplier: 100, openPrice: 1.3 },
   ];
 
-  it("takes a swing's net debit as the premium paid", () => {
-    expect(premiumPaid({ strategy: "swing", legs })).toBeCloseTo(380, 6);
-    expect(returnOnCost({ strategy: "swing", netPnl: 402.1, legs })).toBeCloseTo(1.0582, 4);
+  it("takes a swing's net debit as the premium paid, in cents, as the tiles show it", () => {
+    // 5.1 × 100 − 1.3 × 100 is 379.99999999999994 in floating point: the header and tiles must divide by one debit.
+    expect(premiumPaid({ strategy: "swing", legs })).toBe(380);
+    expect(returnOnCost({ strategy: "swing", netPnl: 402.1, legs })).toBe(402.1 / 380);
   });
 
   it("still has none for a fly", () => {

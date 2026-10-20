@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { nyWallClock } from "@tj/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShortcutsProvider } from "../keys/Shortcuts.js";
@@ -181,6 +181,26 @@ describe("the overnight hint on a scalp (swing spec §5.3)", () => {
     const patches = show(scalp);
     fireEvent.click(await screen.findByRole("button", { name: "Switch to swing" }));
     await waitFor(() => expect(patches).toEqual([{ chosenStrategy: "swing" }]));
+  });
+
+  it("says why a switch from the hint was refused", async () => {
+    show(
+      scalp,
+      new Response(
+        JSON.stringify({
+          error: "invalid",
+          message: "A swing is one bought call or put, or a debit vertical.",
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to swing" }));
+    expect((await within(screen.getByTestId("swing-hint")).findByRole("alert")).textContent).toBe(
+      "A swing is one bought call or put, or a debit vertical.",
+    );
   });
 
   it("doesn't ask about a same-day scalp", async () => {

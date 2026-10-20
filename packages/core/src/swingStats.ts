@@ -9,7 +9,7 @@ import {
 } from "./scalpStats.js";
 import { daysToExpiry, groupTrades } from "./splits.js";
 import { type Closed, type Summary, summarize } from "./stats.js";
-import { calendarDays, SWING_LABELS, SWING_SHAPES, swingMetrics, swingShape } from "./swing.js";
+import { daysHeldOf, SWING_LABELS, SWING_SHAPES, swingMetrics, swingShape } from "./swing.js";
 
 /** The Swings tab (swing spec §4.5, §6.3): buckets, the KPI strip and the breakdowns. */
 
@@ -58,10 +58,6 @@ export function dteBucket(days: number | null): string {
   if (days <= 45) return "22–45";
   return days <= 90 ? "46–90" : "90+";
 }
-
-/** Calendar days from a closed trade's New York open date to its close date. */
-export const daysHeldOf = (trade: { openedAt: number; closedAt: number }): number =>
-  calendarDays(nyDate(trade.openedAt), nyDate(trade.closedAt));
 
 const mean = (values: readonly number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
