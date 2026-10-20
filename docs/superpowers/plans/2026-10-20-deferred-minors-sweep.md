@@ -45,15 +45,17 @@ Mark each item `[x]` with its commit, or `[-] won't fix: why`.
 
 ## PR 2 — launcher, keys and missed (branch `fix/minors-launcher-missed`)
 
+PR 1 merged as #26 (d046606).
+
 ### Launcher (launcher spec §14)
-- [ ] the lock: an unreadable lock counts as stale
-- [ ] the lock: the takeover is unlink, then create
-- [ ] the lock: a live launcher's lock ages out after 60 s during a long `pnpm install`
+- [x] the lock: an unreadable lock counts as stale
+- [x] the lock: the takeover is unlink, then create
+- [x] the lock: a live launcher's lock ages out after 60 s during a long `pnpm install`
 - [ ] shutdown isn't idempotent (a second Stop during the drain exits mid-sync), and has no time limit
 - [ ] Edit → Save reopens the trade without its list, so J/K stop following it
-- [ ] closing the palette with Ctrl+K keeps the typed query (Esc and a click outside clear it)
-- [ ] `parseDayMonthYear("09/12/0026")` gives "26-12-09" (the year isn't padded to four digits)
-- [ ] the date guard catches `new Date(…).toLocaleString(` but not `someDate.toLocaleString(`
+- [x] closing the palette with Ctrl+K keeps the typed query (Esc and a click outside clear it)
+- [x] `parseDayMonthYear("09/12/0026")` gives "26-12-09" (the year isn't padded to four digits)
+- [x] the date guard catches `new Date(…).toLocaleString(` but not `someDate.toLocaleString(`
 - [ ] the `.desktop` records the versioned `/usr/bin/node-22`
 - [ ] clicking a button that already had keyboard focus doesn't mark it mouse-focused
 - [ ] (pre-existing) MissedWorkspace's "keeps a refused new exit's typed time and price" flakes under suite load
