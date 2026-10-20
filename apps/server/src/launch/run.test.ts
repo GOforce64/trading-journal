@@ -54,6 +54,32 @@ describe("runLaunch", () => {
     expect(await slow).toBe(0);
   });
 
+  it("keeps its lock fresh through a long install, so a later click doesn't start a second (launcher spec §14)", async () => {
+    const dir = dataDir();
+    let clock = 1000;
+    const slow = runLaunch(
+      argv(dir),
+      {},
+      {
+        ...base,
+        now: () => clock,
+        refreshEveryMs: 10,
+        open: vi.fn(),
+        click: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          return { kind: "opened", started: true, restarted: false };
+        },
+      },
+    );
+    // More than a minute into pnpm install.
+    clock += 70_000;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const click = vi.fn(async () => ({ kind: "opened" as const, started: true, restarted: false }));
+    expect(await runLaunch(argv(dir), {}, { ...base, now: () => clock, click, open: vi.fn() })).toBe(0);
+    expect(click).not.toHaveBeenCalled();
+    expect(await slow).toBe(0);
+  });
+
   it("opens the error page for a failed click", async () => {
     const dir = dataDir();
     const open = vi.fn();
