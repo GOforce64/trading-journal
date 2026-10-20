@@ -88,9 +88,10 @@ first. On a trade, **J/K** move through the list you opened it from, **1–5** s
   measured separately), credit and how much of it you keep, max loss, breakevens, and the
   earnings context around the trade: implied vs actual move and IV crush, worked out from
   your fills and Alpaca's historical stock prices, and settling an expired fly at intrinsic
-  value. Imported from oQuants, typed in, and synced from IBKR paper, as one trade however
+  value. Imported from oQuants, typed in, and synced from IBKR, as one trade however
   many orders its legs took.
-- **Scalps** — synced from IBKR (Flex Web Service) from a start date you choose, or
+- **Scalps** — synced from IBKR (Flex Web Service), the paper and the live account side by
+  side, each from a start date you choose, or
   typed in, with every fill kept; reviewed on the trade page with the chart: drag the stop
   and targets on the stock's chart or, switched to Option, on the contract's own 1-minute
   candles with your fills at their prices; pick a setup, mistakes, an

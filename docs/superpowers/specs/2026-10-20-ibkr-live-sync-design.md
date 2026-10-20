@@ -95,4 +95,11 @@ The guard that skips a synced trade "already in the journal" (sync spec §8.1) n
 
 ## 10. Plan deviations
 
-(Filled in while building.)
+1. **A run that throws unexpectedly** becomes that account's error summary. One account's failure never sinks the other's report.
+2. **Every error line on the card names its account,** paper's too: "Paper · …", "Live · …". The same goes for "Not synced yet.".
+3. **"Use IBKR's numbers" reports a failure when any account's part failed,** with the first failure's message. The report doesn't say which account the trade belongs to, and that account may be the one that failed. With no account set up, it says the sync didn't run.
+4. **Each Settings panel's remount key includes the Today query ID** as well. Before, a save that changed only that ID left the form showing the old one.
+5. **The paper panel's Remove confirm names the account:** "Remove the IBKR paper token and queries from this machine?"
+6. **Tests:**
+   - the server tests gained `testDb()` and an optional `db` for `testApp`, so a test can write an old-style `sync_state` row;
+   - the web tests' status and sync fixtures moved to the new shapes in the sync task, not the card task, so the suite stayed green between tasks.
