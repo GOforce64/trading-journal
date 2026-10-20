@@ -33,7 +33,8 @@ export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await api.api.settings.ibkr.$put({
+      const res = await api.api.settings.ibkr[":book"].$put({
+        param: { book: "paper" },
         json: { token: token.trim() || undefined, activityQueryId, todayQueryId, since },
       });
       if (!res.ok) throw await refusal(res, "save");
@@ -46,7 +47,7 @@ export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text
 
   const remove = useMutation({
     mutationFn: async () => {
-      const res = await api.api.settings.ibkr.$delete();
+      const res = await api.api.settings.ibkr[":book"].$delete({ param: { book: "paper" } });
       if (!res.ok) throw await refusal(res, "remove");
     },
     onSuccess: refresh,

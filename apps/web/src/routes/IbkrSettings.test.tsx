@@ -17,10 +17,11 @@ const SET = {
   todayQueryId: "1653147",
   since: "2026-09-28",
 };
-const view = (ibkr: unknown) => ({
+/** The settings view with `paper` as the paper account's IBKR block, and live as given or not set up. */
+const view = (paper: unknown, live: unknown = NOT_SET) => ({
   dataDir: "/data",
   marketData: { state: "off", message: null, keyIdHint: null },
-  ibkr,
+  ibkr: { paper, live },
 });
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });

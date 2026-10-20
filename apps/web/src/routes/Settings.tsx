@@ -143,8 +143,8 @@ export function Settings({
       {data && (
         // Keyed by what's saved, so the fields start from it once it loads and after each save.
         <IbkrSettings
-          key={`${data.ibkr?.tokenHint}-${data.ibkr?.activityQueryId}-${data.ibkr?.since}`}
-          ibkr={data.ibkr ?? NOT_SET}
+          key={`${data.ibkr?.paper.tokenHint}-${data.ibkr?.paper.activityQueryId}-${data.ibkr?.paper.since}`}
+          ibkr={data.ibkr?.paper ?? NOT_SET}
           confirm={confirm}
         />
       )}

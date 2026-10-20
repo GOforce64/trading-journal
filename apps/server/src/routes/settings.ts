@@ -5,8 +5,9 @@ import type { AlpacaKeys, KeyCheck } from "@tj/market-data";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  type IbkrBook,
   type IbkrConfig,
-  readSecrets,
+  readIbkrConfig,
   SecretsFileBroken,
   writeAlpacaKeys,
   writeIbkrConfig,
@@ -63,6 +64,9 @@ const ibkrSchema = z.object({
     .refine((date) => date <= nyDate(Date.now())),
 });
 
+/** Which account's credentials (live-sync spec §6). */
+const bookParam = z.object({ book: z.enum(["paper", "live"]) });
+
 const IBKR_INVALID = {
   error: "invalid",
   message: "Enter the token, both query IDs (numbers only) and a start date no later than today.",
@@ -73,13 +77,13 @@ const IBKR_INVALID = {
  * secrets.json and Alpaca: no answer, log line or error ever repeats it.
  */
 export function settingsRoutes(market: MarketData | undefined, deps: SettingsDeps | undefined) {
-  /** What Settings shows of the IBKR block: never the token itself. */
-  const ibkrView = () => {
-    let config: IbkrConfig | undefined;
+  /** What Settings shows of a book's IBKR block: never the token itself. */
+  const ibkrView = (book: IbkrBook) => {
+    let config: IbkrConfig | null = null;
     try {
-      config = deps ? readSecrets(deps.secretsFile, "ibkr").ibkr : undefined;
+      config = deps ? readIbkrConfig(deps.secretsFile, book) : null;
     } catch {
-      config = undefined;
+      config = null;
     }
     return {
       configured: config != null,
@@ -96,7 +100,7 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
       ...(market?.status() ?? { state: "off" as const, message: null }),
       keyIdHint: market?.keyIdHint() ?? null,
     },
-    ibkr: ibkrView(),
+    ibkr: { paper: ibkrView("paper"), live: ibkrView("live") },
   });
 
   const save = (keys: AlpacaKeys | null) => {
@@ -144,16 +148,18 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
       return c.json(view(), 200);
     })
     .put(
-      "/ibkr",
+      "/ibkr/:book",
+      zValidator("param", bookParam),
       zValidator("json", ibkrSchema, (result, c) => {
         if (!result.success) return c.json(IBKR_INVALID, 400);
       }),
       async (c) => {
         if (!deps?.checkIbkr) return c.json(UNAVAILABLE, 503);
+        const { book } = c.req.valid("param");
         const input = c.req.valid("json");
-        let saved: IbkrConfig | undefined;
+        let saved: IbkrConfig | null;
         try {
-          saved = readSecrets(deps.secretsFile, "ibkr").ibkr;
+          saved = readIbkrConfig(deps.secretsFile, book);
         } catch (error) {
           return c.json({ error: "broken_file", message: (error as Error).message }, 409);
         }
@@ -194,7 +200,7 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
           }
         }
         try {
-          writeIbkrConfig(deps.secretsFile, "paper", {
+          writeIbkrConfig(deps.secretsFile, book, {
             token,
             activityQueryId: input.activityQueryId,
             todayQueryId: input.todayQueryId,
@@ -208,10 +214,10 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
         return c.json(view(), 200);
       },
     )
-    .delete("/ibkr", (c) => {
+    .delete("/ibkr/:book", zValidator("param", bookParam), (c) => {
       if (!deps) return c.json(UNAVAILABLE, 503);
       try {
-        writeIbkrConfig(deps.secretsFile, "paper", null);
+        writeIbkrConfig(deps.secretsFile, c.req.valid("param").book, null);
       } catch (error) {
         if (error instanceof SecretsFileBroken)
           return c.json({ error: "broken_file", message: error.message }, 409);
