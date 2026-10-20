@@ -180,7 +180,8 @@ For an open swing, the page works out an estimated return as the live estimate's
 - **Opening view:** the trade's candles with 20 candles of padding on each side in Daily, and 20 weeks in Weekly. Fit trade returns to it.
 - **Daily or Weekly** is remembered in this browser with the other chart preferences (`chart/prefs.ts`). Daily is the default.
 - **Price lines and markers** as in §4.3 and §4.4.
-- **An open swing's** last candle is today's, built from minute bars with the usual 16-minute delay. Only the days the daily bars lack are built from minutes.
+- **The candles run to today,** a closed swing's past its exit too, so the review shows what the stock did after it (added 20 Oct 2026). The last candle is today's, built from minute bars with the usual 16-minute delay. Only the days the daily bars lack are built from minutes.
+- **Without a key** the days after the exit can't be fetched: when the answer up to today is "no key", the chart asks again up to the exit day and ends there, as it did before. The demo, whose bars stop at its end date, relies on this.
 - **Candles** keep their wicks; the chart's candle style must not hide them (§9).
 - **The no-key, loading and error states** are the daily chart's existing ones.
 
@@ -392,4 +393,4 @@ One branch (`feat/swing-trades`) and one PR:
 
 **Still to check with real data, on a machine with the keys:** a swing's chart on real Alpaca bars, and a real paper sync bringing in a debit vertical as a swing.
 
-**Noticed, not changed:** a closed swing's daily chart ends at its exit day, as a scalp's does (the bars are fetched up to the trade's last day), so the padding after the exit is blank. Seeing what the stock did after the exit would need the range to run past the close.
+**Noticed, then changed (20 Oct 2026):** a closed swing's daily chart ended at its exit day, as a scalp's does, so the padding after the exit was blank. It now runs to today (§5.4). Checked on `pnpm demo`: a May NVDA swing shows the candles after its exit; with `--end 2026-10-09` (no bars after it, no key) an April swing's chart still draws, ending at the exit.
