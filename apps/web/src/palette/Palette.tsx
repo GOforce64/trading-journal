@@ -80,10 +80,11 @@ export function Palette({
   const setupName = new Map(setups.map((setup) => [setup.id, setup.name]));
   const typed = query.trim();
 
-  const close = () => {
-    onOpenChange(false);
-    setQuery("");
-  };
+  // However it closes (Esc, a click outside, or Ctrl+K again), it opens empty.
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
+  const close = () => onOpenChange(false);
 
   return (
     <Command.Dialog

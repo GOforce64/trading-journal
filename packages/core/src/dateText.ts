@@ -65,8 +65,9 @@ export const fieldDate = (date: string): string =>
 
 const daysIn = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
 const isoDate = (year: number, month: number, day: number) => `${year}-${pad(month)}-${pad(day)}`;
+/** A real calendar date, from 1900 on: an earlier year is a typo, and would print short of four digits. */
 const real = (year: number, month: number, day: number) =>
-  month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month);
+  year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month);
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DMY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/;

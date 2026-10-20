@@ -13,8 +13,12 @@ const ALLOWED = new Set([
   "packages/importers/src/oquants/time.ts",
   "packages/importers/src/oquants/payload.ts",
 ]);
-const FORMATTER =
-  /DateTimeFormat\(|toLocaleDateString|toLocaleTimeString|new Date\([^)]*\)\.toLocaleString\(/;
+const FORMATTER = /DateTimeFormat\(|toLocaleDateString|toLocaleTimeString/;
+/** Any `.toLocaleString(` call, with what follows it: a number is told from a date by its arguments. */
+const LOCALE_STRING = /\.toLocaleString\(([^)]*)\)/g;
+/** How numbers are written here: "en-US", alone or with number options only. */
+const NUMBER_FORMAT = /^"en-US"(\s*,\s*\{[^}]*\})?$/;
+const DATE_OPTION = /\b(year|month|day|weekday|hour|minute|second|timeZone|dateStyle|timeStyle|era)\b/;
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -38,11 +42,43 @@ const allSources = () =>
     .flatMap(sources)
     .map((file) => relative(ROOT, file).split(sep).join("/"));
 
+/**
+ * Whether a source formats a date itself. Any `.toLocaleString(` counts unless it reads as a number's: on a date it
+ * would follow the browser's language, whatever the variable is called.
+ */
+const formatsDates = (source: string) =>
+  FORMATTER.test(source) ||
+  [...source.matchAll(LOCALE_STRING)].some(([, args = ""]) => {
+    const trimmed = args.trim();
+    return !NUMBER_FORMAT.test(trimmed) || DATE_OPTION.test(trimmed);
+  });
+
+describe("the guard", () => {
+  it.each([
+    "new Date(t).toLocaleString()",
+    "trade.openedAt.toLocaleString()",
+    'when.toLocaleString("en-GB")',
+    'at.toLocaleString("en-US", { month: "short", day: "numeric" })',
+    'new Intl.DateTimeFormat("en-US")',
+    "d.toLocaleDateString()",
+  ])("catches %s", (source) => {
+    expect(formatsDates(source)).toBe(true);
+  });
+
+  it.each([
+    'count.toLocaleString("en-US")',
+    'value.toLocaleString("en-US", { maximumFractionDigits: 2 })',
+    'pnl.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })',
+  ])("lets numbers through: %s", (source) => {
+    expect(formatsDates(source)).toBe(false);
+  });
+});
+
 describe("dates", () => {
   it("are formatted only in dateText.ts", () => {
     const offenders = allSources()
       .filter((file) => !ALLOWED.has(file))
-      .filter((file) => FORMATTER.test(readFileSync(join(ROOT, file), "utf8")));
+      .filter((file) => formatsDates(readFileSync(join(ROOT, file), "utf8")));
     expect(offenders).toEqual([]);
   });
 
