@@ -49,6 +49,10 @@ export function swingShape(legs: readonly SwingShapeLeg[]): SwingShape | null {
 export const calendarDays = (from: string, to: string): number =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 
+/** A closed trade's calendar days held, New York day to day: the one rule the scalp and swing stats share. */
+export const daysHeldOf = (trade: { openedAt: number; closedAt: number }): number =>
+  calendarDays(nyDate(trade.openedAt), nyDate(trade.closedAt));
+
 /** Only a single bought call or put that isn't missed can be a scalp or a swing at the user's word (spec §3.5). */
 export function canSwitchStrategy(trade: { book: string; legs: readonly { quantity: number }[] }): boolean {
   return trade.book !== "missed" && trade.legs.length === 1 && (trade.legs[0]?.quantity ?? 0) > 0;

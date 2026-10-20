@@ -989,6 +989,39 @@ describe("the Scalp | Swing switch (swing spec §3.5)", () => {
     });
   });
 
+  it("re-saving a switched synced option unchanged leaves its facts unedited (swing plan focus #2)", () => {
+    const { id } = repo().create({ ...single, source: "ibkr_flex" });
+    repo().update(id, { chosenStrategy: "swing" });
+    const saved = repo().get(id);
+    if (!saved) throw new Error("no trade");
+    // What the form sends back: the same facts, legs included, with the strategy it now has.
+    const again = repo().update(id, {
+      strategy: "swing",
+      openedAt: saved.openedAt,
+      closedAt: saved.closedAt,
+      netPnl: saved.netPnl,
+      fees: saved.fees,
+      legs: saved.legs.map(({ right, strike, expiry, quantity, multiplier, openPrice, closePrice }) => ({
+        right: right === "P" ? "P" : "C",
+        strike,
+        expiry,
+        quantity,
+        multiplier,
+        openPrice,
+        closePrice,
+      })),
+      notes: "held through CPI",
+    });
+    expect(again).toMatchObject({ strategy: "swing", chosenStrategy: "swing", factsEditedAt: null });
+  });
+
+  it("refuses the switch on an iron fly (swing spec §9)", () => {
+    const fly = repo().create(sampleFly);
+    expect(() => repo().update(fly.id, { chosenStrategy: "swing" })).toThrow(
+      new ReviewRuleError("Only a single bought call or put can be switched."),
+    );
+  });
+
   it("refuses a swing whose new legs aren't a swing shape", () => {
     const { id } = repo().create({ ...single, strategy: "swing", chosenStrategy: "swing" });
     const short = [{ ...single.legs[0], quantity: -1 }] as NewTrade["legs"];

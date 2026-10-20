@@ -54,10 +54,11 @@ interface Replies {
   trade?: unknown;
   patch?: (body: Record<string, unknown>) => Response | Promise<Response>;
   created?: (url: string, body: Record<string, unknown>) => Response;
+  setups?: unknown[];
 }
 
 /** Answers the trade, the setups and tags, creations (201 unless `created` says otherwise) and patches. */
-function stubApi({ trade = SCALP, patch = () => json(trade), created }: Replies = {}) {
+function stubApi({ trade = SCALP, patch = () => json(trade), created, setups = SETUPS }: Replies = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = String(init?.method ?? "GET").toUpperCase();
@@ -67,7 +68,7 @@ function stubApi({ trade = SCALP, patch = () => json(trade), created }: Replies 
       if (created) return created(url, body);
       return json({ id: url.includes("/api/tags") ? "new-tag" : "new-setup", archived: false, ...body }, 201);
     }
-    if (url.includes("/api/setups")) return json(SETUPS);
+    if (url.includes("/api/setups")) return json(setups);
     if (url.includes("/api/tags")) return json(TAGS);
     return json(trade);
   });
@@ -125,6 +126,23 @@ describe("ReviewPanel", () => {
     );
     fireEvent.change(select, { target: { value: "vwap" } });
     await waitFor(() => expect(bodies(fetchMock, "PATCH")).toEqual([{ setupId: "vwap" }]));
+  });
+
+  it("offers a swing its own setups and those for both (swing spec §9)", async () => {
+    const swingSetup = {
+      id: "pullback",
+      name: "Daily pullback",
+      description: null,
+      strategy: "swing",
+      archived: false,
+      tradeCount: 2,
+    };
+    stubApi({ trade: { ...SCALP, strategy: "swing", review: null }, setups: [...SETUPS, swingSetup] });
+    renderPanel("side");
+    const select = await screen.findByRole("combobox", { name: "Setup" });
+    await waitFor(() =>
+      expect(optionNames(select)).toEqual(["None", "VWAP reclaim", "Daily pullback", "+ New setup…"]),
+    );
   });
 
   it("keeps an archived setup the trade has, marked as archived", async () => {

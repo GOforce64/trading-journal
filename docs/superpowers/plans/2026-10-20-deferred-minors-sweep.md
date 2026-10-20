@@ -23,10 +23,10 @@ Mark each item `[x]` with its commit, or `[-] won't fix: why`.
 - [x] (already showed it; now pinned by a test) a failed switch from the "Held overnight" hint shows no message
 - [x] PATCH {strategy} can contradict chosen_strategy: a changed strategy becomes the choice (none off a single bought option); a re-save with the same strategy leaves it
 - [x] an older app's bundle row can do the same (merge): the local choice stands and the strategy follows it
-- [ ] unwritten spec §9 tests: setup picker filter on a swing; open swing tiles; switch refused on fly/missed; R filler skips swings
-- [ ] no repo test for focus #2 (re-save keeps facts_edited_at null)
-- [ ] days held computed twice
-- [ ] the header return uses the unrounded debit
+- [x] (tests added: ReviewPanel swing setups; SwingTiles open spread + single; repo switch refused on a fly, missed.test on a missed trade; risk.test leaves swings alone) unwritten spec §9 tests: setup picker filter on a swing; open swing tiles; switch refused on fly/missed; R filler skips swings
+- [x] (repo test added; it held) no repo test for focus #2 (re-save keeps facts_edited_at null)
+- [x] (one `daysHeldOf` in swing.ts, used by both stats) days held computed twice
+- [x] (`premiumPaid` in cents, scalps too) the header return uses the unrounded debit
 
 ### IBKR sync (PR #7 review). Check each still applies first.
 - [x] (already fixed: the auto skip answers `changedTradeIds: []`, sync.ts runBook) `ran:false` repeats changedTradeIds, so each page load within 15 min re-asks the move fill

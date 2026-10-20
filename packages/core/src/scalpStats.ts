@@ -12,7 +12,7 @@ import {
   tradeSize,
 } from "./splits.js";
 import { type Closed, type StatTrade, type Summary, summarize } from "./stats.js";
-import { calendarDays } from "./swing.js";
+import { daysHeldOf } from "./swing.js";
 
 /** The scalp analytics (scalp-analytics spec §6, §7, §9): time buckets, breakdowns, mistake cost and setup cards. */
 
@@ -87,9 +87,6 @@ export interface GroupStats {
 
 const mean = (values: readonly number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-
-const heldDays = (trade: { openedAt: number; closedAt: number }) =>
-  calendarDays(nyDate(trade.openedAt), nyDate(trade.closedAt));
 
 function median(values: readonly number[]): number | null {
   if (values.length === 0) return null;
@@ -451,7 +448,7 @@ export function setupCards(
       kind: fly ? "fly" : swing ? "swing" : "scalp",
       ...groupStats(members),
       kept: fly ? keptStats(members).keptOverall : null,
-      avgDaysHeld: swing ? mean(members.map(heldDays)) : null,
+      avgDaysHeld: swing ? mean(members.map(daysHeldOf)) : null,
       points: fly || swing ? cumulative(members, (trade) => trade.netPnl) : cumulativeR(members),
       lastClosedAt: Math.max(...members.map((trade) => trade.closedAt), lastEntry(setupId)),
       missed: missedOnCard(missedBySetup.get(setupId) ?? []),

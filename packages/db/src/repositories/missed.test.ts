@@ -40,6 +40,17 @@ const missedLong: NewTrade = {
   missed: { direction: "long", entryPrice: 178.42, stopPrice: null, targetPrice: null, exitPrice: null },
 };
 
+describe("missed trades and the Scalp | Swing switch (swing spec §9)", () => {
+  it("refuses the switch on a missed trade", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-missed-")), "journal.db");
+    runMigrations(file, { migrationsFolder: MIGRATIONS });
+    const repo = createTradesRepo(openDatabase(file), () => 1_000);
+    const missed = repo.create(missedLong);
+    expect(() => repo.update(missed.id, { chosenStrategy: "swing" })).toThrow(ReviewRuleError);
+    expect(repo.get(missed.id)).toMatchObject({ strategy: "scalp", chosenStrategy: null });
+  });
+});
+
 describe("missed trades in the trades repository", () => {
   let db: Db;
   let clock = 1_000;

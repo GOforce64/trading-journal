@@ -321,6 +321,13 @@ describe("POST /api/risk/fill", () => {
     expect(app.minuteBars).not.toHaveBeenCalled();
   });
 
+  it("leaves swings alone: a swing has no R (swing spec §9)", async () => {
+    const app = setup();
+    await app.create(nvda({ strategy: "swing", chosenStrategy: "swing" }));
+    expect((await app.fill()).body).toEqual({ filled: 0, missing: [], optionMissing: [], unavailable: null });
+    expect(app.minuteBars).not.toHaveBeenCalled();
+  });
+
   it("drops prices read for a time the user moved while Alpaca answered", async () => {
     let release: () => void = () => {};
     const hold = new Promise<void>((resolve) => {
