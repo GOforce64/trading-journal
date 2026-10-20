@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { addDays, isTradingDay, nyWallClock, type PriceBar } from "@tj/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { todayNy } from "../market.js";
 import { SwingChart } from "./SwingChart.js";
 import { library, resetLibrary, seriesOf } from "./testing.js";
 
@@ -82,6 +83,45 @@ describe("SwingChart (swing spec §5.4)", () => {
       ["2026-10-02", "B 1 @ 3.80"],
       ["2026-10-09", "S 1 @ 7.85"],
     ]);
+  });
+
+  it("runs a closed swing's candles past its exit to the latest day, to show what the stock did after", async () => {
+    const today = todayNy();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const bars = url.includes("/daily") ? dailyBars("2021-10-01", addDays(today, -1)) : [];
+      return answer({ symbol: "NVDA", bars, partial: false, unavailable: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    show();
+    await waitFor(() => expect(seriesOf("Candlestick")[0]?.data.length).toBeGreaterThan(0));
+    const daily = fetchMock.mock.calls.map((call) => String(call[0])).filter((url) => url.includes("/daily"));
+    expect(daily).toEqual([expect.stringContaining(`to=${today}`)]);
+    const times = seriesOf("Candlestick")[0]?.data.map((candle) => (candle as { time: string }).time) ?? [];
+    expect(times.filter((time) => time > "2026-10-09").length).toBeGreaterThan(0);
+  });
+
+  it("ends at the exit, as before, when there's no key to fetch the days after it (the demo has none)", async () => {
+    const today = todayNy();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes(`daily?to=${today}`)) {
+        return answer({
+          symbol: "NVDA",
+          bars: [],
+          partial: false,
+          unavailable: { reason: "no_key", message: "Add your Alpaca key in Settings to see the chart." },
+        });
+      }
+      const bars = url.includes("/daily") ? DAILY : [];
+      return answer({ symbol: "NVDA", bars, partial: false, unavailable: null });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    show();
+    await waitFor(() => expect(seriesOf("Candlestick")[0]?.data.length).toBe(DAILY.length));
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("daily?to=2026-10-09"))).toBe(true);
+    const markers = library.markers.at(-1) as { time: string; text: string }[];
+    expect(markers.map((marker) => marker.text)).toEqual(["B 1 @ 3.80", "S 1 @ 7.85"]);
   });
 
   it("widens the price scale to every strike and the break-even, so none sits off the chart", async () => {

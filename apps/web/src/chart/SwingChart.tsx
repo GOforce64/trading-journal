@@ -20,7 +20,9 @@ const PERIODS: readonly { id: SwingPeriod; label: string }[] = [
 ];
 export const WEEKLY_EMA_TITLE = "Needs more history than a weekly chart has";
 
-/** A swing's chart (swing spec §5.4): daily or weekly candles across the page, its fills, its strike lines. */
+/**
+ * A swing's chart (swing spec §5.4): daily or weekly candles across the page up to today, its fills, its strike lines.
+ */
 export function SwingChart({
   trade,
   lines = NO_LINES,
@@ -32,19 +34,24 @@ export function SwingChart({
   const [fitKey, setFitKey] = useState(0);
   const period = prefs.swingPeriod;
   const symbol = trade.underlying;
-  const { lastDay } = barRange(trade);
   const today = todayNy();
   const clock = nyMinuteOfDay(Date.now());
-  // Today's candle is built from minute bars: only a swing still open, or closed today, needs them.
-  const needsToday = lastDay === today;
-  const live = needsToday && isTradingDay(today) && clock >= PREMARKET_OPEN && clock < LIVE_UNTIL;
-  const minute = useMinuteBars(symbol, today, today, live, needsToday);
-  const daily = useDailyBars(symbol, lastDay, true, period);
+  // The chart runs to today, past a closed swing's exit, to show what the stock did after it. Today's candle is built
+  // from minute bars.
+  const live = isTradingDay(today) && clock >= PREMARKET_OPEN && clock < LIVE_UNTIL;
+  const minute = useMinuteBars(symbol, today, today, live);
+  const toToday = useDailyBars(symbol, today, true, period);
+  // Without a key the days after the exit can't be fetched (the demo has none): the chart then ends at the exit.
+  const { lastDay } = barRange(trade);
+  const toExit = lastDay < today && toToday.data?.unavailable?.reason === "no_key";
+  const atExit = useDailyBars(symbol, lastDay, toExit, period);
+  const daily = toExit ? atExit : toToday;
+  const end = toExit ? lastDay : today;
   const minuteBars = minute.data?.bars ?? NO_BARS;
   const dailyBars = daily.data?.bars ?? NO_BARS;
   const model = useMemo(
-    () => swingChartModel(dailyBars, minuteBars, trade, prefs.emaLengths, lastDay, period),
-    [dailyBars, minuteBars, trade, prefs.emaLengths, lastDay, period],
+    () => swingChartModel(dailyBars, minuteBars, trade, prefs.emaLengths, end, period),
+    [dailyBars, minuteBars, trade, prefs.emaLengths, end, period],
   );
   const starved = model.emas.flatMap((line, index) => (line.points.length === 0 ? [index] : []));
 
