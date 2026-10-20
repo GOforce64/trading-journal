@@ -43,11 +43,14 @@ export function NewMissed({
     }),
     [symbol, date],
   );
-  const make = (openedAt: number, entryPrice: number) =>
+  // A click on the day answers the off-day note, whatever the create then says.
+  const make = (openedAt: number, entryPrice: number) => {
+    setOffDay(false);
     create.mutate(
       { underlying: symbol, openedAt, entryPrice },
       { onSuccess: (trade) => onCreated(trade.id) },
     );
+  };
 
   const editing: ChartEditing = {
     placing: create.isPending ? null : "entry",
