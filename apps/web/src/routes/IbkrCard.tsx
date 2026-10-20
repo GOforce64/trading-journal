@@ -26,23 +26,18 @@ function groupSkipped<S extends { ticker: string; openedAt: number; reason: stri
   return [...groups.values()];
 }
 
-/** The IBKR sync on Import / Sync: what the last run did, and a button to run one (spec §9.2). */
-export function IbkrCard() {
-  const status = useIbkrStatus();
-  const sync = useIbkrSync();
-  const syncing = useIbkrSyncing();
-  const configured = status.data?.configured === true;
-  const summary = sync.data?.accounts[0] ?? status.data?.accounts[0]?.lastSummary ?? null;
+const LABEL = { paper: "Paper", live: "Live" } as const;
 
+/** One account's last run: its line, and what it skipped, kept and ignored (spec §9.2). */
+function AccountBlock({ book, summary }: { book: SyncSummary["book"]; summary: SyncSummary | null }) {
   let line: string;
-  if (!status.data) line = "Loading…";
-  else if (!configured) line = "Not set up. Add your Flex token and query IDs in Settings.";
-  else if (!summary) line = "Not synced yet.";
-  else if (summary.status === "error") line = summary.error?.message ?? "The last sync failed.";
+  if (!summary) line = `${LABEL[book]} · Not synced yet.`;
+  else if (summary.status === "error")
+    line = `${LABEL[book]} · ${summary.error?.message ?? "The last sync failed."}`;
   else {
     const account = summary.account
       ? `${summary.account.kind === "paper" ? "Paper" : "Live"} ${summary.account.externalId}`
-      : "IBKR";
+      : LABEL[book];
     const at = summary.lastRunAt != null ? ` · last synced ${when(summary.lastRunAt)} ET` : "";
     line = `${account}${at} · ${summary.added} added, ${summary.updated} updated, ${summary.unchanged} unchanged`;
   }
@@ -50,22 +45,12 @@ export function IbkrCard() {
   const ignored = summary && !failed ? ignoredLine(summary.ignored) : null;
 
   return (
-    <Panel title="IBKR · paper sync">
-      <div className="flex flex-wrap items-center gap-3">
-        <p data-testid="ibkr-status" className={failed ? "text-down" : "text-fg"}>
-          {line}
-        </p>
-        <button
-          type="button"
-          disabled={!configured || syncing}
-          onClick={() => sync.mutate(false)}
-          className="rounded-sm border border-accent bg-[#2962ff1a] px-3 py-1 text-fg disabled:opacity-50"
-        >
-          {syncing ? "Syncing with IBKR…" : "Sync now"}
-        </button>
-      </div>
+    <div className="flex flex-col gap-1">
+      <p data-testid="ibkr-status" className={failed ? "text-down" : "text-fg"}>
+        {line}
+      </p>
       {summary && !failed && (
-        <div className="mt-2 flex flex-col gap-1 text-[11px] text-muted">
+        <div className="flex flex-col gap-1 text-[11px] text-muted">
           {summary.activityFailed && (
             <p className="text-down">The Activity statement failed; today's fills are in.</p>
           )}
@@ -96,6 +81,46 @@ export function IbkrCard() {
           {ignored && <p>{ignored}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The IBKR sync on Import / Sync: each account's last run, paper first, and one button that syncs them all (spec
+ * §9.2, live-sync spec §7).
+ */
+export function IbkrCard() {
+  const status = useIbkrStatus();
+  const sync = useIbkrSync();
+  const syncing = useIbkrSyncing();
+  const configured = status.data?.configured === true;
+  const accounts = status.data?.accounts ?? [];
+
+  return (
+    <Panel title="IBKR sync">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="flex flex-col gap-2">
+          {!status.data && <p data-testid="ibkr-status">Loading…</p>}
+          {status.data && !configured && (
+            <p data-testid="ibkr-status">Not set up. Add your Flex token and query IDs in Settings.</p>
+          )}
+          {accounts.map((account) => (
+            <AccountBlock
+              key={account.book}
+              book={account.book}
+              summary={sync.data?.accounts.find((each) => each.book === account.book) ?? account.lastSummary}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={!configured || syncing}
+          onClick={() => sync.mutate(false)}
+          className="rounded-sm border border-accent bg-[#2962ff1a] px-3 py-1 text-fg disabled:opacity-50"
+        >
+          {syncing ? "Syncing with IBKR…" : "Sync now"}
+        </button>
+      </div>
     </Panel>
   );
 }

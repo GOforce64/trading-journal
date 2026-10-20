@@ -31,18 +31,21 @@ function KeptEdits({ tradeId, onOutcome }: { tradeId: string; onOutcome: (outcom
       return (await res.json()) as SyncReport;
     },
     onSuccess: async (report) => {
-      const summary = report.accounts[0];
       // The edits are no longer kept either way; a failed sync just means IBKR's numbers come with the next one.
+      // Any account's failure counts: the trade's own account may be the one that failed.
+      const failed = report.accounts.find((summary) => summary.status !== "ok");
       onOutcome(
-        summary?.status === "ok"
+        report.accounts.length > 0 && !failed
           ? null
-          : `Handed back to IBKR, but the sync failed: ${summary?.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
+          : `Handed back to IBKR, but the sync failed: ${failed?.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
       );
       await afterSync(report);
     },
   });
   // What IBKR has now, when the last sync found it different (spec §9.5).
-  const kept = status.data?.accounts[0]?.lastSummary?.keptEdits.find((each) => each.tradeId === tradeId);
+  const kept = status.data?.accounts
+    .flatMap((account) => account.lastSummary?.keptEdits ?? [])
+    .find((each) => each.tradeId === tradeId);
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-sm border border-accent bg-[#2962ff14] px-3 py-2">
       <p>

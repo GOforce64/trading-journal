@@ -708,6 +708,7 @@ function stubSynced(
     changedTradeIds: ["nvda"],
     accounts: [{ book: "paper", status: "ok", error: null, changedTradeIds: ["nvda"] }],
   },
+  liveKeptEdits: { tradeId: string; ticker: string; netPnl: number | null }[] | null = null,
 ) {
   // After a reset the trade comes back unmarked, as the server leaves it.
   let handedBack = false;
@@ -738,6 +739,18 @@ function stubSynced(
               lastError: null,
               lastSummary: { keptEdits },
             },
+            ...(liveKeptEdits
+              ? [
+                  {
+                    book: "live",
+                    since: "2026-01-02",
+                    lastRunAt: 1,
+                    lastStatus: "ok",
+                    lastError: null,
+                    lastSummary: { keptEdits: liveKeptEdits },
+                  },
+                ]
+              : []),
           ],
         }
       : url.includes("/reset")
@@ -863,6 +876,36 @@ describe("TradeDetail for a scalp", () => {
     expect(
       await screen.findByText(
         "Handed back to IBKR, but the sync failed: IBKR didn't answer. The next sync brings IBKR's numbers.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("finds kept edits in the live account's summary (live-sync spec §7)", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], undefined, [
+      { tradeId: "nvda", ticker: "NVDA", netPnl: 44.74 },
+    ]);
+    renderDetail();
+    expect(
+      await screen.findByText(
+        "Your edits are kept. Later syncs won't change this trade. IBKR now has +$44.74 net.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says so when the live account's part of handing it back failed", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
+      ran: true,
+      changedTradeIds: [],
+      accounts: [
+        { book: "paper", status: "ok", error: null, changedTradeIds: [] },
+        { book: "live", status: "error", error: { kind: "token", message: "IBKR rejected the token." } },
+      ],
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
+    expect(
+      await screen.findByText(
+        "Handed back to IBKR, but the sync failed: IBKR rejected the token. The next sync brings IBKR's numbers.",
       ),
     ).toBeTruthy();
   });
