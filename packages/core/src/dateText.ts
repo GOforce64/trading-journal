@@ -59,6 +59,13 @@ export function monthText(month: string, { long = false }: { long?: boolean } = 
   return `${name} ${month.slice(0, 4)}`;
 }
 
+/** monthText read back: "Sep 2026" or "September 2026" → "2026-09"; null for any other text. */
+export function monthOfText(text: string): string | null {
+  const [name = "", year = ""] = text.split(" ");
+  const index = Math.max(MONTHS.indexOf(name as (typeof MONTHS)[number]), LONG_MONTHS.indexOf(name as never));
+  return index >= 0 && /^\d{4}$/.test(year) ? `${year}-${String(index + 1).padStart(2, "0")}` : null;
+}
+
 /** "2026-12-09" → "09/12/2026", as a date field shows it. */
 export const fieldDate = (date: string): string =>
   `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;

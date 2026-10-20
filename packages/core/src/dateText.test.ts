@@ -7,6 +7,7 @@ import {
   fieldDate,
   fieldDateTime,
   monthName,
+  monthOfText,
   monthText,
   parseDayMonth,
   parseDayMonthYear,
@@ -134,5 +135,20 @@ describe("dates and times in a field", () => {
     "",
   ])("refuses %s", (text) => {
     expect(parseDayMonthYearTime(text)).toBeNull();
+  });
+});
+
+describe("monthOfText (missed spec §14)", () => {
+  it("reads back every month monthText writes, short or long", () => {
+    for (let month = 1; month <= 12; month++) {
+      const key = `2026-${String(month).padStart(2, "0")}`;
+      expect(monthOfText(monthText(key))).toBe(key);
+      expect(monthOfText(monthText(key, { long: true }))).toBe(key);
+    }
+  });
+
+  it("is null for anything else", () => {
+    expect(monthOfText("Sept 2026")).toBeNull();
+    expect(monthOfText("no setup")).toBeNull();
   });
 });
