@@ -372,6 +372,44 @@ describe("useBackfillPrices", () => {
   });
 });
 
+describe("a save in flight and the minute-later retry (launcher review)", () => {
+  it("holds the retry while the trade's save is out, and asks once it lands", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = stubFill((tradeIds) => ({
+      filled: 0,
+      missing: tradeIds.map((tradeId) => ({ tradeId, reason: "too_recent" })),
+      optionMissing: [],
+      unavailable: null,
+    }));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <Page trade={scalp("t1")} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    let land: () => void = () => {};
+    void client
+      .getMutationCache()
+      .build(client, {
+        mutationKey: saveTradeKey("t1"),
+        mutationFn: () =>
+          new Promise<void>((resolve) => {
+            land = resolve;
+          }),
+      })
+      .execute(undefined);
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => land());
+    await vi.advanceTimersByTimeAsync(61_000);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    vi.useRealTimers();
+  });
+});
+
 describe("a first exit's save in flight (missed spec §14)", () => {
   it("waits for it to land before asking for the hold range, so the range isn't asked of a trade with no exit yet", async () => {
     const fetchMock = stubFill(filledAll);

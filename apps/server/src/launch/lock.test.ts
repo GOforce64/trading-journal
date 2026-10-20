@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -75,6 +75,31 @@ describe("the click's lock", () => {
     releaseLock(file);
     expect(takeLock(file, 1500, alive, 32)).toBe(true);
   });
+
+  // Root reads and writes past file modes, so these two hold only for a normal user.
+  const asRoot = process.getuid?.() === 0;
+
+  it.skipIf(process.platform === "win32" || asRoot)(
+    "is taken over when it exists but can't be read and is a minute old (launcher review)",
+    () => {
+      const file = lockIn();
+      writeFileSync(file, JSON.stringify({ pid: 31, at: 0 }));
+      chmodSync(file, 0o000);
+      const now = Date.now();
+      utimesSync(file, (now - 61_000) / 1000, (now - 61_000) / 1000);
+      expect(takeLock(file, now, alive, 32)).toBe(true);
+    },
+  );
+
+  it.skipIf(asRoot)(
+    "never throws from a refresh it can't write: the next one tries again (launcher review)",
+    () => {
+      const file = lockIn();
+      takeLock(file, 0, alive, 31);
+      chmodSync(file, 0o444);
+      expect(() => refreshLock(file, 5_000, 31)).not.toThrow();
+    },
+  );
 
   it("knows this process is alive", () => {
     expect(isAlive(process.pid)).toBe(true);

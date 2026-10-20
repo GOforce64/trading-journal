@@ -13,12 +13,25 @@ const ALLOWED = new Set([
   "packages/importers/src/oquants/time.ts",
   "packages/importers/src/oquants/payload.ts",
 ]);
-const FORMATTER = /DateTimeFormat\(|toLocaleDateString|toLocaleTimeString/;
-/** Any `.toLocaleString(` call, with what follows it: a number is told from a date by its arguments. */
+const FORMATTER =
+  /DateTimeFormat\(|toLocaleDateString|toLocaleTimeString|new Date\([^)]*\)\.toLocaleString\(/;
+/** Any `.toLocaleString(` call, with its arguments: a number is told from a date by them. */
 const LOCALE_STRING = /\.toLocaleString\(([^)]*)\)/g;
-/** How numbers are written here: "en-US", alone or with number options only. */
-const NUMBER_FORMAT = /^"en-US"(\s*,\s*\{[^}]*\})?$/;
-const DATE_OPTION = /\b(year|month|day|weekday|hour|minute|second|timeZone|dateStyle|timeStyle|era)\b/;
+/** The options a number's formatting takes here; any other key, or a spread, may be a date's. */
+const NUMBER_OPTIONS = new Set([
+  "style",
+  "currency",
+  "currencyDisplay",
+  "signDisplay",
+  "useGrouping",
+  "notation",
+  "compactDisplay",
+  "minimumIntegerDigits",
+  "minimumFractionDigits",
+  "maximumFractionDigits",
+  "minimumSignificantDigits",
+  "maximumSignificantDigits",
+]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -42,16 +55,25 @@ const allSources = () =>
     .flatMap(sources)
     .map((file) => relative(ROOT, file).split(sep).join("/"));
 
+/** Whether a `.toLocaleString(…)`'s arguments read as a number's: "en-US", alone or with number options only. */
+function numberArguments(args: string): boolean {
+  const match = /^"en-US"(?:\s*,\s*\{([^}]*)\})?$/.exec(args.trim());
+  if (!match) return false;
+  const options = match[1];
+  if (options === undefined) return true;
+  if (options.includes("...")) return false;
+  const keys = [...options.matchAll(/(\w+)\s*:/g)].map(([, key]) => key ?? "");
+  return keys.length > 0 && keys.every((key) => NUMBER_OPTIONS.has(key));
+}
+
 /**
- * Whether a source formats a date itself. Any `.toLocaleString(` counts unless it reads as a number's: on a date it
- * would follow the browser's language, whatever the variable is called.
+ * Whether a source formats a date itself. A `.toLocaleString(` counts unless it reads as a number's: on a date it
+ * would follow the browser's language, or the US order, whatever the variable is called. A bare "en-US" on a variable
+ * can't be told from a number's without types; `new Date(…)`'s is caught.
  */
 const formatsDates = (source: string) =>
   FORMATTER.test(source) ||
-  [...source.matchAll(LOCALE_STRING)].some(([, args = ""]) => {
-    const trimmed = args.trim();
-    return !NUMBER_FORMAT.test(trimmed) || DATE_OPTION.test(trimmed);
-  });
+  [...source.matchAll(LOCALE_STRING)].some(([, args = ""]) => !numberArguments(args));
 
 describe("the guard", () => {
   it.each([
@@ -61,6 +83,12 @@ describe("the guard", () => {
     'at.toLocaleString("en-US", { month: "short", day: "numeric" })',
     'new Intl.DateTimeFormat("en-US")',
     "d.toLocaleDateString()",
+    'new Date(t).toLocaleString("en-US")',
+    'at.toLocaleString("en-US", { hour12: false })',
+    'at.toLocaleString("en-US", { hourCycle: "h23" })',
+    'at.toLocaleString("en-US", { timeZoneName: "short" })',
+    'at.toLocaleString("en-US", { ...options })',
+    'at.toLocaleString("en-US", {})',
   ])("catches %s", (source) => {
     expect(formatsDates(source)).toBe(true);
   });

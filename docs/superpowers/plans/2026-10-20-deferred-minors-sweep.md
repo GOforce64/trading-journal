@@ -96,3 +96,14 @@ PR 1 merged as #26 (d046606).
   - an orphaned comment;
   - one `round2` for cents.
   - The flaky MissedWorkspace test failed once under the full suite and passed alone; it is PR 2's item.
+- **PR 2** (Opus, d046606..HEAD): 0 Critical, 2 Important, 6 minors.
+  - **Fixed test-first:**
+    - the date guard let `new Date(t).toLocaleString("en-US")` and date-only options (hour12, hourCycle, timeZoneName, a spread, `{}`) through; it now allows only number option keys and catches `new Date(…)` whatever its arguments;
+    - the lock refresh's write could throw from its timer and end a click mid-install;
+    - a lock that exists but can't be read (EACCES) now falls to the age rule rather than refusing every click;
+    - the minute-later price retry waits for a save in flight.
+  - **Deferred** (new, from this review):
+    - `stableNode` follows /usr/bin/node across a major version, and better-sqlite3's native build would then need `pnpm rebuild`; the error page shows it;
+    - the lock's residual risks: a data dir without hard links (FAT, some network shares) drops the rightful holder on a put-back; three clicks within microseconds; a crash between the rename and the unlink leaves a harmless `launch.lock.<pid>.stale`;
+    - `savedTrade` reads the list from wherever the browser is when the save lands, and Back after Save still returns to the edit form (this predates the sweep);
+    - the save-in-flight tests build the mutation through TanStack's mutation cache, which is close to its internals.

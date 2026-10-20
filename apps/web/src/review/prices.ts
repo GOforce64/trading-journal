@@ -227,10 +227,11 @@ export function useAutoFillPrices(trade: TradeView): void {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: each finished fill starts the wait again
   useEffect(() => {
-    if (!needs || !waiting) return;
+    // Not while a save is out either: its own change may clear what the retry would fill.
+    if (!needs || !waiting || saving) return;
     const timer = setTimeout(() => mutate([trade.id]), RETRY_MS);
     return () => clearTimeout(timer);
-  }, [needs, waiting, trade.id, mutate, results.length]);
+  }, [needs, waiting, saving, trade.id, mutate, results.length]);
 }
 
 /** The backfill's words when the filler can't run (scalp-analytics spec §6.2). */

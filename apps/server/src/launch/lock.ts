@@ -22,12 +22,12 @@ const create = (file: string, body: string) => {
   }
 };
 
-/** The lock's text, or null once it's gone. */
+/** The lock's text, or null once it's gone. One that's there but can't be read is "": unreadable, as half-written. */
 const read = (file: string): string | null => {
   try {
     return readFileSync(file, "utf8");
-  } catch {
-    return null;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? null : "";
   }
 };
 
@@ -91,7 +91,12 @@ export function refreshLock(file: string, now: number, pid = process.pid): void 
   } catch {
     return;
   }
-  if (held.pid === pid) writeFileSync(file, JSON.stringify({ pid, at: now }));
+  if (held.pid !== pid) return;
+  try {
+    writeFileSync(file, JSON.stringify({ pid, at: now }));
+  } catch {
+    // It runs on a timer, where a throw would end the click mid-install: the next refresh tries again.
+  }
 }
 
 export function releaseLock(file: string): void {
