@@ -582,4 +582,20 @@ describe("mergeBundle and the Scalp | Swing choice", () => {
     mergeBundle(b.db, bundleOf(a.db));
     expect(b.trades.get(id)).toMatchObject({ strategy: "swing", chosenStrategy: "swing" });
   });
+
+  it("keeps the choice, and the strategy with it, when an older app's newer row has none (swing review minor)", () => {
+    const a = journal();
+    const b = journal();
+    const { id } = a.trades.create(scalp);
+    mergeBundle(b.db, bundleOf(a.db));
+    b.clock.now = 2_000;
+    b.trades.update(id, { chosenStrategy: "swing" });
+    // The older app knows no swings: its later edit carries the old strategy and no choice.
+    a.clock.now = 3_000;
+    a.trades.update(id, { grade: "A" });
+    const old = bundleOf(a.db);
+    for (const row of old.tables.trades) delete (row as Record<string, unknown>).chosen_strategy;
+    expect(mergeBundle(b.db, old)).toMatchObject({ updated: 1 });
+    expect(b.trades.get(id)).toMatchObject({ grade: "A", strategy: "swing", chosenStrategy: "swing" });
+  });
 });

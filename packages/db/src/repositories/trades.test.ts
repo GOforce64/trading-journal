@@ -969,6 +969,26 @@ describe("the Scalp | Swing switch (swing spec §3.5)", () => {
     );
   });
 
+  it("takes a changed strategy as the user's choice, so the two never disagree (swing review minor)", () => {
+    const { id } = repo().create({ ...single, strategy: "swing", chosenStrategy: "swing" });
+    expect(repo().update(id, { strategy: "scalp" })).toMatchObject({
+      strategy: "scalp",
+      chosenStrategy: "scalp",
+    });
+    expect(repo().update(id, { strategy: "swing" })).toMatchObject({
+      strategy: "swing",
+      chosenStrategy: "swing",
+    });
+  });
+
+  it("leaves the choice alone when a save sends the same strategy back", () => {
+    const { id } = repo().create(single);
+    expect(repo().update(id, { strategy: "scalp", notes: "re-saved" })).toMatchObject({
+      strategy: "scalp",
+      chosenStrategy: null,
+    });
+  });
+
   it("refuses a swing whose new legs aren't a swing shape", () => {
     const { id } = repo().create({ ...single, strategy: "swing", chosenStrategy: "swing" });
     const short = [{ ...single.legs[0], quantity: -1 }] as NewTrade["legs"];

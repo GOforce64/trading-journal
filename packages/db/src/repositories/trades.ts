@@ -657,6 +657,12 @@ export function createTradesRepo(db: Db, now: () => number = Date.now) {
           throw new ReviewRuleError("Only a single bought call or put can be switched.");
         }
         columns.strategy = patch.chosenStrategy;
+      } else if (patch.strategy !== undefined && patch.strategy !== existing.strategy) {
+        // A changed strategy is the user's choice too, or the next sync would put the old one back: a single bought
+        // option keeps it as its Scalp | Swing, anything else has none.
+        const switchable = canSwitchStrategy({ book: existing.book, legs: patch.legs ?? record.legs });
+        columns.chosenStrategy =
+          switchable && (patch.strategy === "scalp" || patch.strategy === "swing") ? patch.strategy : null;
       }
       const strategy = (columns.strategy as string | undefined) ?? existing.strategy;
       if (strategy === "swing" && swingShape(patch.legs ?? record.legs) == null) {

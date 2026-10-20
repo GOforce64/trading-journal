@@ -20,9 +20,9 @@ Mark each item `[x]` with its commit, or `[-] won't fix: why`.
 - [x] the card's Skipped list: collapse past 5 lines into "… and N more"
 
 ### Swings (PR #23 review)
-- [ ] a failed switch from the "Held overnight" hint shows no message
-- [ ] PATCH {strategy} can contradict chosen_strategy
-- [ ] an older app's bundle row can do the same (merge)
+- [x] (already showed it; now pinned by a test) a failed switch from the "Held overnight" hint shows no message
+- [x] PATCH {strategy} can contradict chosen_strategy: a changed strategy becomes the choice (none off a single bought option); a re-save with the same strategy leaves it
+- [x] an older app's bundle row can do the same (merge): the local choice stands and the strategy follows it
 - [ ] unwritten spec §9 tests: setup picker filter on a swing; open swing tiles; switch refused on fly/missed; R filler skips swings
 - [ ] no repo test for focus #2 (re-save keeps facts_edited_at null)
 - [ ] days held computed twice
