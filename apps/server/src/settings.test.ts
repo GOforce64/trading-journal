@@ -285,7 +285,11 @@ describe("IBKR Flex settings", () => {
 
   it("refuses an unknown book", async () => {
     const { app, secretsFile } = setup();
-    expect((await putIbkr(app, body({ token: TOKEN }), "demo")).status).not.toBe(200);
+    // The book check's own refusal, not the router's 404 for a path it doesn't know.
+    expect((await putIbkr(app, body({ token: TOKEN }), "demo")).status).toBe(400);
+    expect((await app.request("/api/settings/ibkr/demo", { method: "DELETE", headers: LOCAL })).status).toBe(
+      400,
+    );
     expect(existsSync(secretsFile)).toBe(false);
   });
 });

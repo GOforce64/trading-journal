@@ -100,13 +100,23 @@ function setup(
       const config = books[book];
       return typeof config === "function" ? config() : config;
     },
-    flexClient: () => client,
+    flexClient: (token) => harness.flexClientFor(token),
     now: () => clock,
   });
   const post = (path: string, body: unknown) =>
     app.request(path, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
+  const harness = {
+    /** Builds the Flex client for a token: a test can swap it to make one account's client throw. */
+    flexClientFor: (_token: string): FlexClient => client,
+  };
   const report = async (auto = false) => (await (await post("/api/ibkr/sync", { auto })).json()) as Report;
   return {
+    get flexClientFor() {
+      return harness.flexClientFor;
+    },
+    set flexClientFor(build: (token: string) => FlexClient) {
+      harness.flexClientFor = build;
+    },
     app,
     db,
     asked,
@@ -408,6 +418,21 @@ describe("the live account (live-sync spec §4)", () => {
       ["NVDA", 44.74, "paper"],
       ["TSLA", 300.55, "paper"],
     ]);
+  });
+
+  it("reports a live run that crashes outright as live's error, and still syncs paper", async () => {
+    const app = setup(CONFIG, {}, LIVE);
+    const client = app.flexClientFor;
+    app.flexClientFor = (token) => {
+      if (token === LIVE.token) throw new Error("boom");
+      return client(token);
+    };
+    const report = await app.report();
+    expect(report.accounts.map((each) => [each.book, each.status, each.error?.message ?? null])).toEqual([
+      ["paper", "ok", null],
+      ["live", "error", "The sync failed unexpectedly."],
+    ]);
+    expect(report.changedTradeIds).toHaveLength(2);
   });
 
   it("keeps paper syncing when the live entry can't be read", async () => {

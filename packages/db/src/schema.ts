@@ -287,7 +287,7 @@ export const fills = sqliteTable(
 
 /** The last sync run of a source. Keyed by source: a run can fail before any account is known. */
 export const syncState = sqliteTable("sync_state", {
-  /** 'ibkr' */
+  /** 'ibkr' (the paper account) | 'ibkr_live' (live-sync spec §4) */
   source: text("source").primaryKey(),
   accountId: text("account_id").references(() => accounts.id),
   lastRunAt: integer("last_run_at").notNull(),

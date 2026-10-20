@@ -138,6 +138,18 @@ describe("IbkrCard", () => {
     errors.mockRestore();
   });
 
+  it("shows the first 5 skipped trades and counts the rest, so a year of skips stays short", async () => {
+    const skipped = Array.from({ length: 8 }, (_, day) => ({
+      reason: "unrecognised",
+      ticker: "SPY",
+      openedAt: Date.UTC(2026, 8, day + 1, 14, 0),
+    }));
+    stub(status({ lastSummary: summary({ skipped }) }));
+    renderCard();
+    expect(await screen.findByText("… and 3 more skipped")).toBeTruthy();
+    expect(screen.getAllByText(/^Skipped SPY/)).toHaveLength(5);
+  });
+
   it("shows an error the last run ended with", async () => {
     const message =
       "IBKR rejected the token (Token has expired.). It may have expired: tokens last up to a year. Generate a new one in Client Portal and save it in Settings.";

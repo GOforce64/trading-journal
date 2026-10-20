@@ -139,6 +139,8 @@ One row per IBKR execution, expiry, exercise or assignment. These are facts: not
 
 ### 5.2 `sync_state`
 
+> One row per book since the live sync: paper keeps `"ibkr"`, live is `"ibkr_live"` (live-sync spec §4).
+
 One row per source: `source` (the primary key, `"ibkr"`), `account_id` (nullable: a run that fails before any statement names the account, such as a rejected token, is still recorded and shown), `last_run_at`, `last_status` (`ok` | `error`), `last_error`, `last_summary` (JSON, §8.2).
 
 ### 5.3 `trades.facts_edited_at`
@@ -171,6 +173,8 @@ A new nullable epoch-ms column. `repo.update` sets it when a patch **actually ch
 - A sync never brings back a deleted trade.
 
 ### 5.6 Credentials
+
+> The live account's credentials sit beside these, under `ibkrLive` (live-sync spec §3).
 
 These go in `secrets.json`, next to the Alpaca key and with the same `0600` mode:
 
@@ -256,6 +260,8 @@ Both machines need the same `since` to produce identical trades, and the Setting
 
 ### 8.1 `createIbkrSync({ db, config, client, now })`
 
+> Since the live sync, every configured book runs side by side through these steps, and the duplicate guard also compares the book (live-sync spec §4–5).
+
 This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A second call while one is running gets that run's result.
 
 1. **Configured?** With no token or query IDs, it answers `{ status: "not_configured" }`.
@@ -285,6 +291,8 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
 
 ### 8.2 The summary
 
+> This is now one account's summary, with a `book`; the sync answers a report of them (live-sync spec §4).
+
 ```ts
 {
   status: "ok" | "error" | "not_configured";
@@ -303,12 +311,16 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
 
 ### 8.3 Endpoints
 
+> The sync, reset and status answers are per account since the live sync (live-sync spec §4).
+
 - **`POST /api/ibkr/sync`**, body `{ auto: boolean }`, answers the summary. It's 200 even for an IBKR error; the error is in the body.
 - **`GET /api/ibkr/status`** answers `{ configured, since, lastRunAt, lastStatus, lastError, lastSummary }`.
 - **`POST /api/ibkr/trades/:id/reset`** clears `facts_edited_at` and runs a sync, so the broker's numbers apply. This is the "Use IBKR's numbers" action. It answers the summary.
 - **`GET /api/trades/:id`** also answers the trade's `fills`, for the Fills panel. The list route doesn't include them.
 
 ### 8.4 Settings
+
+> Per book since the live sync: `ibkr: { paper, live }`, and `PUT`/`DELETE /api/settings/ibkr/:book` (live-sync spec §6).
 
 - `GET /api/settings` gains `ibkr: { configured, tokenHint, activityQueryId, todayQueryId, since }`. `tokenHint` is the first 2 and last 4 digits. **The token is never sent back.**
 - **`PUT /api/settings/ibkr`** takes `{ token?, activityQueryId, todayQueryId, since }`.
@@ -328,6 +340,8 @@ This is `apps/server/src/ibkr/sync.ts`. `sync({ auto })` returns a summary. A se
 - Scalps also appear in the Journal, the Dashboard and Analytics Overview, which count every trade. "% kept" shows "—" for a scalp.
 
 ### 9.2 Import / Sync
+
+> A block per account since the live sync (live-sync spec §7).
 
 A new **IBKR** card sits above the oQuants import.
 
@@ -351,6 +365,8 @@ The app shell sends one `POST /api/ibkr/sync { auto: true }` when the app loads.
 - Nothing pops up; errors show on the Import card.
 
 ### 9.4 Settings
+
+> A panel per book since the live sync (live-sync spec §6).
 
 An **IBKR Flex** section next to the Alpaca one:
 
