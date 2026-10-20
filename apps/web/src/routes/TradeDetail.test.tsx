@@ -703,7 +703,11 @@ const nvda = {
 function stubSynced(
   body: unknown,
   keptEdits: { tradeId: string; ticker: string; netPnl: number | null }[] = [],
-  reset: unknown = { status: "ok", error: null, changedTradeIds: ["nvda"] },
+  reset: unknown = {
+    ran: true,
+    changedTradeIds: ["nvda"],
+    accounts: [{ book: "paper", status: "ok", error: null, changedTradeIds: ["nvda"] }],
+  },
 ) {
   // After a reset the trade comes back unmarked, as the server leaves it.
   let handedBack = false;
@@ -725,11 +729,16 @@ function stubSynced(
     const payload = url.includes("/api/ibkr/status")
       ? {
           configured: true,
-          since: "2026-09-28",
-          lastRunAt: 1,
-          lastStatus: "ok",
-          lastError: null,
-          lastSummary: { keptEdits },
+          accounts: [
+            {
+              book: "paper",
+              since: "2026-09-28",
+              lastRunAt: 1,
+              lastStatus: "ok",
+              lastError: null,
+              lastSummary: { keptEdits },
+            },
+          ],
         }
       : url.includes("/reset")
         ? reset
@@ -838,9 +847,16 @@ describe("TradeDetail for a scalp", () => {
 
   it("says so when handing a trade back to IBKR ran into a failed sync", async () => {
     stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
-      status: "error",
-      error: { kind: "unreachable", message: "IBKR didn't answer." },
+      ran: true,
       changedTradeIds: [],
+      accounts: [
+        {
+          book: "paper",
+          status: "error",
+          error: { kind: "unreachable", message: "IBKR didn't answer." },
+          changedTradeIds: [],
+        },
+      ],
     });
     renderDetail();
     fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
@@ -852,10 +868,11 @@ describe("TradeDetail for a scalp", () => {
   });
 
   it("says so in a sentence of its own when the sync didn't run at all", async () => {
+    // No account set up any more: the report lists none.
     stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
-      status: "not_configured",
-      error: null,
+      ran: false,
       changedTradeIds: [],
+      accounts: [],
     });
     renderDetail();
     fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));

@@ -5,7 +5,7 @@ import type { Db } from "@tj/db";
 import { type FlexClient, ibkrFlex } from "@tj/importers";
 import { Hono } from "hono";
 import { createBarService } from "./bars.js";
-import type { IbkrConfig } from "./config.js";
+import type { IbkrBook, IbkrConfig } from "./config.js";
 import { createIbkrSync } from "./ibkr/sync.js";
 import type { MarketData } from "./marketData.js";
 import { createMoveFiller } from "./moves.js";
@@ -39,7 +39,7 @@ export interface AppDeps {
   /** Where Settings saves the key, and how it tests one first. Omitted in tests that don't need it. */
   settings?: SettingsDeps;
   /** IBKR Flex credentials, read on every sync so a save in Settings applies at once. Omitted: not set up. */
-  ibkrConfig?: () => IbkrConfig | null;
+  ibkrConfig?: (book: IbkrBook) => IbkrConfig | null;
   /** Builds the Flex client for a token; tests pass a fake. */
   flexClient?: (token: string) => FlexClient;
   /** This process's id, in /api/health so the launcher knows the server it started (launcher spec §3.3). */

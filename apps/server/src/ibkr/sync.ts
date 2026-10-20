@@ -11,7 +11,7 @@ import {
   type ParsedFill,
   parseFlex,
 } from "@tj/importers";
-import type { IbkrConfig } from "../config.js";
+import type { IbkrBook, IbkrConfig } from "../config.js";
 
 /** An automatic sync (on app open) runs at most this often; the button always runs. */
 export const AUTO_INTERVAL_MS = 15 * 60_000;
@@ -21,9 +21,17 @@ export const AUTO_INTERVAL_MS = 15 * 60_000;
  */
 export const SYNC_PATIENCE_MS = 150_000;
 
+/** Each book's row in `sync_state`: paper keeps the source it always had (live-sync spec §4). */
+export const SYNC_SOURCE: Record<IbkrBook, string> = { paper: "ibkr", live: "ibkr_live" };
+/** Paper first, wherever the accounts are listed. */
+const BOOKS: readonly IbkrBook[] = ["paper", "live"];
+
 // Unions are spelled out: the web infers these types over RPC and must be able to print them (TS2742).
+/** What one account's sync did (spec §8.2). */
 export interface SyncSummary {
-  status: "ok" | "error" | "not_configured";
+  /** The credentials it ran with; `account` says what IBKR's statement held. */
+  book: "paper" | "live";
+  status: "ok" | "error";
   ran: boolean;
   account: { externalId: string; kind: "paper" | "live" } | null;
   added: number;
@@ -43,31 +51,49 @@ export interface SyncSummary {
   lastRunAt: number | null;
 }
 
-export interface IbkrStatus {
-  configured: boolean;
-  since: string | null;
+/** One sync of every account that's set up (live-sync spec §4). */
+export interface SyncReport {
+  /** Whether any account ran, rather than answering from its last run. */
+  ran: boolean;
+  /** Every account's added or updated trades, for the browser's move-data and price fill. */
+  changedTradeIds: string[];
+  /** One per account set up, paper first; none when neither is. */
+  accounts: SyncSummary[];
+}
+
+export interface IbkrAccountStatus {
+  book: "paper" | "live";
+  since: string;
   lastRunAt: number | null;
   lastStatus: "ok" | "error" | null;
   lastError: string | null;
   lastSummary: SyncSummary | null;
 }
 
+export interface IbkrStatus {
+  configured: boolean;
+  /** The accounts set up, paper first. */
+  accounts: IbkrAccountStatus[];
+}
+
 export interface IbkrSync {
-  /** One run at a time: a call during a run gets that run's summary. */
-  sync(options: { auto: boolean }): Promise<SyncSummary>;
+  /** One run at a time: a call during a run gets that run's report. */
+  sync(options: { auto: boolean }): Promise<SyncReport>;
   status(): IbkrStatus;
   /** "Use IBKR's numbers": clears the user's mark on a synced trade and syncs. Null for any other trade. */
-  reset(tradeId: string): Promise<SyncSummary | null>;
+  reset(tradeId: string): Promise<SyncReport | null>;
 }
 
 export interface IbkrSyncDeps {
   db: Db;
-  config: () => IbkrConfig | null;
+  /** A book's credentials, read on every sync; null, or a throw, means that book isn't set up. */
+  config: (book: IbkrBook) => IbkrConfig | null;
   client: (token: string) => FlexClient;
   now?: () => number;
 }
 
-const emptySummary = (): SyncSummary => ({
+const emptySummary = (book: IbkrBook): SyncSummary => ({
+  book,
   status: "ok",
   ran: true,
   account: null,
@@ -123,20 +149,32 @@ const toGrouping = (row: FillRow): FillForGrouping => ({
     row.kind === "expiration" || row.kind === "exercise" || row.kind === "assignment" ? row.kind : "trade",
 });
 
-/** The IBKR sync (spec §8.1): fetch both statements, store fills, regroup, write, all after IBKR has answered. */
+/** A stored summary, from before live existed too, when it carried no book. */
+const storedSummary = (stored: unknown, book: IbkrBook): SyncSummary => ({
+  ...(stored as SyncSummary),
+  book,
+});
+
+/**
+ * The IBKR sync (spec §8.1): for each account set up, fetch both statements, store fills, regroup, write, all after
+ * IBKR has answered. The accounts run side by side (live-sync spec §4).
+ */
 export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncDeps): IbkrSync {
   const repo = createIbkrRepo(db, now);
-  let running: Promise<SyncSummary> | null = null;
+  let running: Promise<SyncReport> | null = null;
 
-  const readConfig = (): IbkrConfig | null => {
-    try {
-      return config();
-    } catch {
-      return null;
-    }
-  };
+  /** The books set up, paper first: a book whose entry can't be read is left out, and never stops the other. */
+  const configured = (): [IbkrBook, IbkrConfig][] =>
+    BOOKS.flatMap((book): [IbkrBook, IbkrConfig][] => {
+      try {
+        const settings = config(book);
+        return settings ? [[book, settings]] : [];
+      } catch {
+        return [];
+      }
+    });
 
-  function fail(error: unknown, accountId: string | null): SyncSummary {
+  function fail(error: unknown, accountId: string | null, book: IbkrBook): SyncSummary {
     const flex =
       error instanceof FlexError
         ? error
@@ -146,23 +184,24 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
           );
     const at = now();
     const summary: SyncSummary = {
-      ...emptySummary(),
+      ...emptySummary(book),
       status: "error",
       error: { kind: flex.kind, message: flex.message },
       lastRunAt: at,
     };
-    repo.recordRun("ibkr", { at, status: "error", error: flex.message, summary, accountId });
+    repo.recordRun(SYNC_SOURCE[book], { at, status: "error", error: flex.message, summary, accountId });
     return summary;
   }
 
-  async function run({ auto }: { auto: boolean }): Promise<SyncSummary> {
-    const settings = readConfig();
-    const last = repo.lastRun("ibkr");
-    if (!settings)
-      return { ...emptySummary(), status: "not_configured", ran: false, lastRunAt: last?.lastRunAt ?? null };
+  async function runBook(
+    book: IbkrBook,
+    settings: IbkrConfig,
+    { auto }: { auto: boolean },
+  ): Promise<SyncSummary> {
+    const last = repo.lastRun(SYNC_SOURCE[book]);
     if (auto && last?.lastSummary && now() - last.lastRunAt < AUTO_INTERVAL_MS) {
       // The last run's counts for the card, but nothing changed now: no ids for the page to fill prices for again.
-      return { ...(last.lastSummary as SyncSummary), ran: false, changedTradeIds: [] };
+      return { ...storedSummary(last.lastSummary, book), ran: false, changedTradeIds: [] };
     }
 
     const flex = client(settings.token);
@@ -171,7 +210,7 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
     try {
       today = parseFlex(await flex.statement(settings.todayQueryId, until));
     } catch (error) {
-      return fail(error, last?.accountId ?? null);
+      return fail(error, last?.accountId ?? null, book);
     }
     let activity: FlexStatementData | null = null;
     let activityFailed = false;
@@ -179,7 +218,7 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
       activity = parseFlex(await flex.statement(settings.activityQueryId, until));
     } catch (error) {
       if (error instanceof FlexError && (error.kind === "token" || error.kind === "query")) {
-        return fail(error, last?.accountId ?? null);
+        return fail(error, last?.accountId ?? null, book);
       }
       activityFailed = true;
     }
@@ -190,6 +229,7 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
           `The two queries belong to different accounts (${today.accountId} and ${activity.accountId}). Use queries from the same account.`,
         ),
         null,
+        book,
       );
     }
 
@@ -199,9 +239,20 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
       externalId,
       kind: externalId.startsWith("DU") ? ("paper" as const) : ("live" as const),
     };
+    if (account.kind !== book) {
+      // Paper's queries saved as live, or the other way round: nothing is stored under the wrong book.
+      return fail(
+        new FlexError(
+          "failed",
+          `These queries belong to the ${account.kind} account ${externalId}: use the ${book} account's own queries.`,
+        ),
+        null,
+        book,
+      );
+    }
     const at = now();
     const summary: SyncSummary = {
-      ...emptySummary(),
+      ...emptySummary(book),
       account: { externalId, kind: account.kind },
       activityFailed,
       lastRunAt: at,
@@ -282,13 +333,26 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
           account.id,
           new Map([...[...grouped.links].filter(([, link]) => linked.has(link.tradeId)), ...held]),
         );
-        repo.recordRun("ibkr", { at, status: "ok", error: null, summary, accountId: account.id });
+        repo.recordRun(SYNC_SOURCE[book], { at, status: "ok", error: null, summary, accountId: account.id });
       });
     } catch (error) {
       console.error("IBKR sync failed while saving:", error instanceof Error ? error.message : error);
-      return fail(new FlexError("failed", "The sync couldn't save what IBKR sent."), account.id);
+      return fail(new FlexError("failed", "The sync couldn't save what IBKR sent."), account.id, book);
     }
     return summary;
+  }
+
+  async function run(options: { auto: boolean }): Promise<SyncReport> {
+    const accounts = await Promise.all(
+      configured().map(([book, settings]) =>
+        runBook(book, settings, options).catch((error: unknown) => fail(error, null, book)),
+      ),
+    );
+    return {
+      ran: accounts.some((summary) => summary.ran),
+      changedTradeIds: accounts.flatMap((summary) => summary.changedTradeIds),
+      accounts,
+    };
   }
 
   const sync: IbkrSync["sync"] = (options) => {
@@ -302,16 +366,18 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
   return {
     sync,
     status() {
-      const settings = readConfig();
-      const last = repo.lastRun("ibkr");
-      return {
-        configured: settings != null,
-        since: settings?.since ?? null,
-        lastRunAt: last?.lastRunAt ?? null,
-        lastStatus: last?.lastStatus ?? null,
-        lastError: last?.lastError ?? null,
-        lastSummary: (last?.lastSummary as SyncSummary | null) ?? null,
-      };
+      const accounts = configured().map(([book, settings]): IbkrAccountStatus => {
+        const last = repo.lastRun(SYNC_SOURCE[book]);
+        return {
+          book,
+          since: settings.since,
+          lastRunAt: last?.lastRunAt ?? null,
+          lastStatus: last?.lastStatus ?? null,
+          lastError: last?.lastError ?? null,
+          lastSummary: last?.lastSummary ? storedSummary(last.lastSummary, book) : null,
+        };
+      });
+      return { configured: accounts.length > 0, accounts };
     },
     async reset(tradeId) {
       if (!createTradesRepo(db, now).clearFactsEdited(tradeId)) return null;

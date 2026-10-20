@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type TradeView } from "../api.js";
 import { usd } from "../components/ui.js";
-import { type SyncSummary, useAfterSync, useIbkrStatus } from "../ibkr.js";
+import { type SyncReport, useAfterSync, useIbkrStatus } from "../ibkr.js";
 
 const ibkrNow = (netPnl: number | null) =>
   netPnl == null ? "IBKR has it still open." : `IBKR now has ${netPnl > 0 ? "+" : ""}${usd(netPnl)} net.`;
@@ -25,23 +25,24 @@ function KeptEdits({ tradeId, onOutcome }: { tradeId: string; onOutcome: (outcom
   const status = useIbkrStatus();
   const afterSync = useAfterSync();
   const reset = useMutation({
-    mutationFn: async (): Promise<SyncSummary> => {
+    mutationFn: async (): Promise<SyncReport> => {
       const res = await api.api.ibkr.trades[":id"].reset.$post({ param: { id: tradeId } });
       if (!res.ok) throw new Error(`the server answered ${res.status}`);
-      return (await res.json()) as SyncSummary;
+      return (await res.json()) as SyncReport;
     },
-    onSuccess: async (summary) => {
+    onSuccess: async (report) => {
+      const summary = report.accounts[0];
       // The edits are no longer kept either way; a failed sync just means IBKR's numbers come with the next one.
       onOutcome(
-        summary.status === "ok"
+        summary?.status === "ok"
           ? null
-          : `Handed back to IBKR, but the sync failed: ${summary.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
+          : `Handed back to IBKR, but the sync failed: ${summary?.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
       );
-      await afterSync(summary);
+      await afterSync(report);
     },
   });
   // What IBKR has now, when the last sync found it different (spec §9.5).
-  const kept = status.data?.lastSummary?.keptEdits.find((each) => each.tradeId === tradeId);
+  const kept = status.data?.accounts[0]?.lastSummary?.keptEdits.find((each) => each.tradeId === tradeId);
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-sm border border-accent bg-[#2962ff14] px-3 py-2">
       <p>

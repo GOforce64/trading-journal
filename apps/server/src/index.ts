@@ -7,7 +7,7 @@ import { backupDatabase, openDatabase, runMigrations } from "@tj/db";
 import { checkFlexQuery } from "@tj/importers";
 import { type AlpacaKeys, checkAlpacaKeys } from "@tj/market-data";
 import { createApp } from "./app.js";
-import { dataPaths, readSecrets, resolveDataDir } from "./config.js";
+import { dataPaths, readIbkrConfig, readSecrets, resolveDataDir } from "./config.js";
 import { createMarketData } from "./marketData.js";
 import { stopWhenIdle } from "./stop.js";
 
@@ -49,7 +49,7 @@ const app = createApp({
     checkIbkr: (token, queryId) => checkFlexQuery(token, queryId),
   },
   // Read on every sync, so saving in Settings applies at once; a broken file means not set up.
-  ibkrConfig: () => readSecrets(paths.secretsFile, "ibkr").ibkr ?? null,
+  ibkrConfig: (book) => readIbkrConfig(paths.secretsFile, book),
   pid: process.pid,
   shutdown: () => {
     console.log("Stopping: the requests in flight finish first.");

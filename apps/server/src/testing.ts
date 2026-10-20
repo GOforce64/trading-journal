@@ -26,9 +26,14 @@ export function fakeSources(overrides: Partial<MarketSources> = {}): MarketSourc
   };
 }
 
-/** The app on a fresh, migrated database, with whatever else a test needs. */
-export function testApp(deps: Omit<AppDeps, "db"> = {}) {
+/** A fresh, migrated database. */
+export function testDb() {
   const file = join(mkdtempSync(join(tmpdir(), "tj-app-")), "journal.db");
   runMigrations(file, { migrationsFolder: MIGRATIONS });
-  return createApp({ db: openDatabase(file), ...deps });
+  return openDatabase(file);
+}
+
+/** The app on a fresh, migrated database (or the one given), with whatever else a test needs. */
+export function testApp(deps: Omit<AppDeps, "db"> & { db?: AppDeps["db"] } = {}) {
+  return createApp({ ...deps, db: deps.db ?? testDb() });
 }

@@ -5,6 +5,7 @@ import { IbkrCard } from "./IbkrCard.js";
 
 const RUN_AT = Date.UTC(2026, 8, 29, 14, 32); // 10:32 ET
 const summary = (overrides: Record<string, unknown> = {}) => ({
+  book: "paper",
   status: "ok",
   ran: true,
   account: { externalId: "DU1234567", kind: "paper" },
@@ -24,17 +25,24 @@ const summary = (overrides: Record<string, unknown> = {}) => ({
   lastRunAt: RUN_AT,
   ...overrides,
 });
+/** The paper account's status, as the only one set up. */
 const status = (overrides: Record<string, unknown> = {}) => ({
   configured: true,
-  since: "2026-09-28",
-  lastRunAt: RUN_AT,
-  lastStatus: "ok",
-  lastError: null,
-  lastSummary: summary(),
-  ...overrides,
+  accounts: [
+    {
+      book: "paper",
+      since: "2026-09-28",
+      lastRunAt: RUN_AT,
+      lastStatus: "ok",
+      lastError: null,
+      lastSummary: summary(),
+      ...overrides,
+    },
+  ],
 });
+const report = (...accounts: unknown[]) => ({ ran: true, changedTradeIds: [], accounts });
 
-function stub(statusBody: unknown, syncBody: unknown = summary()) {
+function stub(statusBody: unknown, syncBody: unknown = report(summary())) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
     const body = url.includes("/api/ibkr/status")
@@ -63,7 +71,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("IbkrCard", () => {
   it("points to Settings when IBKR isn't set up", async () => {
-    stub(status({ configured: false, lastRunAt: null, lastStatus: null, lastSummary: null }));
+    stub({ configured: false, accounts: [] });
     renderCard();
     // The line reads "Loading…" until the status arrives.
     await waitFor(() =>
@@ -121,7 +129,7 @@ describe("IbkrCard", () => {
   });
 
   it("runs a sync on request", async () => {
-    const fetchMock = stub(status(), summary({ added: 4 }));
+    const fetchMock = stub(status(), report(summary({ added: 4 })));
     renderCard();
     const button = screen.getByRole("button", { name: "Sync now" }) as HTMLButtonElement;
     // Disabled until the status says IBKR is set up.

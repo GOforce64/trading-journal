@@ -32,7 +32,7 @@ export function IbkrCard() {
   const sync = useIbkrSync();
   const syncing = useIbkrSyncing();
   const configured = status.data?.configured === true;
-  const summary = sync.data ?? status.data?.lastSummary ?? null;
+  const summary = sync.data?.accounts[0] ?? status.data?.accounts[0]?.lastSummary ?? null;
 
   let line: string;
   if (!status.data) line = "Loading…";

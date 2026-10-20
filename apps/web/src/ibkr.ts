@@ -5,8 +5,10 @@ import { useFillMoves } from "./moves.js";
 import { useFillScalpPrices } from "./review/prices.js";
 
 type SyncResponse = Awaited<ReturnType<typeof api.api.ibkr.sync.$post>>;
-/** What one IBKR sync did (spec §8.2). */
-export type SyncSummary = Awaited<ReturnType<SyncResponse["json"]>>;
+/** One sync of every account that's set up (live-sync spec §4). */
+export type SyncReport = Awaited<ReturnType<SyncResponse["json"]>>;
+/** What one account's sync did (spec §8.2). */
+export type SyncSummary = SyncReport["accounts"][number];
 type StatusResponse = Awaited<ReturnType<typeof api.api.ibkr.status.$get>>;
 export type IbkrStatus = Awaited<ReturnType<StatusResponse["json"]>>;
 
@@ -39,7 +41,7 @@ export function useIbkrSync() {
   const afterSync = useAfterSync();
   return useMutation({
     mutationKey: SYNC_KEY,
-    mutationFn: async (auto: boolean): Promise<SyncSummary> => {
+    mutationFn: async (auto: boolean): Promise<SyncReport> => {
       const res = await api.api.ibkr.sync.$post({ json: { auto } });
       if (!res.ok) throw new Error(`IBKR sync failed: ${res.status}`);
       return res.json();
@@ -56,7 +58,7 @@ export function useAfterSync() {
   const queryClient = useQueryClient();
   const fill = useFillMoves();
   const fillPrices = useFillScalpPrices();
-  return async (summary: Pick<SyncSummary, "changedTradeIds">) => {
+  return async (summary: Pick<SyncReport, "changedTradeIds">) => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["ibkr-status"] }),
       queryClient.invalidateQueries({ queryKey: ["trades"] }),
