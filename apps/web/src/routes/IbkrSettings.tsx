@@ -17,8 +17,24 @@ const FIELD = "flex flex-col gap-1 text-[10px] text-muted uppercase tracking-wid
 const INPUT =
   "num rounded-sm border border-line bg-[#0e1118] px-2 py-1 text-[13px] text-fg normal-case tracking-normal outline-none placeholder:text-[#4a5163] placeholder:italic focus:border-accent";
 
-/** The IBKR Flex Web Service: token, the two queries, and the date the sync starts from (spec §9.4). */
-export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text: string) => boolean }) {
+const NOT_SET_UP = {
+  paper: "Not set up: scalps and flies from IBKR won't sync",
+  live: "Not set up: the live account's trades won't sync",
+} as const;
+
+/**
+ * One account's IBKR Flex Web Service: token, the two queries, and the date the sync starts from (spec §9.4,
+ * live-sync spec §6).
+ */
+export function IbkrSettings({
+  book,
+  ibkr,
+  confirm,
+}: {
+  book: "paper" | "live";
+  ibkr: IbkrView;
+  confirm: (text: string) => boolean;
+}) {
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
   const [activityQueryId, setActivity] = useState(ibkr.activityQueryId ?? "");
@@ -34,7 +50,7 @@ export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text
   const save = useMutation({
     mutationFn: async () => {
       const res = await api.api.settings.ibkr[":book"].$put({
-        param: { book: "paper" },
+        param: { book },
         json: { token: token.trim() || undefined, activityQueryId, todayQueryId, since },
       });
       if (!res.ok) throw await refusal(res, "save");
@@ -47,7 +63,7 @@ export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text
 
   const remove = useMutation({
     mutationFn: async () => {
-      const res = await api.api.settings.ibkr[":book"].$delete({ param: { book: "paper" } });
+      const res = await api.api.settings.ibkr[":book"].$delete({ param: { book } });
       if (!res.ok) throw await refusal(res, "remove");
     },
     onSuccess: refresh,
@@ -55,87 +71,97 @@ export function IbkrSettings({ ibkr, confirm }: { ibkr: IbkrView; confirm: (text
 
   const status = ibkr.configured
     ? `Set up · token ${ibkr.tokenHint} · Activity ${ibkr.activityQueryId} · Today ${ibkr.todayQueryId} · from ${ibkr.since}`
-    : "Not set up: scalps and flies from IBKR won't sync";
+    : NOT_SET_UP[book];
   const problem = save.error ?? remove.error;
 
   return (
-    <Panel title="IBKR Flex">
-      <p className="mb-2 flex items-center gap-2 rounded-sm border border-line bg-[#0e1118] px-2 py-1">
-        <span className={`inline-block size-2 rounded-full ${ibkr.configured ? "bg-up" : "bg-muted"}`} />
-        <span>{status}</span>
-      </p>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          save.mutate();
-        }}
-        className="flex flex-col gap-2"
-      >
-        <label className={FIELD}>
-          Flex token
-          <input
-            aria-label="Flex token"
-            type="password"
-            autoComplete="off"
-            value={token}
-            placeholder={ibkr.configured ? "saved; leave blank to keep it" : ""}
-            onChange={(event) => setToken(event.target.value)}
-            className={INPUT}
-          />
-        </label>
-        <div className="grid grid-cols-3 gap-2">
-          <label className={FIELD}>
-            Activity query ID
-            <input
-              aria-label="Activity query ID"
-              value={activityQueryId}
-              onChange={(event) => setActivity(event.target.value)}
-              className={INPUT}
-            />
-          </label>
-          <label className={FIELD}>
-            Today query ID
-            <input
-              aria-label="Today query ID"
-              value={todayQueryId}
-              onChange={(event) => setToday(event.target.value)}
-              className={INPUT}
-            />
-          </label>
-          <div className={FIELD}>
-            Start date
-            <DateField label="Start date" value={since} onChange={setSince} className={INPUT} />
-          </div>
-        </div>
-        <p className="text-[10px] text-muted">
-          In Client Portal, Performance &amp; Reports → Flex Queries shows each query's ID, and Settings →
-          Account Settings → Flex Web Service gives the token.
+    // A region per account: both panels show the same field labels.
+    <section aria-label={`IBKR Flex · ${book}`}>
+      <Panel title={`IBKR Flex · ${book}`}>
+        <p className="mb-2 flex items-center gap-2 rounded-sm border border-line bg-[#0e1118] px-2 py-1">
+          <span className={`inline-block size-2 rounded-full ${ibkr.configured ? "bg-up" : "bg-muted"}`} />
+          <span>{status}</span>
         </p>
-        <p className="text-[10px] text-muted">Both machines need the same start date.</p>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            aria-label="Save IBKR"
-            disabled={save.isPending}
-            className="rounded-sm bg-accent px-3 py-1 text-white disabled:opacity-50"
-          >
-            {save.isPending ? "Testing with IBKR…" : "Save"}
-          </button>
-          {ibkr.configured && (
-            <button
-              type="button"
-              aria-label="Remove IBKR"
-              onClick={() => {
-                if (confirm("Remove the IBKR token and queries from this machine?")) remove.mutate();
-              }}
-              className="rounded-sm border border-line px-3 py-1 text-fg hover:border-accent"
-            >
-              Remove
-            </button>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            save.mutate();
+          }}
+          className="flex flex-col gap-2"
+        >
+          <label className={FIELD}>
+            Flex token
+            <input
+              aria-label="Flex token"
+              type="password"
+              autoComplete="off"
+              value={token}
+              placeholder={ibkr.configured ? "saved; leave blank to keep it" : ""}
+              onChange={(event) => setToken(event.target.value)}
+              className={INPUT}
+            />
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <label className={FIELD}>
+              Activity query ID
+              <input
+                aria-label="Activity query ID"
+                value={activityQueryId}
+                onChange={(event) => setActivity(event.target.value)}
+                className={INPUT}
+              />
+            </label>
+            <label className={FIELD}>
+              Today query ID
+              <input
+                aria-label="Today query ID"
+                value={todayQueryId}
+                onChange={(event) => setToday(event.target.value)}
+                className={INPUT}
+              />
+            </label>
+            <div className={FIELD}>
+              Start date
+              <DateField label="Start date" value={since} onChange={setSince} className={INPUT} />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted">
+            In Client Portal, Performance &amp; Reports → Flex Queries shows each query's ID, and Settings →
+            Account Settings → Flex Web Service gives the token.
+          </p>
+          {book === "live" && (
+            <p className="text-[10px] text-muted">
+              Make the same two Flex queries (Activity, Today) while logged in to the live account; its token
+              is in that account's Settings.
+            </p>
           )}
-        </div>
-        {problem && <p className="text-down">{problem.message}</p>}
-      </form>
-    </Panel>
+          <p className="text-[10px] text-muted">Both machines need the same start date.</p>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              aria-label="Save IBKR"
+              disabled={save.isPending}
+              className="rounded-sm bg-accent px-3 py-1 text-white disabled:opacity-50"
+            >
+              {save.isPending ? "Testing with IBKR…" : "Save"}
+            </button>
+            {ibkr.configured && (
+              <button
+                type="button"
+                aria-label="Remove IBKR"
+                onClick={() => {
+                  if (confirm(`Remove the IBKR ${book} token and queries from this machine?`))
+                    remove.mutate();
+                }}
+                className="rounded-sm border border-line px-3 py-1 text-fg hover:border-accent"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {problem && <p className="text-down">{problem.message}</p>}
+        </form>
+      </Panel>
+    </section>
   );
 }
