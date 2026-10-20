@@ -194,7 +194,7 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
           }
         }
         try {
-          writeIbkrConfig(deps.secretsFile, {
+          writeIbkrConfig(deps.secretsFile, "paper", {
             token,
             activityQueryId: input.activityQueryId,
             todayQueryId: input.todayQueryId,
@@ -211,7 +211,7 @@ export function settingsRoutes(market: MarketData | undefined, deps: SettingsDep
     .delete("/ibkr", (c) => {
       if (!deps) return c.json(UNAVAILABLE, 503);
       try {
-        writeIbkrConfig(deps.secretsFile, null);
+        writeIbkrConfig(deps.secretsFile, "paper", null);
       } catch (error) {
         if (error instanceof SecretsFileBroken)
           return c.json({ error: "broken_file", message: error.message }, 409);
