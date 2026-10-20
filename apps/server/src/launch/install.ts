@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { posix, win32 } from "node:path";
 import { launchArgs } from "./args.js";
 
@@ -85,6 +85,20 @@ export function findOnPath(
     }
   }
   return null;
+}
+
+/**
+ * The node the icon should run: the PATH's `node` when it's this same binary, else this one. Fedora's /usr/bin/node
+ * links to /usr/bin/node-22, the path `process.execPath` gives, which an upgrade can remove (launcher spec §14).
+ */
+export function stableNode(execPath: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
+  const onPath = findOnPath("node", env, platform);
+  if (!onPath) return execPath;
+  try {
+    return realpathSync(onPath) === realpathSync(execPath) ? onPath : execPath;
+  } catch {
+    return execPath;
+  }
 }
 
 const MAC = "The launcher icon is for Linux and Windows; on a Mac, run `pnpm start`.";

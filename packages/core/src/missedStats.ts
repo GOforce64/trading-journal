@@ -1,4 +1,5 @@
 import { nyWeekday, WEEKDAYS } from "./calendar.js";
+import { monthOfText } from "./dateText.js";
 import { nyDate } from "./marks.js";
 import { round2 } from "./money.js";
 import {
@@ -293,7 +294,6 @@ export type MissedOnlyRow = Omit<GroupStats, "net" | "profitFactor" | "avgReturn
 
 /** Rows that stay at the end of a breakdown, whatever joins it. */
 const LAST = new Set([NO_SETUP, "none", UNKNOWN]);
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** A label's place in a dimension with an order of its own; null for one ordered by its numbers. */
 function rankOf(by: Breakdown | "open" | "hold"): ((label: string) => number) | null {
@@ -311,10 +311,10 @@ function rankOf(by: Breakdown | "open" | "hold"): ((label: string) => number) | 
     case "hold":
       return within([...HOLD_TIME_BUCKETS, UNKNOWN]);
     case "month":
-      // "Sep 2026".
+      // "Sep 2026", read back by the module that writes it.
       return (label) => {
-        const [name = "", year = "0"] = label.split(" ");
-        return Number(year) * 12 + MONTH_NAMES.indexOf(name);
+        const month = monthOfText(label);
+        return month == null ? -1 : Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
       };
     default:
       return null;

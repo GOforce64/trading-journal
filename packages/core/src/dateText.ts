@@ -59,14 +59,22 @@ export function monthText(month: string, { long = false }: { long?: boolean } = 
   return `${name} ${month.slice(0, 4)}`;
 }
 
+/** monthText read back: "Sep 2026" or "September 2026" → "2026-09"; null for any other text. */
+export function monthOfText(text: string): string | null {
+  const [name = "", year = ""] = text.split(" ");
+  const index = Math.max(MONTHS.indexOf(name as (typeof MONTHS)[number]), LONG_MONTHS.indexOf(name as never));
+  return index >= 0 && /^\d{4}$/.test(year) ? `${year}-${String(index + 1).padStart(2, "0")}` : null;
+}
+
 /** "2026-12-09" → "09/12/2026", as a date field shows it. */
 export const fieldDate = (date: string): string =>
   `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 
 const daysIn = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
 const isoDate = (year: number, month: number, day: number) => `${year}-${pad(month)}-${pad(day)}`;
+/** A real calendar date, from 1900 on: an earlier year is a typo, and would print short of four digits. */
 const real = (year: number, month: number, day: number) =>
-  month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month);
+  year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month);
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DMY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/;

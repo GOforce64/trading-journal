@@ -95,6 +95,16 @@ describe("the palette", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
+  it("starts empty again after Ctrl+K closed it, as after Esc (launcher spec §14)", () => {
+    stub(TRADES);
+    renderPalette();
+    open();
+    type("nvda");
+    fireEvent.keyDown(input(), { key: "k", code: "KeyK", ctrlKey: true });
+    open();
+    expect((input() as HTMLInputElement).value).toBe("");
+  });
+
   it("finds trades newest first, and Enter opens one with every match as its list", async () => {
     stub(TRADES);
     const onOpenTrade = vi.fn();

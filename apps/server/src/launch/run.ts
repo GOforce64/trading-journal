@@ -7,7 +7,7 @@ import { parseLaunchArgs } from "./args.js";
 import { click } from "./click.js";
 import { type LaunchPaths, logFile, openInBrowser, realEffects } from "./effects.js";
 import { errorPage, type Failure, failureReason } from "./errorPage.js";
-import { releaseLock, takeLock } from "./lock.js";
+import { refreshLock, releaseLock, takeLock } from "./lock.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 
@@ -17,6 +17,8 @@ export interface RunDeps {
   open: (url: string) => void;
   exists: (path: string) => boolean;
   now: () => number;
+  /** How often a click refreshes its lock while it works; 20 s unless a test says otherwise. */
+  refreshEveryMs?: number;
 }
 
 /** One click on the icon, from its arguments to an exit code (launcher spec §3.2, §3.5). */
@@ -51,6 +53,8 @@ export async function runLaunch(
   const lock = join(dataDir, "launch.lock");
   // Another click is starting the journal, and opens the browser itself.
   if (!takeLock(lock, deps.now())) return 0;
+  // A first install or build can outlast the lock's minute: kept fresh, it isn't taken over meanwhile.
+  const keep = setInterval(() => refreshLock(lock, deps.now()), deps.refreshEveryMs ?? 20_000);
   try {
     const paths: LaunchPaths = { repo: REPO, dataDir, port, node: process.execPath, pnpm: args.pnpm };
     const outcome = await deps.click(deps.effects(paths), port);
@@ -62,6 +66,7 @@ export async function runLaunch(
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
     });
   } finally {
+    clearInterval(keep);
     releaseLock(lock);
   }
 }

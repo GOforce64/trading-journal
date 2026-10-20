@@ -39,7 +39,7 @@ const DAY_TRADES = [
   },
 ];
 
-function setup() {
+function setup({ createFails = false } = {}) {
   const posts: unknown[] = [];
   vi.stubGlobal(
     "fetch",
@@ -47,6 +47,11 @@ function setup() {
       if (init?.method === "POST") posts.push(JSON.parse(String(init.body)));
       else if (String(input).includes("/api/trades"))
         return new Response(JSON.stringify(DAY_TRADES), { headers: { "content-type": "application/json" } });
+      if (init?.method === "POST" && createFails)
+        return new Response(JSON.stringify({ error: "invalid", message: "No." }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
       return new Response(JSON.stringify({ id: "new-1" }), {
         status: init?.method === "POST" ? 201 : 200,
         headers: { "content-type": "application/json" },
@@ -133,6 +138,20 @@ describe("NewMissed", () => {
     );
     expect(await screen.findByText("Place it on 30 Sep")).toBeTruthy();
     expect(posts).toEqual([]);
+  });
+
+  it("drops the off-day note at a click on the day, even when that create fails (missed spec §14)", async () => {
+    const { posts } = setup({ createFails: true });
+    act(() =>
+      charts.props?.levels?.editing.onPlacePoint?.("entry", nyWallClock("2026-09-29", 15 * 60), 177.1),
+    );
+    expect(await screen.findByText("Place it on 30 Sep")).toBeTruthy();
+    act(() =>
+      charts.props?.levels?.editing.onPlacePoint?.("entry", nyWallClock("2026-09-30", 10 * 60), 178.4),
+    );
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(await screen.findByText(/Couldn't create it/)).toBeTruthy();
+    expect(screen.queryByText("Place it on 30 Sep")).toBeNull();
   });
 
   it("shows the day's other trades faintly on the chart", async () => {

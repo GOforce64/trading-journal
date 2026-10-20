@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import {
   launcherFile,
   removeLauncher,
   shortcutScript,
+  stableNode,
   winArg,
 } from "./install.js";
 
@@ -140,4 +141,27 @@ describe.runIf(process.platform === "win32")("on Windows, for real", () => {
     expect(existsSync(file)).toBe(false);
     // Two cold PowerShell starts (make, then read back) take longer than vitest's 5 s on a CI runner.
   }, 60_000);
+});
+
+describe("stableNode (launcher spec §14)", () => {
+  // Fedora's /usr/bin/node is a link to /usr/bin/node-22, and process.execPath is the versioned file: an upgrade that
+  // drops node-22 would leave the icon pointing at nothing.
+  it.skipIf(process.platform === "win32")("records the PATH's node when it's the same binary", () => {
+    const root = mkdtempSync(join(tmpdir(), "tj-node-"));
+    mkdirSync(join(root, "lib"));
+    mkdirSync(join(root, "bin"));
+    const versioned = join(root, "lib", "node-22");
+    writeFileSync(versioned, "");
+    symlinkSync(versioned, join(root, "bin", "node"));
+    expect(stableNode(versioned, { PATH: join(root, "bin") }, "linux")).toBe(join(root, "bin", "node"));
+  });
+
+  it.skipIf(process.platform === "win32")("keeps this node when the PATH's is another one", () => {
+    const root = mkdtempSync(join(tmpdir(), "tj-node-"));
+    mkdirSync(join(root, "bin"));
+    const mine = join(root, "node-20");
+    writeFileSync(mine, "");
+    writeFileSync(join(root, "bin", "node"), "");
+    expect(stableNode(mine, { PATH: join(root, "bin") }, "linux")).toBe(mine);
+  });
 });

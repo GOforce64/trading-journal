@@ -45,24 +45,26 @@ Mark each item `[x]` with its commit, or `[-] won't fix: why`.
 
 ## PR 2 — launcher, keys and missed (branch `fix/minors-launcher-missed`)
 
+PR 1 merged as #26 (d046606).
+
 ### Launcher (launcher spec §14)
-- [ ] the lock: an unreadable lock counts as stale
-- [ ] the lock: the takeover is unlink, then create
-- [ ] the lock: a live launcher's lock ages out after 60 s during a long `pnpm install`
-- [ ] shutdown isn't idempotent (a second Stop during the drain exits mid-sync), and has no time limit
-- [ ] Edit → Save reopens the trade without its list, so J/K stop following it
-- [ ] closing the palette with Ctrl+K keeps the typed query (Esc and a click outside clear it)
-- [ ] `parseDayMonthYear("09/12/0026")` gives "26-12-09" (the year isn't padded to four digits)
-- [ ] the date guard catches `new Date(…).toLocaleString(` but not `someDate.toLocaleString(`
-- [ ] the `.desktop` records the versioned `/usr/bin/node-22`
-- [ ] clicking a button that already had keyboard focus doesn't mark it mouse-focused
-- [ ] (pre-existing) MissedWorkspace's "keeps a refused new exit's typed time and price" flakes under suite load
+- [x] the lock: an unreadable lock counts as stale
+- [x] the lock: the takeover is unlink, then create
+- [x] the lock: a live launcher's lock ages out after 60 s during a long `pnpm install`
+- [x] shutdown isn't idempotent (a second Stop during the drain exits mid-sync), and has no time limit
+- [x] Edit → Save reopens the trade without its list, so J/K stop following it
+- [x] closing the palette with Ctrl+K keeps the typed query (Esc and a click outside clear it)
+- [x] `parseDayMonthYear("09/12/0026")` gives "26-12-09" (the year isn't padded to four digits)
+- [x] the date guard catches `new Date(…).toLocaleString(` but not `someDate.toLocaleString(`
+- [x] the `.desktop` records the versioned `/usr/bin/node-22`
+- [x] clicking a button that already had keyboard focus doesn't mark it mouse-focused
+- [x] (pre-existing) MissedWorkspace's "keeps a refused new exit's typed time and price" flakes under suite load
 
 ### Missed (missed spec §14, "Still deferred")
-- [ ] the hold-range fill can be asked before a first exit's save lands
-- [ ] `testTmp.test.ts` passes only under the root config
-- [ ] `/missed/new`'s "Place it on …" note isn't cleared by a later click whose create fails
-- [ ] the month order leans on Intl's English month names
+- [x] the hold-range fill can be asked before a first exit's save lands
+- [x] `testTmp.test.ts` passes only under the root config
+- [x] `/missed/new`'s "Place it on …" note isn't cleared by a later click whose create fails
+- [x] the month order leans on Intl's English month names
 
 ## PR 3 — screenshots and demo (branch `fix/minors-screens-demo`)
 
@@ -94,3 +96,14 @@ Mark each item `[x]` with its commit, or `[-] won't fix: why`.
   - an orphaned comment;
   - one `round2` for cents.
   - The flaky MissedWorkspace test failed once under the full suite and passed alone; it is PR 2's item.
+- **PR 2** (Opus, d046606..HEAD): 0 Critical, 2 Important, 6 minors.
+  - **Fixed test-first:**
+    - the date guard let `new Date(t).toLocaleString("en-US")` and date-only options (hour12, hourCycle, timeZoneName, a spread, `{}`) through; it now allows only number option keys and catches `new Date(…)` whatever its arguments;
+    - the lock refresh's write could throw from its timer and end a click mid-install;
+    - a lock that exists but can't be read (EACCES) now falls to the age rule rather than refusing every click;
+    - the minute-later price retry waits for a save in flight.
+  - **Deferred** (new, from this review):
+    - `stableNode` follows /usr/bin/node across a major version, and better-sqlite3's native build would then need `pnpm rebuild`; the error page shows it;
+    - the lock's residual risks: a data dir without hard links (FAT, some network shares) drops the rightful holder on a put-back; three clicks within microseconds; a crash between the rename and the unlink leaves a harmless `launch.lock.<pid>.stale`;
+    - `savedTrade` reads the list from wherever the browser is when the save lands, and Back after Save still returns to the edit form (this predates the sweep);
+    - the save-in-flight tests build the mutation through TanStack's mutation cache, which is close to its internals.

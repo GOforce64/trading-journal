@@ -7,6 +7,7 @@ import {
   fieldDate,
   fieldDateTime,
   monthName,
+  monthOfText,
   monthText,
   parseDayMonth,
   parseDayMonthYear,
@@ -79,12 +80,22 @@ describe("dates typed", () => {
     expect(parseDayMonthYear(text)).toBe(date);
   });
 
-  it.each(["31/02/2026", "9/28/2026", "29/2/2026", "9/12", "9/12/202", "2026-13-01", "", "abc"])(
-    "refuses %s",
-    (text) => {
-      expect(parseDayMonthYear(text)).toBeNull();
-    },
-  );
+  // A year before 1900 is a typo, not a trade's date: "0026" once came back as "26-12-09" (launcher spec §14).
+  it.each([
+    "31/02/2026",
+    "9/28/2026",
+    "29/2/2026",
+    "9/12",
+    "9/12/202",
+    "2026-13-01",
+    "",
+    "abc",
+    "09/12/0026",
+    "0026-12-09",
+    "1/1/1899",
+  ])("refuses %s", (text) => {
+    expect(parseDayMonthYear(text)).toBeNull();
+  });
 
   it("reads a day and month as the latest such date on or before today", () => {
     expect(parseDayMonth("9/12", "2026-10-12")).toBe("2025-12-09");
@@ -124,5 +135,20 @@ describe("dates and times in a field", () => {
     "",
   ])("refuses %s", (text) => {
     expect(parseDayMonthYearTime(text)).toBeNull();
+  });
+});
+
+describe("monthOfText (missed spec §14)", () => {
+  it("reads back every month monthText writes, short or long", () => {
+    for (let month = 1; month <= 12; month++) {
+      const key = `2026-${String(month).padStart(2, "0")}`;
+      expect(monthOfText(monthText(key))).toBe(key);
+      expect(monthOfText(monthText(key, { long: true }))).toBe(key);
+    }
+  });
+
+  it("is null for anything else", () => {
+    expect(monthOfText("Sept 2026")).toBeNull();
+    expect(monthOfText("no setup")).toBeNull();
   });
 });

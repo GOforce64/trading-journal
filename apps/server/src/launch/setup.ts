@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findOnPath, installLauncher, removeLauncher } from "./install.js";
+import { findOnPath, installLauncher, removeLauncher, stableNode } from "./install.js";
 
 /** `pnpm launcher:install` and `pnpm launcher:remove` (launcher spec §3.1). */
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
@@ -13,7 +13,13 @@ try {
     if (!pnpm) throw new Error("pnpm isn't on your PATH. Install pnpm, then run this again.");
     const port = process.env.TJ_PORT ? Number(process.env.TJ_PORT) : null;
     const file = installLauncher(
-      { node: process.execPath, pnpm, repo: REPO, dataDir: process.env.TJ_DATA_DIR ?? null, port },
+      {
+        node: stableNode(process.execPath, process.env, process.platform),
+        pnpm,
+        repo: REPO,
+        dataDir: process.env.TJ_DATA_DIR ?? null,
+        port,
+      },
       process.platform,
       process.env,
       homedir(),
