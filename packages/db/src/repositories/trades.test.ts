@@ -981,6 +981,15 @@ describe("the Scalp | Swing switch (swing spec §3.5)", () => {
     });
   });
 
+  it("doesn't mark a synced option's facts edited when a strategy change is its choice", () => {
+    const { id } = repo().create({ ...single, source: "ibkr_flex" });
+    expect(repo().update(id, { strategy: "swing" })).toMatchObject({
+      strategy: "swing",
+      chosenStrategy: "swing",
+      factsEditedAt: null,
+    });
+  });
+
   it("leaves the choice alone when a save sends the same strategy back", () => {
     const { id } = repo().create(single);
     expect(repo().update(id, { strategy: "scalp", notes: "re-saved" })).toMatchObject({

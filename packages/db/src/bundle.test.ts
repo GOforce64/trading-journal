@@ -598,4 +598,36 @@ describe("mergeBundle and the Scalp | Swing choice", () => {
     expect(mergeBundle(b.db, old)).toMatchObject({ updated: 1 });
     expect(b.trades.get(id)).toMatchObject({ grade: "A", strategy: "swing", chosenStrategy: "swing" });
   });
+
+  it("takes a newer row's own null choice as it is: only a row lacking the column defers to the local one", () => {
+    const a = journal();
+    const b = journal();
+    const { id } = a.trades.create(scalp);
+    mergeBundle(b.db, bundleOf(a.db));
+    b.clock.now = 2_000;
+    b.trades.update(id, { chosenStrategy: "swing" });
+    // The other machine never switched it, and edited it later: its row says scalp, with no choice.
+    a.clock.now = 3_000;
+    a.trades.update(id, { grade: "A" });
+    expect(mergeBundle(b.db, bundleOf(a.db))).toMatchObject({ updated: 1 });
+    expect(b.trades.get(id)).toMatchObject({ grade: "A", strategy: "scalp", chosenStrategy: null });
+  });
+
+  it("doesn't force the choice onto an older row whose legs can't be switched", () => {
+    const a = journal();
+    const b = journal();
+    const { id } = a.trades.create(scalp);
+    mergeBundle(b.db, bundleOf(a.db));
+    b.clock.now = 2_000;
+    b.trades.update(id, { chosenStrategy: "swing" });
+    const old = bundleOf(a.db);
+    // An older app's later row whose only leg was sold: not a single bought option any more.
+    for (const row of old.tables.trades) {
+      delete (row as Record<string, unknown>).chosen_strategy;
+      Object.assign(row, { updated_at: 3_000, edited_at: 3_000 });
+    }
+    for (const row of old.tables.legs) Object.assign(row, { quantity: -1 });
+    mergeBundle(b.db, old);
+    expect(b.trades.get(id)?.strategy).toBe("scalp");
+  });
 });

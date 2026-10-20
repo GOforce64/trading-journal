@@ -59,8 +59,6 @@ export function dteBucket(days: number | null): string {
   return days <= 90 ? "46–90" : "90+";
 }
 
-/** Calendar days from a closed trade's New York open date to its close date. */
-
 const mean = (values: readonly number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 

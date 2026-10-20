@@ -83,3 +83,14 @@ Mark each item `[x]` with its commit, or `[-] won't fix: why`.
 - [ ] an empty `TJ_DEMO_DIR` fails with "ENOENT mkdir ''"; a relative one resolves against apps/server
 - [ ] an `--end` before mid-2024 gives option charts that read "too old"
 - [ ] option bars: each bar's open isn't the previous bar's close (cosmetic)
+
+## Final reviews
+
+- **PR 1** (Opus, 6568b75..d3b0bbe): 0 Critical, 0 Important, 6 minors in the sweep's own changes, all fixed test-first:
+  - a strategy change recorded as the choice no longer marks the facts edited;
+  - the bundle rule applies only to legs a choice can apply to;
+  - a test that a newer row's own null choice stands;
+  - the hidden skipped count sums trades, not grouped lines;
+  - an orphaned comment;
+  - one `round2` for cents.
+  - The flaky MissedWorkspace test failed once under the full suite and passed alone; it is PR 2's item.

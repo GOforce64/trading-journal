@@ -353,16 +353,15 @@ export interface ReturnTrade {
  */
 export function premiumPaid(trade: Pick<ReturnTrade, "strategy" | "legs">): number | null {
   // In cents, as the tiles show it: 5.1 × 100 − 1.3 × 100 is 379.99999999999994 in floating point.
-  const cents = (value: number) => Math.round(value * 100) / 100;
   if (trade.strategy === "swing") {
-    const debit = cents(
+    const debit = round2(
       trade.legs.reduce((sum, leg) => sum + leg.quantity * leg.multiplier * leg.openPrice, 0),
     );
     return debit > 0 ? debit : null;
   }
   const leg = trade.legs.length === 1 ? trade.legs[0] : undefined;
   if (trade.strategy !== "scalp" || !leg || leg.quantity <= 0) return null;
-  const cost = cents(leg.quantity * leg.multiplier * leg.openPrice);
+  const cost = round2(leg.quantity * leg.multiplier * leg.openPrice);
   return cost > 0 ? cost : null;
 }
 

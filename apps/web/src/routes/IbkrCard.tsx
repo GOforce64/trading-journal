@@ -46,6 +46,8 @@ function AccountBlock({ book, summary }: { book: SyncSummary["book"]; summary: S
   const failed = summary?.status === "error";
   const ignored = summary && !failed ? ignoredLine(summary.ignored) : null;
   const skipped = summary ? groupSkipped(summary.skipped) : [];
+  // The trades past the shown lines, each line counting as many as it groups.
+  const hidden = skipped.slice(SKIPPED_SHOWN).reduce((sum, group) => sum + group.count, 0);
 
   return (
     <div className="flex flex-col gap-1">
@@ -65,7 +67,7 @@ function AccountBlock({ book, summary }: { book: SyncSummary["book"]; summary: S
                   {count > 1 ? ` ×${count}` : ""}
                 </li>
               ))}
-              {skipped.length > SKIPPED_SHOWN && <li>… and {skipped.length - SKIPPED_SHOWN} more skipped</li>}
+              {hidden > 0 && <li>… and {hidden} more skipped</li>}
             </ul>
           )}
           {summary.keptEdits.length > 0 && (

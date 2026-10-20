@@ -150,6 +150,19 @@ describe("IbkrCard", () => {
     expect(screen.getAllByText(/^Skipped SPY/)).toHaveLength(5);
   });
 
+  it("counts the hidden skipped trades, not their grouped lines", async () => {
+    const day = (date: number) => ({
+      reason: "unrecognised",
+      ticker: "SPY",
+      openedAt: Date.UTC(2026, 8, date, 14, 0),
+    });
+    // Five lines shown, then two hidden lines of 4 identical trades each: 8 trades.
+    const skipped = [1, 2, 3, 4, 5].map(day).concat(Array.from({ length: 4 }, () => [day(6), day(7)]).flat());
+    stub(status({ lastSummary: summary({ skipped }) }));
+    renderCard();
+    expect(await screen.findByText("… and 8 more skipped")).toBeTruthy();
+  });
+
   it("shows an error the last run ended with", async () => {
     const message =
       "IBKR rejected the token (Token has expired.). It may have expired: tokens last up to a year. Generate a new one in Client Portal and save it in Settings.";
