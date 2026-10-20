@@ -329,10 +329,12 @@ describe("MissedWorkspace", () => {
     type("Exit price", "180");
     await waitFor(() => expect(patches).toHaveLength(1));
     const price = screen.getByLabelText("Exit price") as HTMLInputElement;
-    await waitFor(() =>
-      expect(price.parentElement?.textContent).toContain("The exit must come after the entry"),
-    );
+    // While the save is out, the field shows the optimistic exit ("180.00"); the refusal's rollback brings the typed
+    // draft back. Under a loaded run the reason can show a render before the rollback, so wait for both together.
+    await waitFor(() => {
+      expect(price.parentElement?.textContent).toContain("The exit must come after the entry");
+      expect(price.value).toBe("180");
+    });
     expect((screen.getByLabelText("Exit time") as HTMLInputElement).value).toBe("09:30");
-    expect(price.value).toBe("180");
   });
 });
