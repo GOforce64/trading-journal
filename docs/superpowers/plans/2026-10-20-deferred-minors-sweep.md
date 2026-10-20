@@ -61,10 +61,10 @@ PR 1 merged as #26 (d046606).
 - [x] (pre-existing) MissedWorkspace's "keeps a refused new exit's typed time and price" flakes under suite load
 
 ### Missed (missed spec §14, "Still deferred")
-- [ ] the hold-range fill can be asked before a first exit's save lands
-- [ ] `testTmp.test.ts` passes only under the root config
-- [ ] `/missed/new`'s "Place it on …" note isn't cleared by a later click whose create fails
-- [ ] the month order leans on Intl's English month names
+- [x] the hold-range fill can be asked before a first exit's save lands
+- [x] `testTmp.test.ts` passes only under the root config
+- [x] `/missed/new`'s "Place it on …" note isn't cleared by a later click whose create fails
+- [x] the month order leans on Intl's English month names
 
 ## PR 3 — screenshots and demo (branch `fix/minors-screens-demo`)
 

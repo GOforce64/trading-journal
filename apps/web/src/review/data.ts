@@ -83,6 +83,9 @@ function missedShownAtOnce(before: TradeDetailView, body: TradePatchBody) {
   };
 }
 
+/** A trade's saves, so others can tell one is in flight (the hold range waits for a first exit's: missed spec §14). */
+export const saveTradeKey = (tradeId: string) => ["save-trade", tradeId];
+
 /**
  * Saves part of a trade (scalp-review spec §7.3). The review's fields and levels change on the page at once and go
  * back if the server refuses. Afterwards the trade, the lists and the queue refetch, after a refusal too.
@@ -91,6 +94,7 @@ export function useSaveTrade(tradeId: string) {
   const queryClient = useQueryClient();
   const key = ["trade", tradeId];
   return useMutation({
+    mutationKey: saveTradeKey(tradeId),
     mutationFn: async (body: TradePatchBody) => {
       const res = await api.api.trades[":id"].$patch({ param: { id: tradeId }, json: body });
       if (!res.ok) throw await refusal(res, "save");

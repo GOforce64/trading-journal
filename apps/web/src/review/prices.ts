@@ -2,6 +2,7 @@ import { useIsMutating, useMutation, useMutationState, useQueryClient } from "@t
 import { nyWallClock, OPTION_BARS_SINCE } from "@tj/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type TradeView } from "../api.js";
+import { saveTradeKey } from "./data.js";
 
 type PriceFillResponse = Awaited<ReturnType<typeof api.api.risk.fill.$post>>;
 /** What one run of the scalp price filler did (scalp-R spec §7). */
@@ -211,16 +212,18 @@ export function useAutoFillPrices(trade: TradeView): void {
     word === "too_recent" || word === "failed" || optionWord === "too_recent" || optionWord === "unreachable";
   // The trade this page last asked for, so StrictMode's second run asks nothing.
   const asked = useRef<string | null>(null);
+  // A save in flight shows its change at once, a first exit too: the server can't fill a range it hasn't stored yet.
+  const saving = useIsMutating({ mutationKey: saveTradeKey(trade.id) }) > 0;
 
   useEffect(() => {
     if (!needs) {
       asked.current = null;
       return;
     }
-    if (asked.current === trade.id) return;
+    if (saving || asked.current === trade.id) return;
     asked.current = trade.id;
     mutate([trade.id]);
-  }, [needs, trade.id, mutate]);
+  }, [needs, saving, trade.id, mutate]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: each finished fill starts the wait again
   useEffect(() => {

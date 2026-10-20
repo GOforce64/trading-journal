@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TradeView } from "../api.js";
+import { saveTradeKey } from "./data.js";
 import {
   needsPrices,
   useAutoFillPrices,
@@ -368,5 +369,42 @@ describe("useBackfillPrices", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(bodies(fetchMock)).toEqual([{ tradeIds: ["early", "late"] }, { tradeIds: ["late"] }]);
+  });
+});
+
+describe("a first exit's save in flight (missed spec §14)", () => {
+  it("waits for it to land before asking for the hold range, so the range isn't asked of a trade with no exit yet", async () => {
+    const fetchMock = stubFill(filledAll);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    let land: () => void = () => {};
+    // The exit shows at once (optimistically) while its PATCH is still out.
+    void client
+      .getMutationCache()
+      .build(client, {
+        mutationKey: saveTradeKey("m1"),
+        mutationFn: () =>
+          new Promise<void>((resolve) => {
+            land = resolve;
+          }),
+      })
+      .execute(undefined);
+    const missed = {
+      id: "m1",
+      strategy: "scalp",
+      book: "missed",
+      closedAt: 5,
+      scalpPrices: null,
+    } as unknown as TradeView;
+    render(
+      <QueryClientProvider client={client}>
+        <Page trade={missed} />
+      </QueryClientProvider>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fetchMock).not.toHaveBeenCalled();
+    await act(async () => land());
+    await waitFor(() => expect(bodies(fetchMock)).toEqual([{ tradeIds: ["m1"] }]));
   });
 });
