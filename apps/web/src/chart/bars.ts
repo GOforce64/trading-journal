@@ -34,7 +34,10 @@ export function useMinuteBars(symbol: string, from: string, to: string, live: bo
   });
 }
 
-/** Daily bars up to the trade's last day: three years, or five for a swing's weekly view (swing spec §4.2). */
+/**
+ * Daily bars up to `to` (the trade's last day, or today on a swing's chart): three years, or five for a swing's weekly
+ * view (swing spec §4.2).
+ */
 export function useDailyBars(symbol: string, to: string, wanted = true, span: "daily" | "weekly" = "daily") {
   return useQuery({
     queryKey: ["daily-bars", symbol, to, span],
