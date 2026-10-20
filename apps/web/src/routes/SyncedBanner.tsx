@@ -17,11 +17,19 @@ export function SyncedBanner({ trade }: { trade: TradeView }) {
   if (trade.factsEditedAt == null) {
     return outcome ? <p className="text-[11px] text-down">{outcome}</p> : null;
   }
-  return <KeptEdits tradeId={trade.id} onOutcome={setOutcome} />;
+  return <KeptEdits tradeId={trade.id} book={trade.book} onOutcome={setOutcome} />;
 }
 
 /** Split out so that only these trades ask for the IBKR status. */
-function KeptEdits({ tradeId, onOutcome }: { tradeId: string; onOutcome: (outcome: string | null) => void }) {
+function KeptEdits({
+  tradeId,
+  book,
+  onOutcome,
+}: {
+  tradeId: string;
+  book: string;
+  onOutcome: (outcome: string | null) => void;
+}) {
   const status = useIbkrStatus();
   const afterSync = useAfterSync();
   const reset = useMutation({
@@ -32,12 +40,12 @@ function KeptEdits({ tradeId, onOutcome }: { tradeId: string; onOutcome: (outcom
     },
     onSuccess: async (report) => {
       // The edits are no longer kept either way; a failed sync just means IBKR's numbers come with the next one.
-      // Any account's failure counts: the trade's own account may be the one that failed.
-      const failed = report.accounts.find((summary) => summary.status !== "ok");
+      // Only the trade's own account counts: none at all means it isn't set up any more, so nothing ran for it.
+      const own = report.accounts.find((summary) => summary.book === book);
       onOutcome(
-        report.accounts.length > 0 && !failed
+        own?.status === "ok"
           ? null
-          : `Handed back to IBKR, but the sync failed: ${failed?.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
+          : `Handed back to IBKR, but the sync failed: ${own?.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
       );
       await afterSync(report);
     },

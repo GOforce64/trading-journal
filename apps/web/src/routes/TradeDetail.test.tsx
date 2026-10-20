@@ -892,15 +892,18 @@ describe("TradeDetail for a scalp", () => {
     ).toBeTruthy();
   });
 
-  it("says so when the live account's part of handing it back failed", async () => {
-    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], {
-      ran: true,
-      changedTradeIds: [],
-      accounts: [
-        { book: "paper", status: "ok", error: null, changedTradeIds: [] },
-        { book: "live", status: "error", error: { kind: "token", message: "IBKR rejected the token." } },
-      ],
-    });
+  /** Paper's part of a hand-back worked, live's failed. */
+  const liveFailed = {
+    ran: true,
+    changedTradeIds: [],
+    accounts: [
+      { book: "paper", status: "ok", error: null, changedTradeIds: [] },
+      { book: "live", status: "error", error: { kind: "token", message: "IBKR rejected the token." } },
+    ],
+  };
+
+  it("says so when the trade's own account failed to sync after handing it back", async () => {
+    stubSynced({ ...nvda, book: "live", factsEditedAt: 5, netPnl: 50 }, [], liveFailed);
     renderDetail();
     fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
     expect(
@@ -908,6 +911,15 @@ describe("TradeDetail for a scalp", () => {
         "Handed back to IBKR, but the sync failed: IBKR rejected the token. The next sync brings IBKR's numbers.",
       ),
     ).toBeTruthy();
+  });
+
+  it("doesn't blame a paper trade's hand-back on the live account's failure", async () => {
+    stubSynced({ ...nvda, factsEditedAt: 5, netPnl: 50 }, [], liveFailed);
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Use IBKR's numbers" }));
+    // The banner goes once the trade comes back unmarked; nothing about a failure stays.
+    await waitFor(() => expect(screen.queryByText(/Your edits are kept/)).toBeNull());
+    expect(screen.queryByText(/Handed back to IBKR, but the sync failed/)).toBeNull();
   });
 
   it("says so in a sentence of its own when the sync didn't run at all", async () => {
