@@ -151,8 +151,11 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
     // Enter belongs to the layer on a button the mouse focused, so a click then Enter doesn't click it again.
     let lastInput: "pointer" | "key" = "key";
     let pointerFocus = false;
-    const onPointer = () => {
+    const onPointer = (event: PointerEvent) => {
       lastInput = "pointer";
+      // A click on what already has focus fires no focus event: it's the mouse's now all the same.
+      const active = document.activeElement;
+      if (active && event.target instanceof Node && active.contains(event.target)) pointerFocus = true;
     };
     const onFocus = () => {
       pointerFocus = lastInput === "pointer";

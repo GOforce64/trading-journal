@@ -126,6 +126,20 @@ describe("the shortcut layer", () => {
     expect(press("Enter", {}, button)).toBe(true);
   });
 
+  it("counts a click on a button Tab already focused as the mouse's (launcher spec §14)", () => {
+    render(
+      <ShortcutsProvider>
+        <button type="button">B</button>
+      </ShortcutsProvider>,
+    );
+    const button = screen.getByRole("button", { name: "B" });
+    press("Tab");
+    button.focus();
+    // Already focused: the click fires no focus event of its own.
+    fireEvent.pointerDown(button);
+    expect(press("Enter", {}, button)).toBe(false);
+  });
+
   it("lets the latest registration win, and forgets one that unmounts", () => {
     const run = vi.fn();
     function Both() {
