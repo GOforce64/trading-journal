@@ -79,12 +79,22 @@ declare module "@tanstack/react-router" {
 
 const openTrade: OpenTrade = (id, list) =>
   router.navigate({ to: "/trades/$id", params: { id }, state: { tradeList: list } });
-const editTrade = (id: string) => router.navigate({ to: "/trades/$id/edit", params: { id }, search: {} });
+/** The trade's list rides along to its edit page, so a save comes back to J and K that still follow it. */
+const listHere = () => readTradeList(router.state.location.state) ?? undefined;
+export const editTrade = (id: string) =>
+  router.navigate({ to: "/trades/$id/edit", params: { id }, search: {}, state: { tradeList: listHere() } });
+/** After a save, the trade again, with the list its edit page was opened from. */
+export const savedTrade = (id: string) => openTrade(id, listHere());
 /** The missed trade's page replaces the new-trade page, so Back skips the empty chart. */
 const openCreatedMissed = (id: string) =>
   router.navigate({ to: "/trades/$id", params: { id }, replace: true });
 const settleTrade = (id: string) =>
-  router.navigate({ to: "/trades/$id/edit", params: { id }, search: { settle: true } });
+  router.navigate({
+    to: "/trades/$id/edit",
+    params: { id },
+    search: { settle: true },
+    state: { tradeList: listHere() },
+  });
 
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -200,7 +210,7 @@ const editTradeRoute = createRoute({
   component: function EditTradeRoute() {
     const { id } = editTradeRoute.useParams();
     const { settle } = editTradeRoute.useSearch();
-    return <EditTrade tradeId={id} settle={settle === true} onSaved={openTrade} />;
+    return <EditTrade tradeId={id} settle={settle === true} onSaved={savedTrade} />;
   },
 });
 
