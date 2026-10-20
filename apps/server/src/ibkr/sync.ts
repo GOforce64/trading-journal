@@ -151,13 +151,13 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
       error: { kind: flex.kind, message: flex.message },
       lastRunAt: at,
     };
-    repo.recordRun({ at, status: "error", error: flex.message, summary, accountId });
+    repo.recordRun("ibkr", { at, status: "error", error: flex.message, summary, accountId });
     return summary;
   }
 
   async function run({ auto }: { auto: boolean }): Promise<SyncSummary> {
     const settings = readConfig();
-    const last = repo.lastRun();
+    const last = repo.lastRun("ibkr");
     if (!settings)
       return { ...emptySummary(), status: "not_configured", ran: false, lastRunAt: last?.lastRunAt ?? null };
     if (auto && last?.lastSummary && now() - last.lastRunAt < AUTO_INTERVAL_MS) {
@@ -282,7 +282,7 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
           account.id,
           new Map([...[...grouped.links].filter(([, link]) => linked.has(link.tradeId)), ...held]),
         );
-        repo.recordRun({ at, status: "ok", error: null, summary, accountId: account.id });
+        repo.recordRun("ibkr", { at, status: "ok", error: null, summary, accountId: account.id });
       });
     } catch (error) {
       console.error("IBKR sync failed while saving:", error instanceof Error ? error.message : error);
@@ -303,7 +303,7 @@ export function createIbkrSync({ db, config, client, now = Date.now }: IbkrSyncD
     sync,
     status() {
       const settings = readConfig();
-      const last = repo.lastRun();
+      const last = repo.lastRun("ibkr");
       return {
         configured: settings != null,
         since: settings?.since ?? null,

@@ -380,6 +380,27 @@ describe("the duplicate guards", () => {
     trades().create({ ...scalp().trade, source: "manual", openedAt: OPEN + 3_600_000 });
     expect(ibkr().isDuplicate(scalp())).toBe(true);
   });
+
+  it("a typed paper scalp doesn't hide a live synced one; a typed live one does (live-sync spec §5)", () => {
+    const typed = trades().create({ ...scalp().trade, source: "manual", openedAt: OPEN + 3_600_000 });
+    const live = scalp({ book: "live" }, "trade-nvda-live");
+    expect(ibkr().isDuplicate(live)).toBe(false);
+    expect(ibkr().isDuplicate(scalp())).toBe(true);
+    trades().update(typed.id, { book: "live" });
+    expect(ibkr().isDuplicate(live)).toBe(true);
+    expect(ibkr().isDuplicate(scalp())).toBe(false);
+  });
+
+  it("the oQuants guard only matches a synced fly of the same book", () => {
+    ibkr().apply(fly({ book: "live" }), ACCOUNT.id);
+    const fromOquants = {
+      ...fly().trade,
+      source: "oquants_extract" as const,
+      openedAt: Date.UTC(2026, 6, 16, 17, 54),
+    };
+    expect(ibkr().syncedFrom(fromOquants)).toBe(false);
+    expect(ibkr().syncedFrom({ ...fromOquants, book: "live" })).toBe(true);
+  });
 });
 
 describe("orphans, links and runs", () => {
@@ -441,27 +462,47 @@ describe("orphans, links and runs", () => {
   });
 
   it("records the last run, errors before any account included", () => {
-    expect(ibkr().lastRun()).toBeNull();
-    ibkr().recordRun({
+    expect(ibkr().lastRun("ibkr")).toBeNull();
+    ibkr().recordRun("ibkr", {
       at: 2_000,
       status: "error",
       error: "IBKR rejected the token.",
       summary: { added: 0 },
       accountId: null,
     });
-    expect(ibkr().lastRun()).toEqual({
+    expect(ibkr().lastRun("ibkr")).toEqual({
       accountId: null,
       lastRunAt: 2_000,
       lastStatus: "error",
       lastError: "IBKR rejected the token.",
       lastSummary: { added: 0 },
     });
-    ibkr().recordRun({ at: 3_000, status: "ok", error: null, summary: { added: 2 }, accountId: ACCOUNT.id });
-    expect(ibkr().lastRun()).toMatchObject({
+    ibkr().recordRun("ibkr", {
+      at: 3_000,
+      status: "ok",
+      error: null,
+      summary: { added: 2 },
+      accountId: ACCOUNT.id,
+    });
+    expect(ibkr().lastRun("ibkr")).toMatchObject({
       accountId: ACCOUNT.id,
       lastStatus: "ok",
       lastSummary: { added: 2 },
     });
+  });
+
+  it("keeps one last run per source", () => {
+    ibkr().recordRun("ibkr", {
+      at: 3_000,
+      status: "ok",
+      error: null,
+      summary: { added: 2 },
+      accountId: ACCOUNT.id,
+    });
+    ibkr().recordRun("ibkr_live", { at: 4_000, status: "error", error: "No.", summary: {}, accountId: null });
+    expect(ibkr().lastRun("ibkr")?.lastStatus).toBe("ok");
+    expect(ibkr().lastRun("ibkr_live")).toMatchObject({ lastStatus: "error", lastRunAt: 4_000 });
+    expect(ibkr().lastRun("other")).toBeNull();
   });
 
   it("knows which trades exist, deleted ones included", () => {
