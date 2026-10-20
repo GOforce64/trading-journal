@@ -27,12 +27,15 @@ interface Summary {
 /** The real server on a fresh journal, synced from the IBKR fixtures, answering the page's requests. */
 function syncedServer() {
   const app = testApp({
-    ibkrConfig: () => ({
-      token: "1234567890123456789012",
-      todayQueryId: "1653147",
-      activityQueryId: "1653145",
-      since: "2026-07-01",
-    }),
+    ibkrConfig: (book) =>
+      book === "paper"
+        ? {
+            token: "1234567890123456789012",
+            todayQueryId: "1653147",
+            activityQueryId: "1653145",
+            since: "2026-07-01",
+          }
+        : null,
     flexClient: () => ({
       statement: async (queryId: string) => STATEMENTS[queryId] ?? "",
       checkQuery: async () => {},
@@ -52,7 +55,7 @@ function syncedServer() {
         headers: { "content-type": "application/json", ...LOCAL },
         body: JSON.stringify({ auto: false }),
       });
-      return (await res.json()) as Summary;
+      return ((await res.json()) as { accounts: Summary[] }).accounts[0] as Summary;
     },
     async trades() {
       const res = await app.request("/api/trades", { headers: LOCAL });

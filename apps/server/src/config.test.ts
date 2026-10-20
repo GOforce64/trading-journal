@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   dataPaths,
+  readIbkrConfig,
   readSecrets,
   resolveDataDir,
   SecretsFileBroken,
@@ -76,6 +77,30 @@ describe("readSecrets", () => {
     );
     expect(readSecrets(file, "alpaca").alpaca).toEqual({ keyId: "PKTEST", secretKey: "shh-secret" });
     expect(() => readSecrets(file, "ibkr")).toThrow(/ibkr\.token/);
+  });
+
+  it("reads the live entry on its own: a broken one leaves paper and Alpaca readable", () => {
+    const paper = {
+      token: "1234567890123456789012",
+      activityQueryId: "1",
+      todayQueryId: "2",
+      since: "2026-09-28",
+    };
+    const file = secretsFile(
+      JSON.stringify({
+        alpaca: { keyId: "PKTEST", secretKey: "shh-secret" },
+        ibkr: paper,
+        ibkrLive: { token: "shh-live-token", since: "yesterday" },
+      }),
+    );
+    expect(readIbkrConfig(file, "paper")).toEqual(paper);
+    expect(readSecrets(file, "alpaca").alpaca).toEqual({ keyId: "PKTEST", secretKey: "shh-secret" });
+    expect(() => readIbkrConfig(file, "live")).toThrow(/ibkrLive/);
+    expect(() => readIbkrConfig(file, "live")).not.toThrow(/shh-live-token/);
+  });
+
+  it("reads a book that isn't set up as null", () => {
+    expect(readIbkrConfig(secretsFile(JSON.stringify({})), "live")).toBeNull();
   });
 
   it("names the field that is missing from the Alpaca entry", () => {
@@ -157,9 +182,31 @@ describe("writeIbkrConfig", () => {
       todayQueryId: "1653147",
       since: "2026-09-28",
     };
-    writeIbkrConfig(file, ibkr);
+    writeIbkrConfig(file, "paper", ibkr);
     expect(readSecrets(file)).toEqual({ alpaca: { keyId: "PK1", secretKey: "s" }, ibkr });
-    writeIbkrConfig(file, null);
+    writeIbkrConfig(file, "paper", null);
     expect(readSecrets(file)).toEqual({ alpaca: { keyId: "PK1", secretKey: "s" } });
+  });
+
+  it("writes each book's entry and keeps the other", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "tj-config-")), "secrets.json");
+    const paper = {
+      token: "1234567890123456789012",
+      activityQueryId: "1",
+      todayQueryId: "2",
+      since: "2026-09-28",
+    };
+    const live = {
+      token: "2234567890123456789012",
+      activityQueryId: "3",
+      todayQueryId: "4",
+      since: "2026-01-02",
+    };
+    writeIbkrConfig(file, "live", live);
+    writeIbkrConfig(file, "paper", paper);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ ibkr: paper, ibkrLive: live });
+    expect(readIbkrConfig(file, "live")).toEqual(live);
+    writeIbkrConfig(file, "live", null);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ ibkr: paper });
   });
 });

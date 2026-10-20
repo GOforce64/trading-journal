@@ -74,7 +74,6 @@ export interface LastRun {
   lastSummary: unknown;
 }
 
-const SOURCE = "ibkr";
 const FLY_STRUCTURE = [
   "bodyPutStrike",
   "bodyCallStrike",
@@ -220,6 +219,8 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       .where(
         and(
           eq(trades.underlying, trade.underlying),
+          // A live trade and a paper one are never the same trade (live-sync spec §5).
+          eq(trades.book, trade.book),
           // A typed single option is the same trade whether the user called it a scalp or a swing.
           trade.strategy === "iron_fly"
             ? eq(trades.strategy, "iron_fly")
@@ -516,7 +517,8 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
       }
     },
 
-    recordRun(run: SyncRun): void {
+    /** The last run of `source`: one row per book, "ibkr" for paper and "ibkr_live" for live (live-sync spec §4). */
+    recordRun(source: string, run: SyncRun): void {
       const values = {
         accountId: run.accountId,
         lastRunAt: run.at,
@@ -525,13 +527,13 @@ export function createIbkrRepo(db: Db, now: () => number = Date.now) {
         lastSummary: JSON.stringify(run.summary),
       };
       db.insert(syncState)
-        .values({ source: SOURCE, ...values })
+        .values({ source, ...values })
         .onConflictDoUpdate({ target: syncState.source, set: values })
         .run();
     },
 
-    lastRun(): LastRun | null {
-      const row = db.select().from(syncState).where(eq(syncState.source, SOURCE)).get();
+    lastRun(source: string): LastRun | null {
+      const row = db.select().from(syncState).where(eq(syncState.source, source)).get();
       if (!row) return null;
       return {
         accountId: row.accountId,

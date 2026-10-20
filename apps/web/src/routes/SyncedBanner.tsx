@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type TradeView } from "../api.js";
 import { usd } from "../components/ui.js";
-import { type SyncSummary, useAfterSync, useIbkrStatus } from "../ibkr.js";
+import { type SyncReport, useAfterSync, useIbkrStatus } from "../ibkr.js";
 
 const ibkrNow = (netPnl: number | null) =>
   netPnl == null ? "IBKR has it still open." : `IBKR now has ${netPnl > 0 ? "+" : ""}${usd(netPnl)} net.`;
@@ -17,31 +17,43 @@ export function SyncedBanner({ trade }: { trade: TradeView }) {
   if (trade.factsEditedAt == null) {
     return outcome ? <p className="text-[11px] text-down">{outcome}</p> : null;
   }
-  return <KeptEdits tradeId={trade.id} onOutcome={setOutcome} />;
+  return <KeptEdits tradeId={trade.id} book={trade.book} onOutcome={setOutcome} />;
 }
 
 /** Split out so that only these trades ask for the IBKR status. */
-function KeptEdits({ tradeId, onOutcome }: { tradeId: string; onOutcome: (outcome: string | null) => void }) {
+function KeptEdits({
+  tradeId,
+  book,
+  onOutcome,
+}: {
+  tradeId: string;
+  book: string;
+  onOutcome: (outcome: string | null) => void;
+}) {
   const status = useIbkrStatus();
   const afterSync = useAfterSync();
   const reset = useMutation({
-    mutationFn: async (): Promise<SyncSummary> => {
+    mutationFn: async (): Promise<SyncReport> => {
       const res = await api.api.ibkr.trades[":id"].reset.$post({ param: { id: tradeId } });
       if (!res.ok) throw new Error(`the server answered ${res.status}`);
-      return (await res.json()) as SyncSummary;
+      return (await res.json()) as SyncReport;
     },
-    onSuccess: async (summary) => {
+    onSuccess: async (report) => {
       // The edits are no longer kept either way; a failed sync just means IBKR's numbers come with the next one.
+      // Only the trade's own account counts: none at all means it isn't set up any more, so nothing ran for it.
+      const own = report.accounts.find((summary) => summary.book === book);
       onOutcome(
-        summary.status === "ok"
+        own?.status === "ok"
           ? null
-          : `Handed back to IBKR, but the sync failed: ${summary.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
+          : `Handed back to IBKR, but the sync failed: ${own?.error?.message ?? "it didn't run."} The next sync brings IBKR's numbers.`,
       );
-      await afterSync(summary);
+      await afterSync(report);
     },
   });
   // What IBKR has now, when the last sync found it different (spec §9.5).
-  const kept = status.data?.lastSummary?.keptEdits.find((each) => each.tradeId === tradeId);
+  const kept = status.data?.accounts
+    .flatMap((account) => account.lastSummary?.keptEdits ?? [])
+    .find((each) => each.tradeId === tradeId);
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-sm border border-accent bg-[#2962ff14] px-3 py-2">
       <p>

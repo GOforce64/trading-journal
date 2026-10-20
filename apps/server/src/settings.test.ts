@@ -61,7 +61,10 @@ describe("GET /api/settings", () => {
     expect(await res.json()).toEqual({
       dataDir: dir,
       marketData: { state: "off", message: null, keyIdHint: null },
-      ibkr: { configured: false, tokenHint: null, activityQueryId: null, todayQueryId: null, since: null },
+      ibkr: {
+        paper: { configured: false, tokenHint: null, activityQueryId: null, todayQueryId: null, since: null },
+        live: { configured: false, tokenHint: null, activityQueryId: null, todayQueryId: null, since: null },
+      },
     });
   });
 
@@ -160,8 +163,11 @@ describe("IBKR Flex settings", () => {
   const TOKEN = "1234567890123456789012";
   const body = (fields: Record<string, unknown>) =>
     JSON.stringify({ activityQueryId: "1653145", todayQueryId: "1653147", since: "2026-09-28", ...fields });
-  const putIbkr = (app: ReturnType<typeof createApp>, json: string) =>
-    app.request("/api/settings/ibkr", { method: "PUT", headers: JSON_HEADERS, body: json });
+  const putIbkr = (app: ReturnType<typeof createApp>, json: string, book = "paper") =>
+    app.request(`/api/settings/ibkr/${book}`, { method: "PUT", headers: JSON_HEADERS, body: json });
+  const LIVE_TOKEN = "2234567890123456789012";
+  const liveBody = (fields: Record<string, unknown>) =>
+    JSON.stringify({ activityQueryId: "2653145", todayQueryId: "2653147", since: "2026-01-02", ...fields });
 
   it("tests both queries with the token, saves them, and shows only a hint of the token", async () => {
     const { app, secretsFile, ibkrChecked } = setup();
@@ -169,7 +175,7 @@ describe("IBKR Flex settings", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).not.toContain(TOKEN);
-    expect(JSON.parse(text).ibkr).toEqual({
+    expect(JSON.parse(text).ibkr.paper).toEqual({
       configured: true,
       tokenHint: "12…9012",
       activityQueryId: "1653145",
@@ -229,8 +235,57 @@ describe("IBKR Flex settings", () => {
     const { app, secretsFile } = setup();
     await put(app, JSON.stringify(KEYS));
     await putIbkr(app, body({ token: TOKEN }));
-    const res = await app.request("/api/settings/ibkr", { method: "DELETE", headers: LOCAL });
-    expect(((await res.json()) as { ibkr: { configured: boolean } }).ibkr.configured).toBe(false);
+    const res = await app.request("/api/settings/ibkr/paper", { method: "DELETE", headers: LOCAL });
+    expect(((await res.json()) as { ibkr: { paper: { configured: boolean } } }).ibkr.paper.configured).toBe(
+      false,
+    );
     expect(readSecrets(secretsFile)).toEqual({ alpaca: KEYS });
+  });
+
+  it("saves the live account's queries beside paper's, and removes them alone", async () => {
+    const { app, secretsFile } = setup();
+    await putIbkr(app, body({ token: TOKEN }));
+    expect((await putIbkr(app, liveBody({ token: LIVE_TOKEN }), "live")).status).toBe(200);
+    const view = (await (await app.request("/api/settings", { headers: LOCAL })).json()) as {
+      ibkr: Record<string, { configured: boolean; tokenHint: string | null; activityQueryId: string | null }>;
+    };
+    expect(view.ibkr).toEqual({
+      paper: expect.objectContaining({ configured: true, tokenHint: "12…9012", activityQueryId: "1653145" }),
+      live: expect.objectContaining({ configured: true, tokenHint: "22…9012", activityQueryId: "2653145" }),
+    });
+    expect(readSecrets(secretsFile)).toMatchObject({
+      ibkr: { token: TOKEN },
+      ibkrLive: { token: LIVE_TOKEN, since: "2026-01-02" },
+    });
+    const res = await app.request("/api/settings/ibkr/live", { method: "DELETE", headers: LOCAL });
+    const after = (await res.json()) as { ibkr: Record<string, { configured: boolean }> };
+    expect([after.ibkr.paper?.configured, after.ibkr.live?.configured]).toEqual([true, false]);
+    expect(readSecrets(secretsFile).ibkr?.token).toBe(TOKEN);
+  });
+
+  it("tests the live queries with the live token, keeping the saved one when left out", async () => {
+    const { app, secretsFile, ibkrChecked } = setup();
+    await putIbkr(app, body({ token: TOKEN }));
+    await putIbkr(app, liveBody({ token: LIVE_TOKEN }), "live");
+    ibkrChecked.length = 0;
+    expect((await putIbkr(app, liveBody({ since: "2026-02-03" }), "live")).status).toBe(200);
+    expect(ibkrChecked).toEqual([
+      [LIVE_TOKEN, "2653145"],
+      [LIVE_TOKEN, "2653147"],
+    ]);
+    expect(readSecrets(secretsFile).ibkrLive).toMatchObject({ token: LIVE_TOKEN, since: "2026-02-03" });
+  });
+
+  it("asks for a live token rather than borrowing paper's", async () => {
+    const { app, secretsFile } = setup();
+    await putIbkr(app, body({ token: TOKEN }));
+    expect((await putIbkr(app, liveBody({}), "live")).status).toBe(400);
+    expect(readSecrets(secretsFile).ibkrLive).toBeUndefined();
+  });
+
+  it("refuses an unknown book", async () => {
+    const { app, secretsFile } = setup();
+    expect((await putIbkr(app, body({ token: TOKEN }), "demo")).status).not.toBe(200);
+    expect(existsSync(secretsFile)).toBe(false);
   });
 });

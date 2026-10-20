@@ -26,7 +26,7 @@ Success means:
 
 ### Out of scope
 
-- **The live account.** Paper only for now. The design stores which account each trade belongs to, so live is a second set of credentials later.
+- **The live account.** Paper only for now. The design stores which account each trade belongs to, so live is a second set of credentials later. **Done 20 Oct 2026:** see `2026-10-20-ibkr-live-sync-design.md`. That spec changes §5.2 (a `sync_state` row per book), §5.6 (an `ibkrLive` entry), §8.1 (the duplicate guard compares the book), §8.2–8.3 (the sync answers a report of per-account summaries; the status lists the accounts), §8.4 and §9.4 (Settings per book), and §9.2 (a block per account).
 - **Grades, setups, tags, the review queue, stops and R.** These come with the scalp-review step (parent spec Phase 2, step 3), where the stop and R numbers they depend on are built.
 - **Trade charts and the bars cache** (Phase 2, step 2).
 - **Short single-leg scalps** in the scalp form. The user's scalps are bought calls and puts.

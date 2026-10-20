@@ -140,14 +140,20 @@ export function Settings({
           or an export. It powers live prices, option chains and marks.
         </p>
       </Panel>
-      {data && (
-        // Keyed by what's saved, so the fields start from it once it loads and after each save.
-        <IbkrSettings
-          key={`${data.ibkr?.tokenHint}-${data.ibkr?.activityQueryId}-${data.ibkr?.since}`}
-          ibkr={data.ibkr ?? NOT_SET}
-          confirm={confirm}
-        />
-      )}
+      {data &&
+        (["paper", "live"] as const).map((book) => {
+          const ibkr = data.ibkr?.[book] ?? NOT_SET;
+          return (
+            // Keyed by what's saved, so the fields start from it once it loads and after each save: each book by its
+            // own, so saving one leaves what's typed in the other.
+            <IbkrSettings
+              key={`${book}-${ibkr.tokenHint}-${ibkr.activityQueryId}-${ibkr.todayQueryId}-${ibkr.since}`}
+              book={book}
+              ibkr={ibkr}
+              confirm={confirm}
+            />
+          );
+        })}
       <ChartSettings />
       <DataSettings dataDir={data?.dataDir} />
       <JournalPanel />

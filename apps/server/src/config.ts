@@ -41,16 +41,32 @@ const ibkrSchema = z.object({
 /** The Flex Web Service token, the two queries, and the date the sync starts from (spec §5.6). */
 export type IbkrConfig = z.infer<typeof ibkrSchema>;
 
+/** Which IBKR account a set of credentials is for (live-sync spec §3). */
+export type IbkrBook = "paper" | "live";
+
+/** Paper keeps the entry it always had; live sits beside it. */
+const IBKR_ENTRY = { paper: "ibkr", live: "ibkrLive" } as const;
+
 const secretsSchema = z.object({
   alpaca: z.object({ keyId: z.string().min(1), secretKey: z.string().min(1) }).optional(),
   ibkr: ibkrSchema.optional(),
+  ibkrLive: ibkrSchema.optional(),
 });
 
 export type Secrets = z.infer<typeof secretsSchema>;
 
+/** Each entry read on its own, so a broken one never switches another off. */
+const ENTRY_SCHEMA: Record<keyof Secrets, z.ZodType<Secrets>> = {
+  alpaca: secretsSchema.pick({ alpaca: true }),
+  ibkr: secretsSchema.pick({ ibkr: true }),
+  ibkrLive: secretsSchema.pick({ ibkrLive: true }),
+};
+
 const EXPECTED: Record<keyof Secrets, string> = {
   alpaca: '{"alpaca": {"keyId": "…", "secretKey": "…"}}',
   ibkr: '{"ibkr": {"token": "…", "activityQueryId": "…", "todayQueryId": "…", "since": "YYYY-MM-DD"}}',
+  ibkrLive:
+    '{"ibkrLive": {"token": "…", "activityQueryId": "…", "todayQueryId": "…", "since": "YYYY-MM-DD"}}',
 };
 
 /**
@@ -73,9 +89,7 @@ export function readSecrets(file: string, only?: keyof Secrets): Secrets {
     // The parser's own message quotes the text around the mistake, which may be a key.
     throw new Error(`${file} is not valid JSON`);
   }
-  let schema: z.ZodType<Secrets> = secretsSchema;
-  if (only === "alpaca") schema = secretsSchema.pick({ alpaca: true });
-  if (only === "ibkr") schema = secretsSchema.pick({ ibkr: true });
+  const schema: z.ZodType<Secrets> = only ? ENTRY_SCHEMA[only] : secretsSchema;
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
     const fields = parsed.error.issues.map((issue) => issue.path.join(".") || "the top level").join(", ");
@@ -112,9 +126,14 @@ export function writeAlpacaKeys(file: string, keys: AlpacaKeys | null): void {
   writeEntry(file, "alpaca", keys ? { keyId: keys.keyId, secretKey: keys.secretKey } : null);
 }
 
-/** Sets or removes the IBKR Flex block. */
-export function writeIbkrConfig(file: string, config: IbkrConfig | null): void {
-  writeEntry(file, "ibkr", config);
+/** One book's IBKR Flex block, or null when it isn't set up. A broken block throws, as readSecrets does. */
+export function readIbkrConfig(file: string, book: IbkrBook): IbkrConfig | null {
+  return readSecrets(file, IBKR_ENTRY[book])[IBKR_ENTRY[book]] ?? null;
+}
+
+/** Sets or removes one book's IBKR Flex block. */
+export function writeIbkrConfig(file: string, book: IbkrBook, config: IbkrConfig | null): void {
+  writeEntry(file, IBKR_ENTRY[book], config);
 }
 
 /** The file as a plain object, entries this app does not know included. No file is an empty object. */

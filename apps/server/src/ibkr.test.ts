@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createIbkrRepo } from "@tj/db";
 import { type FlexClient, FlexError } from "@tj/importers";
 import { describe, expect, it } from "vitest";
-import { LOCAL, testApp } from "./testing.js";
+import { LOCAL, testApp, testDb } from "./testing.js";
 
 const fixture = (name: string) =>
   readFileSync(
@@ -18,9 +19,19 @@ const CONFIG = {
   todayQueryId: "1653147",
   since: "2026-09-28",
 };
+const LIVE = {
+  token: "2234567890123456789012",
+  activityQueryId: "2653145",
+  todayQueryId: "2653147",
+  since: "2026-09-28",
+};
+/** The same statements, from the live account U7654321. */
+const asLive = (xml: string) => xml.replaceAll("DU1234567", "U7654321");
 const NOW = Date.UTC(2026, 8, 29, 1, 0);
 
 interface Summary {
+  book: string;
+  account: { externalId: string; kind: string } | null;
   status: string;
   ran: boolean;
   added: number;
@@ -35,16 +46,34 @@ interface Summary {
   error: { kind: string; message: string } | null;
 }
 
+interface Report {
+  ran: boolean;
+  changedTradeIds: string[];
+  accounts: Summary[];
+}
+
 interface Answers {
   today?: string | Error;
   activity?: string | Error;
+  liveToday?: string | Error;
+  liveActivity?: string | Error;
 }
 
-/** The app with a fake Flex client that answers each query from the fixtures, and a clock the test moves. */
-function setup(config: typeof CONFIG | null = CONFIG, answers: Answers = {}) {
+type Config = typeof CONFIG;
+
+/**
+ * The app with a fake Flex client that answers each query from the fixtures, and a clock the test moves. Paper is
+ * set up with CONFIG unless told otherwise; live only when given (a function stands for an entry that can't be read).
+ */
+function setup(
+  paper: Config | null = CONFIG,
+  answers: Answers = {},
+  live: Config | null | (() => Config) = null,
+) {
   const asked: string[] = [];
   const deadlines: (number | undefined)[] = [];
   let clock = NOW;
+  const books = { paper, live };
   const client: FlexClient = {
     async statement(queryId, until) {
       asked.push(queryId);
@@ -52,24 +81,59 @@ function setup(config: typeof CONFIG | null = CONFIG, answers: Answers = {}) {
       // A statement takes a moment, as IBKR's does, so two syncs at once really overlap.
       await new Promise((resolve) => setTimeout(resolve, 5));
       const answer =
-        queryId === CONFIG.todayQueryId ? (answers.today ?? TODAY_XML) : (answers.activity ?? ACTIVITY_XML);
+        queryId === LIVE.todayQueryId
+          ? (answers.liveToday ?? asLive(TODAY_XML))
+          : queryId === LIVE.activityQueryId
+            ? (answers.liveActivity ?? asLive(ACTIVITY_XML))
+            : queryId === CONFIG.todayQueryId
+              ? (answers.today ?? TODAY_XML)
+              : (answers.activity ?? ACTIVITY_XML);
       if (answer instanceof Error) throw answer;
       return answer;
     },
     async checkQuery() {},
   };
-  const app = testApp({ ibkrConfig: () => config, flexClient: () => client, now: () => clock });
+  const db = testDb();
+  const app = testApp({
+    db,
+    ibkrConfig: (book) => {
+      const config = books[book];
+      return typeof config === "function" ? config() : config;
+    },
+    flexClient: () => client,
+    now: () => clock,
+  });
   const post = (path: string, body: unknown) =>
     app.request(path, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
+  const report = async (auto = false) => (await (await post("/api/ibkr/sync", { auto })).json()) as Report;
   return {
     app,
+    db,
     asked,
     deadlines,
+    books,
     advance: (ms: number) => {
       clock += ms;
     },
+    report,
+    /** The paper account's summary. */
     async sync(auto = false) {
-      return (await (await post("/api/ibkr/sync", { auto })).json()) as Summary;
+      const answer = await report(auto);
+      const summary = answer.accounts.find((each) => each.book === "paper");
+      if (!summary) throw new Error("no paper summary");
+      return summary;
+    },
+    async status() {
+      return (await (await app.request("/api/ibkr/status", { headers: LOCAL })).json()) as {
+        configured: boolean;
+        accounts: {
+          book: string;
+          since: string;
+          lastStatus: string | null;
+          lastError: string | null;
+          lastSummary: Summary | null;
+        }[];
+      };
     },
     async trades() {
       return (await (await app.request("/api/trades", { headers: LOCAL })).json()) as {
@@ -139,11 +203,9 @@ describe("POST /api/ibkr/sync", () => {
     const app = setup(CONFIG, { today: new FlexError("token", message) });
     const summary = await app.sync();
     expect(summary).toMatchObject({ status: "error", error: { kind: "token", message }, added: 0 });
-    const status = (await (await app.app.request("/api/ibkr/status", { headers: LOCAL })).json()) as {
-      lastStatus: string;
-      lastError: string;
-    };
-    expect(status).toMatchObject({ lastStatus: "error", lastError: message });
+    expect((await app.status()).accounts).toMatchObject([
+      { book: "paper", lastStatus: "error", lastError: message },
+    ]);
   });
 
   it("gives both statements one deadline, two and a half minutes from the start", async () => {
@@ -267,10 +329,150 @@ describe("POST /api/ibkr/sync", () => {
     expect(summary.skipped).toContainEqual(expect.objectContaining({ reason: "deleted", ticker: "NVDA" }));
   });
 
-  it("answers not_configured without credentials", async () => {
+  it("answers no accounts without credentials", async () => {
     const app = setup(null);
-    expect(await app.sync()).toMatchObject({ status: "not_configured", ran: false });
+    expect(await app.report()).toEqual({ ran: false, changedTradeIds: [], accounts: [] });
     expect(app.asked).toEqual([]);
+    expect(await app.status()).toEqual({ configured: false, accounts: [] });
+  });
+});
+
+describe("the live account (live-sync spec §4)", () => {
+  const rows = async (app: ReturnType<typeof setup>) =>
+    (await app.trades()).map((trade) => [trade.underlying, trade.netPnl, trade.book]).sort();
+
+  it("syncs both accounts, each into its own book", async () => {
+    const app = setup(CONFIG, {}, LIVE);
+    const report = await app.report();
+    expect(report.accounts.map((each) => [each.book, each.account?.kind, each.account?.externalId])).toEqual([
+      ["paper", "paper", "DU1234567"],
+      ["live", "live", "U7654321"],
+    ]);
+    expect(report.ran).toBe(true);
+    expect(await rows(app)).toEqual([
+      ["NVDA", 44.74, "live"],
+      ["NVDA", 44.74, "paper"],
+      ["TSLA", 300.55, "live"],
+      ["TSLA", 300.55, "paper"],
+    ]);
+    expect(report.changedTradeIds).toHaveLength(4);
+    expect((await app.status()).accounts.map((each) => [each.book, each.lastStatus])).toEqual([
+      ["paper", "ok"],
+      ["live", "ok"],
+    ]);
+  });
+
+  it("syncs the live account alone", async () => {
+    const app = setup(null, {}, LIVE);
+    const report = await app.report();
+    expect(report.accounts.map((each) => [each.book, each.status, each.added])).toEqual([["live", "ok", 2]]);
+    expect(await rows(app)).toEqual([
+      ["NVDA", 44.74, "live"],
+      ["TSLA", 300.55, "live"],
+    ]);
+  });
+
+  it("refuses queries from the other kind of account, and stores nothing", async () => {
+    const app = setup(null, { liveToday: TODAY_XML, liveActivity: ACTIVITY_XML }, LIVE);
+    const [live] = (await app.report()).accounts;
+    expect(live).toMatchObject({
+      book: "live",
+      status: "error",
+      error: {
+        kind: "failed",
+        message: "These queries belong to the paper account DU1234567: use the live account's own queries.",
+      },
+    });
+    expect(await app.trades()).toEqual([]);
+  });
+
+  it("refuses live queries saved as paper", async () => {
+    const app = setup({ ...CONFIG }, { today: asLive(TODAY_XML), activity: asLive(ACTIVITY_XML) });
+    expect((await app.sync()).error?.message).toBe(
+      "These queries belong to the live account U7654321: use the paper account's own queries.",
+    );
+    expect(await app.trades()).toEqual([]);
+  });
+
+  it("keeps one account's trades when the other fails", async () => {
+    const app = setup(CONFIG, { liveToday: new FlexError("token", "IBKR rejected the token.") }, LIVE);
+    const report = await app.report();
+    expect(
+      report.accounts.map((each) => [each.book, each.status, each.added, each.error?.kind ?? null]),
+    ).toEqual([
+      ["paper", "ok", 2, null],
+      ["live", "error", 0, "token"],
+    ]);
+    expect(report.changedTradeIds).toHaveLength(2);
+    expect(await rows(app)).toEqual([
+      ["NVDA", 44.74, "paper"],
+      ["TSLA", 300.55, "paper"],
+    ]);
+  });
+
+  it("keeps paper syncing when the live entry can't be read", async () => {
+    const app = setup(CONFIG, {}, () => {
+      throw new Error("secrets.json: check ibkrLive.token");
+    });
+    const report = await app.report();
+    expect(report.accounts.map((each) => [each.book, each.status])).toEqual([["paper", "ok"]]);
+    expect((await app.status()).accounts.map((each) => each.book)).toEqual(["paper"]);
+  });
+
+  it("runs the 15-minute rule per account", async () => {
+    const app = setup();
+    await app.report();
+    expect(app.asked).toEqual([CONFIG.todayQueryId, CONFIG.activityQueryId]);
+    app.books.live = LIVE;
+    app.advance(60_000);
+    const report = await app.report(true);
+    expect(app.asked.slice(2)).toEqual([LIVE.todayQueryId, LIVE.activityQueryId]);
+    expect(report.accounts.map((each) => [each.book, each.ran])).toEqual([
+      ["paper", false],
+      ["live", true],
+    ]);
+    expect(report.ran).toBe(true);
+    expect(report.changedTradeIds).toHaveLength(2);
+  });
+
+  it("runs one sync at a time, for both accounts", async () => {
+    const app = setup(CONFIG, {}, LIVE);
+    const [first, second] = await Promise.all([app.report(), app.report()]);
+    expect(first).toEqual(second);
+    expect(app.asked).toHaveLength(4);
+  });
+
+  it("reads the paper run recorded before live existed", async () => {
+    const app = setup();
+    const { book: _book, ...before } = await app.sync();
+    // A row as the paper-only sync wrote it: its summary has no book.
+    createIbkrRepo(app.db, () => NOW).recordRun("ibkr", {
+      at: NOW,
+      status: "ok",
+      error: null,
+      summary: before,
+      accountId: null,
+    });
+    const [paper] = (await app.status()).accounts;
+    expect(paper).toMatchObject({
+      book: "paper",
+      lastStatus: "ok",
+      lastSummary: { book: "paper", added: 2 },
+    });
+  });
+
+  it("hands a live trade back to IBKR's numbers", async () => {
+    const app = setup(CONFIG, {}, LIVE);
+    await app.report();
+    const nvda = (await app.trades()).find((trade) => trade.underlying === "NVDA" && trade.book === "live");
+    await app.app.request(`/api/trades/${nvda?.id}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ netPnl: 50 }),
+    });
+    const reset = (await (await app.post(`/api/ibkr/trades/${nvda?.id}/reset`, {})).json()) as Report;
+    expect(reset.accounts.map((each) => each.book)).toEqual(["paper", "live"]);
+    expect((await app.trades()).find((trade) => trade.id === nvda?.id)?.netPnl).toBe(44.74);
   });
 });
 

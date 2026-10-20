@@ -38,14 +38,7 @@ function stubFetch(...responses: Response[]) {
   const queue = [...responses];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     if (String(input).includes("/api/ibkr/status")) {
-      return json({
-        configured: false,
-        since: null,
-        lastRunAt: null,
-        lastStatus: null,
-        lastError: null,
-        lastSummary: null,
-      });
+      return json({ configured: false, accounts: [] });
     }
     const next = queue.shift();
     if (!next) throw new Error(`unexpected request ${String(input)}`);

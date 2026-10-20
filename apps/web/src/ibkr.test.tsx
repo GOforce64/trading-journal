@@ -4,7 +4,8 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAutoSync } from "./ibkr.js";
 
-const SUMMARY = {
+const PAPER = {
+  book: "paper",
   status: "ok",
   ran: true,
   account: { externalId: "DU1234567", kind: "paper" },
@@ -20,6 +21,7 @@ const SUMMARY = {
   error: null,
   lastRunAt: 1,
 };
+const REPORT = { ran: true, changedTradeIds: ["t1"], accounts: [PAPER] };
 
 function AutoSync() {
   useAutoSync();
@@ -33,7 +35,7 @@ describe("useAutoSync", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const body = /\/api\/(moves|risk)\/fill/.test(String(input))
         ? { filled: 0, missing: [], unavailable: null }
-        : SUMMARY;
+        : REPORT;
       return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
     });
     vi.stubGlobal("fetch", fetchMock);
