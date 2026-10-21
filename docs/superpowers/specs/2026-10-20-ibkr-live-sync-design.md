@@ -93,6 +93,8 @@ The guard that skips a synced trade "already in the journal" (sync spec §8.1) n
 3. Sync. The live swings come in with the LIVE chip, and paper is unchanged.
 4. Sync again: everything unchanged.
 
+**Done 21 Oct 2026:** the user made the live account's two queries and token, saved them in Settings → IBKR Flex · live, and synced: "all pops up good".
+
 ## 10. Plan deviations
 
 1. **A run that throws unexpectedly** becomes that account's error summary. One account's failure never sinks the other's report.

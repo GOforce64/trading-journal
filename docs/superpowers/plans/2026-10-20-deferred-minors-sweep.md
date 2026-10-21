@@ -86,6 +86,9 @@ PR 1 merged as #26 (d046606).
 - [ ] an `--end` before mid-2024 gives option charts that read "too old"
 - [ ] option bars: each bar's open isn't the previous bar's close (cosmetic)
 
+### Added by the user (21 Oct 2026)
+- [ ] the crosshair snaps to the candle's close over the candles (Lightweight Charts' default Magnet mode); the user wants it to follow the cursor everywhere, like TradingView: `crosshair: { mode: CrosshairMode.Normal }` in `chartOptions` (apps/web/src/chart/style.ts), which every candle chart uses; check EquityCurve too
+
 ## Final reviews
 
 - **PR 1** (Opus, 6568b75..d3b0bbe): 0 Critical, 0 Important, 6 minors in the sweep's own changes, all fixed test-first:
