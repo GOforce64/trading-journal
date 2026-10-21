@@ -204,7 +204,7 @@ export function bundleRoutes(
         if (newer) return c.json(newer, 409);
         backup?.();
         // Files before rows: a merged screenshot never points at a missing file.
-        if (dir) for (const [name, temp] of staged) commitFile(dir, name, temp);
+        if (dir) for (const [name, temp] of staged) await commitFile(dir, name, temp);
         staged.clear();
         return c.json(mergeBundle(db, bundle), 200);
       } catch (error) {

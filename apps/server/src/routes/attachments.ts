@@ -24,16 +24,43 @@ export function stageFile(dir: string, name: string, bytes: Uint8Array): string 
   return temp;
 }
 
+/** The errors a rename meets while Windows' antivirus is still scanning a file just written. */
+const HELD = new Set(["EPERM", "EBUSY", "EACCES"]);
+const TRIES = 5;
+
+/**
+ * Renames `from` to `to`, trying again a few times over about a second while the file is held: on Windows an
+ * antivirus scan can hold a file for a moment after it's written, and a retry then works.
+ */
+export async function renameRetrying(
+  from: string,
+  to: string,
+  {
+    rename = renameSync,
+    pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  }: { rename?: (from: string, to: string) => void; pause?: (ms: number) => Promise<void> } = {},
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rename(from, to);
+      return;
+    } catch (error) {
+      if (attempt === TRIES || !HELD.has((error as NodeJS.ErrnoException).code ?? "")) throw error;
+      await pause(attempt * 100);
+    }
+  }
+}
+
 /** Moves a staged file into place as `dir/name`, unless the same content is there already. */
-export function commitFile(dir: string, name: string, temp: string): void {
+export async function commitFile(dir: string, name: string, temp: string): Promise<void> {
   const target = join(dir, name);
   if (existsSync(target)) rmSync(temp, { force: true });
-  else renameSync(temp, target);
+  else await renameRetrying(temp, target);
 }
 
 /** Writes `dir/name` unless it's there, through a temp file, so a half-written image is never served. */
-export function storeFile(dir: string, name: string, bytes: Uint8Array): void {
-  if (!existsSync(join(dir, name))) commitFile(dir, name, stageFile(dir, name, bytes));
+export async function storeFile(dir: string, name: string, bytes: Uint8Array): Promise<void> {
+  if (!existsSync(join(dir, name))) await commitFile(dir, name, stageFile(dir, name, bytes));
 }
 
 const NO_DIR = { error: "unavailable", message: "Screenshots need a data directory." };
@@ -58,7 +85,7 @@ export function attachmentRoutes(db: Db, { dir, now }: { dir?: string; now?: () 
         if (bytes.length === 0) return c.json({ error: "invalid", message: "That image is empty." }, 400);
         const hash = sha256(bytes);
         // The file first: a row never points at a missing one. A file for a trade that turns out unknown is harmless.
-        storeFile(dir, `${hash}.${ext}`, bytes);
+        await storeFile(dir, `${hash}.${ext}`, bytes);
         const row = repo.create(c.req.param("id"), { sha256: hash, ext, mime, bytes: bytes.length });
         return row ? c.json(row, 201) : c.json(NOT_FOUND, 404);
       },
@@ -72,6 +99,7 @@ export function attachmentRoutes(db: Db, { dir, now }: { dir?: string; now?: () 
       return c.body(new Uint8Array(readFileSync(path)), 200, {
         "content-type": TYPES[match[2] ?? ""] ?? "application/octet-stream",
         "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
       });
     })
     .patch(
