@@ -72,11 +72,11 @@ PR 1 merged as #26 (d046606).
 - [ ] the caption input has no maxLength (past 500 characters: "Saving the caption failed: 400")
 - [ ] a soft-deleted trade's live screenshot rows still put their files in every bundle
 - [ ] a bundle's attachment rows aren't checked: a crafted sha256 could point a thumbnail at another /api path
-- [ ] Windows: a rename right after a write can fail under antivirus (the upload answers 500)
-- [ ] served files lack `X-Content-Type-Options: nosniff`
+- [x] Windows: a rename right after a write can fail under antivirus (the upload answers 500) (492bfc4: `renameRetrying`, EPERM/EBUSY/EACCES, 5 tries over ~1 s)
+- [x] served files lack `X-Content-Type-Options: nosniff` (492bfc4)
 - [ ] thumbnails are cropped to 160×96 (object-cover), though §5 says their aspect is kept
 - [ ] a thumbnail dragged within the page may drop back as a duplicate (`draggable={false}`)
-- [ ] test gaps: a 404 upload asserting no row; caption and remove in the property test; `tj-shots-*` temp dirs left behind
+- [ ] test gaps: a 404 upload asserting no row (done, 492bfc4); caption and remove in the property test (TODO); `tj-shots-*` temp dirs left behind (already fixed by 61cdbbe, the run's own temp folder: a run leaves 0 in /tmp, checked 21 Oct)
 - [ ] the lightbox has no focus trap, and its zoom is mouse-only
 
 ### Demo (demo spec §9)
